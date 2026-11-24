@@ -136,6 +136,10 @@ static func deal(att, tgt, info: Dictionary) -> float:
 	var dealt: float = tgt.take_damage(info)
 	if dealt > 0.0 and att != null and is_instance_valid(att):
 		_on_hit(att, tgt, dealt, info)
+		if att.is_player and info.get("melee", false) and not info.get("proc", false) and (crit or tgt.is_dead or dealt > tgt.max_hp * 0.2):
+			Game.hit_stop(0.07 if tgt.is_dead else 0.045)
+			if tgt.is_dead or crit:
+				VFX.shake(0.12)
 	return dealt
 
 static func _on_hit(att: Actor, tgt: Actor, dealt: float, info: Dictionary) -> void:

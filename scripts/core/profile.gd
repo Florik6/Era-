@@ -49,6 +49,7 @@ var arena_best := 0
 var arena_tokens := 0
 var play_time := 0.0
 var tutorial_done := false
+var hints_shown := {}         # tip id -> true; "_off" disables tips
 
 func _process(delta: float) -> void:
 	if has_character:
@@ -80,6 +81,7 @@ func new_character(nm: String, cid: String, female: bool, appearance: Dictionary
 	witness = {"relation": 0.0, "met": [], "variant": randi() % 4, "hostile": false, "trades": 0}
 	play_time = 0.0
 	tutorial_done = false
+	hints_shown = {}
 
 func _main_cat() -> String:
 	var w := char.inv.equipped("main")
@@ -181,7 +183,7 @@ func to_dict() -> Dictionary:
 		"era_progress": era_progress, "achievements": achievements, "stats": stats, "legacy": legacy,
 		"fallen_legends": fallen_legends, "hall_of_legends": hall_of_legends, "artifacts": artifacts, "witness": witness,
 		"world_seed": world_seed, "arena_best": arena_best, "arena_tokens": arena_tokens, "play_time": play_time,
-		"tutorial_done": tutorial_done}
+		"tutorial_done": tutorial_done, "hints_shown": hints_shown}
 
 func from_dict(d: Dictionary) -> void:
 	char = CharData.new()
@@ -207,3 +209,4 @@ func from_dict(d: Dictionary) -> void:
 	arena_tokens = int(d.get("arena_tokens", 0))
 	play_time = float(d.get("play_time", 0.0))
 	tutorial_done = d.get("tutorial_done", false)
+	hints_shown = d.get("hints_shown", {})

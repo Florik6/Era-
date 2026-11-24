@@ -47,6 +47,20 @@ func time_string() -> String:
 	var h := hour()
 	return "День %d, %02d:%02d" % [day() + 1, int(h), int(fmod(h, 1.0) * 60.0)]
 
+var _hit_stop := false
+var _hit_stop_next := 0
+
+## Brief freeze-frame on heavy hits (adds weight to combat).
+func hit_stop(dur: float = 0.05) -> void:
+	if _hit_stop or get_tree().paused or Time.get_ticks_msec() < _hit_stop_next:
+		return
+	_hit_stop = true
+	_hit_stop_next = Time.get_ticks_msec() + 300
+	Engine.time_scale = 0.06
+	get_tree().create_timer(dur, true, false, true).timeout.connect(func():
+		Engine.time_scale = 1.0
+		_hit_stop = false)
+
 # ---------------------------------------------------------------- scene flow
 func start(new_mode: String, opts: Dictionary = {}) -> void:
 	mode = new_mode

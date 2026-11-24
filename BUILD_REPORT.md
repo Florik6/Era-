@@ -1,4 +1,4 @@
-# BUILD REPORT — ERA: Восхождение 0.9.0
+# BUILD REPORT — ERA: Восхождение 0.9.1
 
 ## Инструменты
 
@@ -16,7 +16,7 @@ debug-ключа в editor settings, импортирует ресурсы и э
 ## Пресет экспорта (`export_presets.cfg`)
 
 - Платформа Android, архитектура **arm64-v8a** (armv7, x86 и x86_64 выключены).
-- `package/unique_name = com.eraascension.game`, имя «ERA: Восхождение», версия 0.9.0 (code 9).
+- `package/unique_name = com.eraascension.game`, имя «ERA: Восхождение», версия 0.9.1 (code 10).
 - Иконки: 192 px и адаптивная 432 px (foreground и background).
 - Immersive mode. Разрешение — только VIBRATE, интернет не требуется.
 - Ориентация горизонтальная (sensor landscape в project.godot).
@@ -28,17 +28,20 @@ debug-ключа в editor settings, импортирует ресурсы и э
 
 | Файл | Размер | SHA-256 |
 |---|---|---|
-| `ERA_Ascension.apk` (release) | 34 475 790 байт | `f1b4dfb9c590017b113151d8ce30576d1f54eefc45e63d7c0cb100fccef5d8d7` |
-| `ERA_Ascension-debug.apk` | 36 290 807 байт | `bc2059ea2860a44fa77e40851873cf7b985526b55aea83e2ac3a173e3c00f4f9` |
+| `ERA_Ascension.apk` (release) | 34 488 229 байт | `d95abbc910363340b1b22c7fc7081b5307886c215604ba0f4948ada621ef1c61` |
+| `ERA_Ascension-debug.apk` | 36 303 246 байт | `39e8655ac5b78f16f509947dd4166ca2b38aa597ceed69e9a9219b22ec6c54a0` |
 
 ## Проверка APK
 
 - **Формат и подпись:** `file` определяет оба файла как Android package (APK). `apksigner verify` проходит для обоих.
   Подпись debug — `CN=Android Debug, O=Android, C=US`, release — `CN=ERA Ascension, O=ERA, C=RU`.
-- **Манифест (`aapt dump badging`):** `package: name='com.eraascension.game' versionCode='9' versionName='0.9.0'`,
+- **Манифест (`aapt dump badging`):** `package: name='com.eraascension.game' versionCode='10' versionName='0.9.1'`,
   `sdkVersion:'24'`, `targetSdkVersion:'36'`, метка `ERA: Восхождение`.
   - `android.hardware.vulkan.level` и `.version` объявлены с `required="false"`, так что устройства без Vulkan не отсекаются.
   - `glEsVersion 0x30000` (OpenGL ES 3 для отката).
+  - Старый `aapt` v1 выводит «failed to read attribute 'android:required'». Godot записывает этот атрибут для Vulkan строкой
+    `"false"`. Android разбирает его через `TypedArray.getBoolean` → `convertValueToBoolean`, так что для установки это безопасно.
+    Так выглядит стандартный манифест любого Godot 4 экспорта с Vulkan.
 - **Содержимое:**
   - `lib/arm64-v8a/libgodot_android.so` и `libc++_shared.so` — нативный движок, без WebView и браузера;
   - `classes.dex`;

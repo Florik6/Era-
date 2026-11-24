@@ -50,6 +50,7 @@ func build() -> void:
 	vb.add_child(_check("Помощь в прицеливании", Settings.aim_assist, func(v): Settings.aim_assist = v))
 	vb.add_child(_check("Автоподбор расходников", Settings.auto_pickup, func(v): Settings.auto_pickup = v))
 	vb.add_child(_check("Вибрация", Settings.vibration, func(v): Settings.vibration = v))
+	vb.add_child(_check("Подсказки для новичков", not Profile.hints_shown.get("_off", false), func(v): Profile.hints_shown["_off"] = not v))
 	vb.add_child(_header("Тестирование"))
 	vb.add_child(_check("Открыть все эпохи (тестовый режим)", Settings.dev_unlock_all, func(v): Settings.dev_unlock_all = v))
 	vb.add_child(UITheme.wrap_label("Тестовый режим позволяет сразу посетить любую эпоху без Суда Хроноса. Прогресс эпох при этом не засчитывается.", 15))

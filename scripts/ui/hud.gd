@@ -25,6 +25,7 @@ var boss_lbl: Label
 var vignette: ColorRect
 var minimap: Control
 var touch: TouchControls
+var hints: Hints
 var event_lbl: Label
 var _boss = null
 var _banner_t := 0.0
@@ -47,6 +48,8 @@ func _ready() -> void:
 	_build_center()
 	touch = TouchControls.new()
 	root.add_child(touch)
+	hints = Hints.new()
+	root.add_child(hints)
 	Events.notify.connect(_on_notify)
 	Events.banner.connect(_on_banner)
 	Events.boss_engaged.connect(func(b): _boss = b)
