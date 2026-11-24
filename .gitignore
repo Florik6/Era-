@@ -7,3 +7,4 @@ export_credentials.cfg
 # Signing keys are generated locally by tools/build_apk.sh
 android/*.keystore
 *.jks
+android/release_pass.txt

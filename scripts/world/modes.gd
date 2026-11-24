@@ -109,7 +109,7 @@ class ArenaMode:
 		Profile.arena_best = maxi(Profile.arena_best, score)
 		SaveSys.save_game()
 		world.ui.open("death", {"text": "Арена окончена.\nВремя: %d:%02d · Волн: %d · Побед: %d · Уровень: %d\nОчки: %d (рекорд %d)\nПеренесено мастерства: %d опыта · жетонов арены: +%d" % [int(t) / 60, int(t) % 60, wave, kills, world.player.data.level, score, Profile.arena_best, gained, tokens],
-			"respawn_text": "В главное меню", "respawn_cb": func(): Game.goto_menu()})
+			"respawn_text": "В главное меню", "menu": false, "respawn_cb": func(): Game.goto_menu()})
 
 class TrialsMode:
 	extends Node
@@ -181,7 +181,7 @@ class TrialsMode:
 		ended = true
 		SaveSys.save_game()
 		world.ui.open("death", {"text": ("Испытания пройдены! Все 10 волн отбиты." if win else "Испытания окончены на волне %d." % wave) + "\nНаграды сохранены в инвентаре.",
-			"respawn_text": "В главное меню", "respawn_cb": func(): Game.goto_menu()})
+			"respawn_text": "В главное меню", "menu": false, "respawn_cb": func(): Game.goto_menu()})
 	func objective_text() -> String:
 		return "[color=#ffd36b]Испытания[/color] · волна %d/10" % wave
 	func on_player_died() -> void:
@@ -219,7 +219,7 @@ class DungeonMode:
 			ended = true
 			SaveSys.save_game()
 			Profile.milestone("rift_clear")
-			world.ui.open("death", {"text": "Экспедиция завершена успешно! Вся добыча сохранена.", "respawn_text": "В главное меню", "respawn_cb": func(): Game.goto_menu()})
+			world.ui.open("death", {"text": "Экспедиция завершена успешно! Вся добыча сохранена.", "respawn_text": "В главное меню", "menu": false, "respawn_cb": func(): Game.goto_menu()})
 	func objective_text() -> String:
 		return "[color=#9fd0ff]Хроноподземелье · зал %d/3[/color] · %s" % [room, world.dim_node.objective_text() if world.dim_node else ""]
 	func on_player_died() -> void:
@@ -229,4 +229,4 @@ class DungeonMode:
 			if not world.player.data.inv.remove(uid).is_empty():
 				lost += 1
 		SaveSys.save_game()
-		world.ui.open("death", {"text": "Вы пали в хроноподземелье. Потеряно предметов: %d." % lost, "respawn_text": "В главное меню", "respawn_cb": func(): Game.goto_menu()})
+		world.ui.open("death", {"text": "Вы пали в хроноподземелье. Потеряно предметов: %d." % lost, "respawn_text": "В главное меню", "menu": false, "respawn_cb": func(): Game.goto_menu()})

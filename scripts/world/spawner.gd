@@ -130,6 +130,8 @@ func spawn_enemy(id: String, pos: Vector3, lvl: int = -1) -> Actor:
 		a.base_hp_override = d.hp * scale_f
 		a.refresh_gear()
 	a.hp = a.max_hp
+	if a.elite:
+		name_tag(a, Color(1.0, 0.55, 0.4))
 	if id == "mimic" and a.rig is CreatureRig:
 		a.rig.set_dormant(false)
 		Audio.play_sfx("mimic", pos)
@@ -177,7 +179,29 @@ func spawn_bot(rec: Dictionary, pos: Vector3) -> NPC:
 	n.mana = n.max_mana
 	if rec.get("legend", false):
 		_legend_aura(n)
+	name_tag(n, Color(1.0, 0.75, 0.25) if rec.get("legend", false) else Color(1.0, 0.95, 0.6))
 	return n
+
+## Floating name tag (contenders, legends, elites, bosses).
+func name_tag(a: Actor, col: Color) -> void:
+	var old = a.get_node_or_null("NameTag")
+	if old:
+		old.queue_free()
+	var l := Label3D.new()
+	l.name = "NameTag"
+	var t: String = a.display_name
+	if a.title != "":
+		t += "\n«%s»" % a.title
+	l.text = t
+	l.modulate = col
+	l.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	l.font_size = 34
+	l.pixel_size = 0.0055
+	l.outline_size = 9
+	l.position.y = 2.25 * (a.rig.scale.y if a.rig else 1.0)
+	l.visibility_range_end = 28.0
+	l.no_depth_test = false
+	a.add_child(l)
 
 func _legend_aura(n: Actor) -> void:
 	var l := OmniLight3D.new()
@@ -303,6 +327,7 @@ func spawn_boss(id: String, pos: Vector3, lvl: int = -1, times_escaped: int = 0)
 				break
 	_place(b, pos)
 	b.arena_center = b.global_position
+	name_tag(b, Color(1.0, 0.35, 0.3))
 	return b
 
 ## Era-appropriate companion: wolf / familiar / mechanical helper / drone.

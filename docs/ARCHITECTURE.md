@@ -76,3 +76,18 @@ Record: `{id, name, title, archetype, faction, level, renown, kills, boss_kills,
 backstory, memories:[{t, text}], rel:{respect, fear, rivalry, gratitude, grudge}, holdings:[], era_history:[], equip:{}, data:{CharData dict},
 pos:[x,z], female, look:{}, followers:[], heir_of, cause_of_death, events:[chronicle ids]}`.
 Biographies are built only from Chronicle events that reference the record id, so they never contain invented facts.
+
+## Implementation notes (0.9.0)
+- Fog: `Settings.fog_value()` caps the user-scaled density at 0.012; `Weather` multiplies it by `Weather.FOG_SCALE` (0.35) and
+  writes `fog_mode` only when it changes (Godot 4.7 resets `fog_density` to 1.0 whenever `fog_mode` is assigned).
+- World state keys: `points` holds only faction control points (`{owner, type, name}`); per-POI gameplay state (camps cleared,
+  rifts closed, mirror used, terminals hacked) lives in `poi_state`.
+- `ChunkStreamer.build_poi_decor` is disabled by world.gd; `Poi` builds the visuals/logic, the streamer still adds camp
+  palisades/crates/chest, lair destructible pillars and ruin chests.
+- Player input can be overridden with `Player.scripted_move` (tests, cutscenes).
+- Bot "avoid stronger enemy" rule applies only to `role == "bot"` (contenders); bandits/monsters keep fighting.
+
+## Tests
+`tools/check.sh` (compile all), `tests/logic_test.tscn` (67 checks), `tests/world_logic_test.tscn` (122 checks),
+`tests/game_smoke.tscn`, `tests/modes_smoke.tscn`, `tests/world_test.tscn`, `tests/ui_test.tscn` (screenshots; run with
+`VK_ICD_FILENAMES=/opt/lavapipe/lvp_icd.json xvfb-run -a godot --path . --rendering-method mobile --rendering-driver vulkan <scene>`).

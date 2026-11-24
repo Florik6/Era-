@@ -124,6 +124,7 @@ func _check_promotion(r: Dictionary) -> void:
 			n.title = r.title
 			n.refresh_gear()
 			world.spawner._legend_aura(n)
+			world.spawner.name_tag(n, Color(1.0, 0.75, 0.25))
 			n.base_speed *= 1.05
 
 func _title_for(r: Dictionary) -> String:

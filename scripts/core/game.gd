@@ -55,7 +55,7 @@ func start(new_mode: String, opts: Dictionary = {}) -> void:
 	actors.clear()
 	ui_stack.clear()
 	get_tree().paused = false
-	get_tree().change_scene_to_file(GAME_SCENE)
+	get_tree().change_scene_to_file.call_deferred(GAME_SCENE)
 
 func goto_menu() -> void:
 	if world != null and mode == "world":
@@ -66,7 +66,7 @@ func goto_menu() -> void:
 	actors.clear()
 	ui_stack.clear()
 	get_tree().paused = false
-	get_tree().change_scene_to_file(MENU_SCENE)
+	get_tree().change_scene_to_file.call_deferred(MENU_SCENE)
 
 func push_ui(ui_name: String) -> void:
 	ui_stack.append(ui_name)
