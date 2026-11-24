@@ -36,19 +36,24 @@ func _layout() -> void:
 	var ac := Vector2(safe.end.x - 125.0 * bs, safe.end.y - 125.0 * bs)
 	buttons.attack.pos = ac
 	buttons.attack.r = 76.0 * bs
-	var ring := 150.0 * bs
-	var order := [["dodge", 180.0], ["skill1", 207.0], ["skill2", 234.0], ["skill3", 261.0], ["block", 288.0]]
+	var ring := 172.0 * bs
+	var order := [["skill1", 222.0], ["skill2", 254.0], ["skill3", 286.0]]
 	for o in order:
 		var a := deg_to_rad(o[1])
 		buttons[o[0]].pos = ac + Vector2(cos(a), sin(a)) * ring
 		buttons[o[0]].r = 44.0 * bs
-	buttons.interact.pos = ac + Vector2(-260.0, -150.0) * bs
-	buttons.interact.r = 50.0 * bs
-	buttons.swap.pos = Vector2(safe.end.x - 46.0 * bs, ac.y - 225.0 * bs)
-	buttons.swap.r = 32.0 * bs
-	buttons.potion.pos = Vector2(safe.end.x - 46.0 * bs, ac.y - 300.0 * bs)
-	buttons.potion.r = 32.0 * bs
-	buttons.companion.pos = Vector2(safe.end.x - 46.0 * bs, ac.y - 375.0 * bs)
+	buttons.dodge.pos = ac + Vector2(-172.0, 38.0) * bs
+	buttons.dodge.r = 46.0 * bs
+	buttons.block.pos = ac + Vector2(-282.0, 44.0) * bs
+	buttons.block.r = 44.0 * bs
+	buttons.interact.pos = ac + Vector2(-268.0, -112.0) * bs
+	buttons.interact.r = 48.0 * bs
+	var small_y := ac.y - 262.0 * bs
+	buttons.swap.pos = Vector2(safe.end.x - 36.0 * bs, small_y)
+	buttons.swap.r = 30.0 * bs
+	buttons.potion.pos = Vector2(safe.end.x - 104.0 * bs, small_y)
+	buttons.potion.r = 30.0 * bs
+	buttons.companion.pos = Vector2(safe.end.x - 172.0 * bs, small_y)
 	buttons.companion.r = 30.0 * bs
 	_joy_radius = 85.0 * Settings.joystick_size
 

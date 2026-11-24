@@ -10,6 +10,7 @@ const KINDS := ["clear", "cloudy", "rain", "storm", "fog", "snow", "wind"]
 const NAMES := {"clear": "Ясно", "cloudy": "Облачно", "rain": "Дождь", "storm": "Гроза", "fog": "Туман", "snow": "Снег", "wind": "Ветер"}
 const WEIGHTS := {"clear": 34.0, "cloudy": 20.0, "rain": 14.0, "storm": 6.0, "fog": 10.0, "snow": 6.0, "wind": 10.0}
 const FOG_ADD := {"clear": 0.0, "cloudy": 0.0008, "rain": 0.002, "storm": 0.003, "fog": 0.0055, "snow": 0.003, "wind": 0.0005}
+const FOG_SCALE := 0.35
 const SUN := {"clear": 1.0, "cloudy": 0.78, "rain": 0.62, "storm": 0.48, "fog": 0.72, "snow": 0.8, "wind": 0.95}
 
 var current := "clear"
@@ -33,6 +34,7 @@ var _wet_t := 0.0
 var _indoor_t := 0.0
 var _indoor := false
 var _amb := {}
+var _fog_cur := 0.0
 var _rng := RandomNumberGenerator.new()
 
 func setup(world_env: WorldEnvironment, era_i: int) -> void:
@@ -79,13 +81,13 @@ func _make_particles(kind: String) -> GPUParticles3D:
 			pm.emission_box_extents = Vector3(24, 1, 24)
 			pm.direction = Vector3(0.2, -1, 0.1)
 			pm.spread = 25.0
-			pm.initial_velocity_min = 1.5
-			pm.initial_velocity_max = 3.0
+			pm.initial_velocity_min = 2.5
+			pm.initial_velocity_max = 4.0
 			pm.gravity = Vector3(0, -1.5, 0)
 			pm.turbulence_enabled = true
 			pm.turbulence_noise_strength = 0.6
-			p.lifetime = 8.0
-			mesh = MeshLib.box(Vector3(0.09, 0.09, 0.09))
+			p.lifetime = 5.5
+			mesh = MeshLib.box(Vector3(0.16, 0.16, 0.16))
 			mat = MeshLib.mat(Color(0.97, 0.98, 1.0, 0.9), 0.0, 1.0, 0.0, true)
 		_:
 			pm.emission_box_extents = Vector3(22, 4, 22)
@@ -179,12 +181,18 @@ func _process(delta: float) -> void:
 			s = Game.world.terrain
 		_indoor = s != null and s.has_method("building_at") and s.building_at(tp) != null
 	_rain.global_position = tp + Vector3(0, 16, 0)
-	_snow.global_position = tp + Vector3(0, 14, 0)
+	_snow.global_position = tp + Vector3(0, 11, 0)
 	_wind.global_position = tp + Vector3(-10, 2, 0)
-	_rain.emitting = is_raining() and not _indoor
-	_snow.emitting = current == "snow" and not _indoor
-	_wind.emitting = (current == "wind" or current == "storm") and not _indoor
+	var in_dim := _in_dimension()
+	_rain.emitting = is_raining() and not _indoor and not in_dim
+	_snow.emitting = current == "snow" and not _indoor and not in_dim
+	_wind.emitting = (current == "wind" or current == "storm") and not _indoor and not in_dim
 	_apply_fog(minf(1.0, delta * 0.5))
+	if in_dim:
+		_bolt_light.light_energy = 0.0
+		_ambient("rain_loop", false)
+		_ambient("wind_loop", false)
+		return
 	# storm lightning
 	if current == "storm":
 		_lightning_t -= delta
@@ -240,6 +248,14 @@ func _strike(p: Vector3) -> void:
 		if is_instance_valid(d) and d.has_method("take_hit"):
 			d.take_hit(15.0, "fire", null)
 
+## Inside a rift / pocket dimension the world controls sky & fog colour; the
+## weather only keeps the density readable and stops precipitation.
+func _in_dimension() -> bool:
+	if Game.world == null or not is_instance_valid(Game.world):
+		return false
+	var d = Game.world.get("dimension")
+	return d != null and str(d) != ""
+
 func fog_base() -> float:
 	var base: float = DBEras.era(era).fog_base + FOG_ADD.get(current, 0.0)
 	if overrides.has("cursed_fog"):
@@ -250,12 +266,19 @@ func _apply_fog(k: float) -> void:
 	if env == null or env.environment == null:
 		return
 	var en := env.environment
-	var dens := Settings.fog_value(fog_base())
-	en.fog_enabled = dens > 0.0001
-	en.fog_mode = Environment.FOG_MODE_EXPONENTIAL
-	en.fog_density = lerpf(en.fog_density, dens, k)
+	# Godot's exponential fog is strong: scale the (already capped) setting so the
+	# heaviest fog still keeps the hero, roads and nearby enemies clearly visible.
+	var in_dim := _in_dimension()
+	var dens := Settings.fog_value(0.004 if in_dim else fog_base()) * FOG_SCALE
+	if en.fog_mode != Environment.FOG_MODE_EXPONENTIAL:
+		en.fog_mode = Environment.FOG_MODE_EXPONENTIAL
+	_fog_cur = lerpf(_fog_cur, dens, k)
+	en.fog_enabled = _fog_cur > 0.0001
+	en.fog_density = _fog_cur
 	en.fog_sky_affect = 0.35
 	en.fog_aerial_perspective = 0.0
+	if in_dim:
+		return
 	var c: Color = DBEras.era(era).fog_color
 	if is_raining():
 		c = c.lerp(Color(0.55, 0.58, 0.62), 0.6)

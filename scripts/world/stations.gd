@@ -113,8 +113,8 @@ static func _terminal(world, poi) -> void:
 	world.ui.open("dialog", {"title": "Терминал", "text": "Экран мерцает. Доступ защищён, но защиту можно обойти. Взлом поднимет тревогу.", "portrait_color": Color(0.3, 0.8, 1.0), "options": opts})
 
 static func _hack(world, poi) -> void:
-	var st: Dictionary = Game.world_state.points.get(poi.data.id, {})
-	Game.world_state.points[poi.data.id] = st
+	var st: Dictionary = Game.world_state.get("poi_state", {}).get(poi.data.id, {})
+	Game.world_state.poi_state[poi.data.id] = st
 	if st.get("hacked", false):
 		Events.notify.emit("Терминал уже взломан.", Color(0.6, 0.8, 1.0))
 		return

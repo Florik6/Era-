@@ -39,7 +39,9 @@ func _exit_tree() -> void:
 			a.queue_free()
 
 func _st() -> Dictionary:
-	var pts: Dictionary = Game.world_state.points
+	if not Game.world_state.has("poi_state"):
+		Game.world_state["poi_state"] = {}
+	var pts: Dictionary = Game.world_state.poi_state
 	if not pts.has(data.id):
 		pts[data.id] = {}
 	return pts[data.id]
@@ -103,7 +105,6 @@ func _build_visual() -> void:
 				MeshLib.part(self, MeshLib.box(Vector3(1.0, 5.0, 1.0)), dark, Vector3(cos(a2) * 13, 2.5, sin(a2) * 13), Vector3(0, rad_to_deg(a2), 0))
 			MeshLib.part(self, MeshLib.cyl(14.0, 14.5, 0.2, 24), MeshLib.mat(Color(0.2, 0.15, 0.15)), Vector3(0, 0.05, 0))
 			_lbl(nm if nm != "" else "Логово", 6.5, Color(1.0, 0.4, 0.35))
-			_spawn_pillars()
 		"trial":
 			_portal_ring(Color(1.0, 0.85, 0.3), 2.6)
 			for i in 8:
@@ -164,7 +165,6 @@ func _build_visual() -> void:
 			for i in 5:
 				MeshLib.part(self, MeshLib.box(Vector3(1.0, randf_range(1.0, 4.0), 1.0)), stone, Vector3(randf_range(-6, 6), 1.0, randf_range(-6, 6)), Vector3(randf_range(-10, 10), 0, randf_range(-10, 10)))
 			_lbl(nm if nm != "" else "Руины", 4.0)
-			_spawn_ruins_chest()
 
 func _spawn_pillars() -> void:
 	if not ResourceLoader.exists("res://scripts/world/destructible.gd"):

@@ -16,6 +16,7 @@ var marker: Node3D
 
 func _ready() -> void:
 	DirAccess.make_dir_recursive_absolute(OUT)
+	Settings.effective_quality = Settings.Quality.MEDIUM
 	var eras: Array = []
 	for a in OS.get_cmdline_user_args():
 		if a.is_valid_int():
@@ -74,11 +75,13 @@ func _look(target: Vector3, dist: float = 1.0) -> void:
 	cam.look_at(target, Vector3.UP)
 	marker.global_position = target
 
-func _shot(nm: String, frames: int = 6) -> void:
+func _shot(nm: String, frames: int = 3) -> void:
+	var t0 := Time.get_ticks_msec()
 	for i in frames:
 		await get_tree().process_frame
 	var img := get_viewport().get_texture().get_image()
 	img.save_png(OUT + nm + ".png")
+	print("shot %s (%d ms for %d frames)" % [nm, Time.get_ticks_msec() - t0, frames])
 
 func _run_era(e: int) -> void:
 	await _setup_era(e)
@@ -104,7 +107,7 @@ func _run_era(e: int) -> void:
 	var cp: Vector2 = camp.pos
 	var ct := Vector3(cp.x, gen.height(cp.x, cp.y), cp.y)
 	streamer.build_times.clear()
-	for i in 60:
+	for i in 25:
 		streamer.update_center(ct)
 		await get_tree().process_frame
 	var bt2: Array = streamer.build_times
@@ -144,12 +147,12 @@ func _run_era(e: int) -> void:
 		dn.time_override = 23.0
 		weather.set_weather("rain", 999.0)
 		_look(target)
-		for i in 30:
+		for i in 8:
 			await get_tree().process_frame
 		await _shot("world_era%d_night_rain" % e)
 		dn.time_override = 10.5
 		weather.set_weather("fog", 999.0)
-		for i in 40:
+		for i in 10:
 			await get_tree().process_frame
 		await _shot("world_era%d_fog" % e)
 		weather.set_weather("clear", 999.0)

@@ -119,8 +119,8 @@ func _build_vitals() -> void:
 func _build_topright() -> void:
 	var col := VBoxContainer.new()
 	col.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-	col.offset_left = -220
-	col.offset_right = -18
+	col.offset_left = -330
+	col.offset_right = -16
 	col.offset_top = 12
 	col.alignment = BoxContainer.ALIGNMENT_BEGIN
 	root.add_child(col)
@@ -131,8 +131,8 @@ func _build_topright() -> void:
 	for spec in [["≡", "pause"], ["Сумка", "inventory"], ["Навыки", "skills"], ["Карта", "map"]]:
 		var b := Button.new()
 		b.text = spec[0]
-		b.custom_minimum_size = Vector2(48 if spec[0] == "≡" else 0, 48)
-		b.add_theme_font_size_override("font_size", 15)
+		b.custom_minimum_size = Vector2(52 if spec[0] == "≡" else 0, 50)
+		b.add_theme_font_size_override("font_size", 16)
 		b.focus_mode = Control.FOCUS_NONE
 		var nm: String = spec[1]
 		b.pressed.connect(func():
@@ -141,7 +141,7 @@ func _build_topright() -> void:
 				Game.world.ui.open(nm))
 		btns.add_child(b)
 	minimap = Minimap.new()
-	minimap.custom_minimum_size = Vector2(190, 190)
+	minimap.custom_minimum_size = Vector2(170, 170)
 	minimap.size_flags_horizontal = Control.SIZE_SHRINK_END
 	col.add_child(minimap)
 	time_lbl = _label(14, Color(0.9, 0.9, 0.85))
@@ -218,9 +218,10 @@ func _on_notify(text: String, col: Color) -> void:
 	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	l.custom_minimum_size = Vector2(420, 0)
 	feed.add_child(l)
-	while feed.get_child_count() > 6:
-		feed.get_child(0).queue_free()
-		feed.remove_child(feed.get_child(0))
+	var kids := feed.get_children()
+	var extra := kids.size() - 6
+	for i in maxi(0, extra):
+		kids[i].queue_free()
 	var tw := l.create_tween()
 	tw.tween_interval(4.0)
 	tw.tween_property(l, "modulate:a", 0.0, 1.0)

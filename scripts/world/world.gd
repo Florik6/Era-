@@ -55,10 +55,13 @@ func _ready() -> void:
 	if mode == "world":
 		Game.world_state = SaveSys.load_world_state(era)
 		if Game.world_state.is_empty():
-			Game.world_state = {"chunks": {}, "settlements": {}, "points": {}, "records": {}, "factions": {}, "quests": {}, "bosses": {}, "director": {}, "fortress": {}, "time": 0.3}
+			Game.world_state = {"chunks": {}, "settlements": {}, "points": {}, "records": {}, "factions": {}, "quests": {}, "bosses": {}, "director": {}, "fortress": {}, "poi_state": {}, "time": 0.3}
+		for k in ["chunks", "settlements", "points", "records", "factions", "quests", "bosses", "director", "fortress", "poi_state"]:
+			if not Game.world_state.has(k):
+				Game.world_state[k] = {}
 		Game.game_time = float(Game.world_state.get("time", 0.3))
 	else:
-		Game.world_state = {"chunks": {}, "settlements": {}, "points": {}, "records": {}, "factions": {}, "quests": {}, "bosses": {}, "director": {}, "fortress": {}}
+		Game.world_state = {"chunks": {}, "settlements": {}, "points": {}, "records": {}, "factions": {}, "quests": {}, "bosses": {}, "director": {}, "fortress": {}, "poi_state": {}}
 	_build_environment()
 	fx_root = Node3D.new()
 	fx_root.name = "FX"
@@ -138,7 +141,7 @@ func _build_environment() -> void:
 	e.tonemap_mode = Environment.TONE_MAPPER_FILMIC
 	e.fog_enabled = true
 	e.fog_light_color = ed.fog_color
-	e.fog_density = Settings.fog_value(ed.fog_base)
+	e.fog_density = Settings.fog_value(ed.fog_base) * 0.35
 	e.fog_sky_affect = 0.3
 	env.environment = e
 	add_child(env)
@@ -169,7 +172,7 @@ func _apply_quality() -> void:
 	if env and env.environment:
 		env.environment.glow_enabled = p.glow
 		if not weather:
-			env.environment.fog_density = Settings.fog_value(DBEras.era(era).fog_base)
+			env.environment.fog_density = Settings.fog_value(DBEras.era(era).fog_base) * 0.35
 
 # ---------------------------------------------------------------- setup
 func _setup_world() -> void:
@@ -179,6 +182,7 @@ func _setup_world() -> void:
 		terrain = load("res://scripts/world/chunk_streamer.gd").new()
 		terrain.name = "Terrain"
 		add_child(terrain)
+		terrain.build_poi_decor = false
 		terrain.setup(gen, Game.world_state.chunks)
 		terrain.chunk_loaded.connect(_on_chunk_loaded)
 		terrain.chunk_unloaded.connect(_on_chunk_unloaded)
@@ -345,6 +349,10 @@ func spawn_ice_wall(p: Vector3, dir: Vector3, life: float) -> void:
 	sb.global_position = Vector3(p.x, ground_height(p), p.z)
 	sb.look_at(sb.global_position + Vector3(dir.x, 0, dir.z), Vector3.UP)
 	get_tree().create_timer(life, false).timeout.connect(sb.queue_free)
+
+func camera_snap() -> void:
+	if cam:
+		cam.snap()
 
 func camera_shake(a: float) -> void:
 	if cam:
@@ -668,7 +676,7 @@ func _apply_dim_env(d) -> void:
 	sm.sky_horizon_color = d.sky_horizon
 	sm.ground_horizon_color = d.sky_horizon
 	e.fog_light_color = d.sky_horizon
-	e.fog_density = Settings.fog_value(0.004)
+	e.fog_density = Settings.fog_value(0.004) * 0.35
 	sun.light_color = d.light
 	if weather and weather.has_method("set_weather"):
 		weather.set_weather("clear", 9999.0)

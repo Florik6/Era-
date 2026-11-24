@@ -11,6 +11,7 @@ var action_buffer: Array = []      # recorded actions for the chrono double
 var notoriety := 0.0               # attracts hunters
 var companion = null
 var companion_mode := "follow"     # follow | attack | hold
+var scripted_move := Vector3.ZERO  # tests / cutscenes override joystick input
 var dimension := ""
 var _attack_hold_t := 0.0
 var _step_t := 0.0
@@ -78,6 +79,8 @@ func _read_input(delta: float) -> void:
 		mv = kb
 	var cam_yaw: float = Game.world.cam.yaw if (Game.world and Game.world.get("cam")) else 0.0
 	var dir := Vector3(mv.x, 0, mv.y).rotated(Vector3.UP, cam_yaw)
+	if scripted_move.length() > 0.01:
+		dir = scripted_move
 	move_input = dir
 	if Game.ui_is_open():
 		move_input = Vector3.ZERO

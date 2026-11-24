@@ -180,6 +180,17 @@ func _think() -> void:
 				best_s = fs
 				best_goal = "flee"
 				threat = thr
+	# --- cautious characters avoid much stronger enemies nearby
+	if enemies.size() > 0 and n.role == "bot" and best_goal != "flee":
+		for e in enemies:
+			if e.global_position.distance_to(n.global_position) < 11.0:
+				var r2: float = my_pow / power_of(e)
+				if r2 < 0.55 and p.caution >= 0.45:
+					var av: float = 1.0 + p.caution * 0.6 + (0.55 - r2)
+					if av > best_s:
+						best_s = av
+						best_goal = "flee"
+						threat = e
 	# --- heal
 	if hp_f < 0.45 and n.data and n.data.inv.count("potion_hp") > 0 and n.act.is_empty():
 		_drink()

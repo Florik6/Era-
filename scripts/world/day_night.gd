@@ -29,7 +29,10 @@ func setup(world_env: WorldEnvironment, sun_light: DirectionalLight3D, era_i: in
 	e.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 	e.reflected_light_source = Environment.REFLECTION_SOURCE_SKY
 	e.tonemap_mode = Environment.TONE_MAPPER_FILMIC
-	e.tonemap_exposure = 1.0
+	e.tonemap_exposure = 1.05
+	e.adjustment_enabled = true
+	e.adjustment_saturation = 1.18
+	e.adjustment_contrast = 1.06
 	if not Events.settings_changed.is_connected(_apply_settings):
 		Events.settings_changed.connect(_apply_settings)
 	_apply_settings()
@@ -82,7 +85,7 @@ func _update(k: float) -> void:
 	if blood:
 		moon_c = Color(1.0, 0.32, 0.25)
 	var col := moon_c.lerp(sun_c, day).lerp(Color(1.0, 0.6, 0.35), dusk * 0.6)
-	var energy := lerpf(0.42 if not blood else 0.5, 1.15, day)
+	var energy := lerpf(0.5 if not blood else 0.55, 1.4, day)
 	var wm := 1.0
 	var w = weather
 	if w == null and Game.world and Game.world.get("weather"):
@@ -90,6 +93,15 @@ func _update(k: float) -> void:
 	if w != null and w.get("sun_mult") != null:
 		wm = w.sun_mult
 	energy *= wm
+	var in_dim := false
+	if Game.world != null and is_instance_valid(Game.world):
+		var dimv = Game.world.get("dimension")
+		in_dim = dimv != null and str(dimv) != ""
+	if in_dim:
+		# a rift / pocket dimension owns its sky and light colour
+		sun.light_energy = lerpf(sun.light_energy, 1.0, k)
+		_lf = 0.8
+		return
 	sun.light_color = sun.light_color.lerp(col, k)
 	sun.light_energy = lerpf(sun.light_energy, energy, k)
 	var target_rot: Vector3
@@ -102,10 +114,11 @@ func _update(k: float) -> void:
 	else:
 		sun.rotation = sun.rotation.lerp(target_rot, k)
 	var en := env.environment
-	var amb: Color = e.ambient
+	var amb: Color = (e.ambient as Color).lerp(e.sun as Color, 0.35)
 	var night_amb := Color(0.36, 0.42, 0.62) if not blood else Color(0.55, 0.25, 0.25)
 	en.ambient_light_color = en.ambient_light_color.lerp(night_amb.lerp(amb, day), k)
-	en.ambient_light_energy = lerpf(en.ambient_light_energy, lerpf(0.55, 0.62, day) * (0.85 + 0.15 * wm), k)
+	var amb_boost := 0.22 if era == 4 else (0.08 if era == 2 else 0.0)
+	en.ambient_light_energy = lerpf(en.ambient_light_energy, (lerpf(0.62, 0.48, day) + amb_boost) * (0.85 + 0.15 * wm), k)
 	var top: Color = e.sky_top
 	var hor: Color = e.sky_horizon
 	var n_top := Color(0.04, 0.06, 0.16)

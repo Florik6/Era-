@@ -312,9 +312,9 @@ func finish_and_leave() -> void:
 			Profile.unlock("rift_master")
 		var pid: String = opts.get("poi", "")
 		if pid != "":
-			if not Game.world_state.points.has(pid):
-				Game.world_state.points[pid] = {}
-			Game.world_state.points[pid].cleared_day = Game.day()
+			if not Game.world_state.poi_state.has(pid):
+				Game.world_state.poi_state[pid] = {}
+			Game.world_state.poi_state[pid].cleared_day = Game.day()
 	w.leave_dimension(true)
 
 func _trial_victory() -> void:

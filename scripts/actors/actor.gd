@@ -405,6 +405,8 @@ func _tick_action(delta: float) -> void:
 	if not act.done and act.t >= act.dur * act.impact:
 		act.done = true
 		_on_impact(act)
+		if act.is_empty():
+			return
 	if act.t >= act.dur:
 		var fin := act
 		act = {}

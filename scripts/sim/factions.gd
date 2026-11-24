@@ -106,7 +106,7 @@ func strength(fid: String) -> float:
 func territory(fid: String) -> int:
 	var n := 0
 	for k in points:
-		if points[k].owner == fid:
+		if points[k].get("owner", "") == fid:
 			n += 1
 	for k in settlements:
 		if settlements[k].owner == fid:
@@ -147,9 +147,9 @@ func player_bonus() -> Dictionary:
 		b.dmg += 0.05
 		b.armor += 0.05
 	for k in points:
-		var o: String = points[k].owner
+		var o: String = points[k].get("owner", "")
 		if o == "player" or (m != "" and o == m):
-			match points[k].type:
+			match points[k].get("type", ""):
 				"watchtower", "comm_tower", "data_node":
 					b.xp += 0.05
 				"outpost", "checkpoint", "defense_turret", "power_station", "energy_station":
@@ -271,9 +271,9 @@ func buy(it: Dictionary, mult: float) -> bool:
 
 # ---------------------------------------------------------------- territory
 func capture_point(pid: String, new_owner: String, by_actor = null) -> void:
-	if not points.has(pid):
+	if not points.has(pid) or not points[pid].has("type"):
 		return
-	var prev: String = points[pid].owner
+	var prev: String = points[pid].get("owner", "")
 	if prev == new_owner:
 		return
 	points[pid].owner = new_owner
@@ -359,7 +359,9 @@ func _process(delta: float) -> void:
 	var target_f: String = enemies[randi() % enemies.size()]
 	var targets: Array = []
 	for pid in points:
-		if points[pid].owner == target_f or points[pid].owner == "":
+		if not points[pid].has("type"):
+			continue
+		if points[pid].get("owner", "") == target_f or points[pid].get("owner", "") == "":
 			targets.append(["cp", pid])
 	for sid in settlements:
 		if settlements[sid].owner == target_f and randf() < 0.3:

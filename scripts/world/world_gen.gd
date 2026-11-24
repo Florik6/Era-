@@ -71,7 +71,7 @@ func river_factor(x: float, z: float) -> float:
 
 ## Height before settlement flattening and roads.
 func raw_height(x: float, z: float) -> float:
-	var base := n_height.get_noise_2d(x, z) * 7.0
+	var base := 2.8 + n_height.get_noise_2d(x, z) * 6.0
 	var h := base + n_detail.get_noise_2d(x, z) * 1.2
 	var m := mountain_mask(x, z)
 	if m > 0.0:
@@ -98,7 +98,7 @@ func height(x: float, z: float) -> float:
 	var rd := road_distance(x, z)
 	if rd < 6.0:
 		var t := smoothstep(6.0, 1.5, rd)
-		var smooth := n_height.get_noise_2d(x, z) * 7.0 + mountain_mask(x, z) * 12.0
+		var smooth := 2.8 + n_height.get_noise_2d(x, z) * 6.0 + mountain_mask(x, z) * 12.0
 		h = lerpf(h, maxf(minf(h, smooth + 0.5), water_level + 0.3), t * 0.75)
 		if t > 0.2:
 			h = maxf(h, water_level + 0.3)

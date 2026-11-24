@@ -48,7 +48,9 @@ func setup(g: WorldGen, cs: Dictionary) -> void:
 			_idx_add(_bld_idx, key_of(b.pos), [b, s])
 	_terrain_mat = StandardMaterial3D.new()
 	_terrain_mat.vertex_color_use_as_albedo = true
+	_terrain_mat.vertex_color_is_srgb = true
 	_terrain_mat.roughness = 0.95
+	_terrain_mat.metallic_specular = 0.15
 	_water_mat = StandardMaterial3D.new()
 	var wc: Color = DBEras.era(era).water
 	_water_mat.albedo_color = wc
@@ -241,6 +243,8 @@ func _build_terrain(node: Node3D, k: Vector2i) -> PackedFloat32Array:
 			var b := gen.biome_at(x, z, h)
 			var c: Color = g.get(b, g.plains)
 			var jit := gen.n_detail.get_noise_2d(x * 2.7, z * 2.7)
+			if b == "urban":
+				c = _settlement_ground(x, z, g, jit)
 			c = c.lightened(jit * 0.09) if jit > 0.0 else c.darkened(-jit * 0.12)
 			var slope := 1.0 - norms[idx].y
 			if slope > 0.25 and b != "urban":
@@ -250,7 +254,7 @@ func _build_terrain(node: Node3D, k: Vector2i) -> PackedFloat32Array:
 				c = c.lerp(road_c, smoothstep(4.5, 1.5, rd) * 0.9)
 			if h < wl + 0.25:
 				c = c.lerp(g.sand.darkened(0.25), clampf((wl + 0.25 - h) * 0.8, 0.0, 0.85))
-			cols[idx] = c
+			cols[idx] = c.lightened(0.06)
 	var idxs := PackedInt32Array()
 	idxs.resize(RES * RES * 6)
 	var q := 0
@@ -279,6 +283,7 @@ func _build_terrain(node: Node3D, k: Vector2i) -> PackedFloat32Array:
 	var mi := MeshInstance3D.new()
 	mi.name = "Terrain"
 	mi.mesh = am
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	node.add_child(mi)
 	var sb := StaticBody3D.new()
 	sb.name = "Ground"
@@ -303,6 +308,27 @@ func _build_terrain(node: Node3D, k: Vector2i) -> PackedFloat32Array:
 		wm.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		node.add_child(wm)
 	return hs
+
+func _settlement_ground(x: float, z: float, g: Dictionary, jit: float) -> Color:
+	var s = gen.settlement_at(x, z, 0.8)
+	var urban: Color = g.urban
+	var dirt: Color = g.road
+	var grass: Color = g.plains
+	if s == null:
+		return urban
+	var sp: Vector2 = s.pos
+	var d := Vector2(x - sp.x, z - sp.y).length() / float(s.radius)
+	var patch := gen.n_moist.get_noise_2d(x * 9.0, z * 9.0)
+	var c: Color
+	if era >= 3 or s.type == "city":
+		c = urban.lerp(dirt, 0.25)
+		if d < 0.3:
+			c = urban.lightened(0.18)
+	else:
+		c = dirt.lerp(grass, clampf(0.35 + patch * 1.6 + (d - 0.5) * 0.9, 0.0, 0.85))
+		if d < 0.3:
+			c = urban.lightened(0.12).lerp(dirt, 0.25)
+	return c
 
 func _local_h(hs: PackedFloat32Array, lx: float, lz: float) -> float:
 	var fi := clampf(lx / STEP, 0.0, RES - 0.001)

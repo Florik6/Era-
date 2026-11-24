@@ -5,8 +5,8 @@ extends Camera3D
 
 var target: Node3D = null
 var yaw := 0.0
-var pitch_deg := 56.0
-var base_dist := 17.0
+var pitch_deg := 54.0
+var base_dist := 14.0
 var _focus := Vector3.ZERO
 var _shake := 0.0
 var _snap := true
