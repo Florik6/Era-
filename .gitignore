@@ -1,0 +1,9 @@
+# Godot
+.godot/
+*.tmp
+# Build outputs (APKs are published separately)
+builds/
+export_credentials.cfg
+# Signing keys are generated locally by tools/build_apk.sh
+android/*.keystore
+*.jks

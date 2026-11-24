@@ -1,0 +1,371 @@
+class_name BossBrain
+extends RefCounted
+## Boss fight director: phase transitions (visible: roar, banner, arena
+## changes, summons, form change, rift transfer), telegraphed ability
+## library, melee between abilities, escape logic.
+
+var b
+var target = null
+var think_t := 0.0
+var ability_cd := {}
+var global_cd := 2.0
+var casting := false
+var spin_t := 0.0
+var escape_checked := false
+
+func _init(boss) -> void:
+	b = boss
+
+func tick(delta: float) -> void:
+	for k in ability_cd.keys():
+		ability_cd[k] -= delta
+	global_cd -= delta
+	if spin_t > 0.0:
+		spin_t -= delta
+	if not b.can_act():
+		b.move_input = Vector3.ZERO
+		return
+	think_t -= delta
+	if think_t <= 0.0:
+		think_t = 0.3
+		_pick_target()
+		_check_phase()
+	if target == null:
+		var home: Vector3 = b.arena_center - b.global_position
+		home.y = 0
+		b.move_input = home.normalized() * 0.5 if home.length() > 3.0 else Vector3.ZERO
+		if home.length() < 3.0 and b.hp < b.max_hp:
+			b.hp = minf(b.max_hp, b.hp + b.max_hp * 0.02 * delta)
+		return
+	if casting:
+		b.move_input = Vector3.ZERO
+		return
+	var to: Vector3 = target.global_position - b.global_position
+	to.y = 0
+	var d := to.length()
+	var dir = to.normalized() if d > 0.01 else b.facing
+	b.face_dir(dir)
+	if global_cd <= 0.0 and _try_ability(d, dir):
+		return
+	var reach: float = b.natural_range + 0.6
+	if d > reach:
+		b.move_input = dir * (1.25 if b.statuses.has("enrage") else 1.0)
+	else:
+		b.move_input = Vector3.ZERO
+		_melee(dir)
+
+func _pick_target() -> void:
+	var best = null
+	var bd := 34.0
+	for a in Game.actors_near(b.global_position, 34.0):
+		if a.is_dead or not Game.is_enemy(b, a):
+			continue
+		var d: float = a.global_position.distance_to(b.global_position)
+		if a.is_player:
+			d -= 6.0
+		if d < bd:
+			bd = d
+			best = a
+	if best == null and target != null and is_instance_valid(target) and not target.is_dead and target.global_position.distance_to(b.global_position) < 60.0:
+		return
+	target = best
+
+func _melee(dir: Vector3) -> void:
+	if b.attack_cd > 0.0 or b.busy():
+		return
+	b.attack_cd = 1.6 if not b.statuses.has("enrage") else 1.1
+	var anims := ["slash", "overhead", "slash2"]
+	b.start_action("skill", 0.8, 0.55, {"anim": anims[randi() % 3], "cb": func():
+		var info := {"amount": b.base_dmg, "dtype": b.natural_dtype, "src": b, "melee": true, "knock": 5.0}
+		Combat.melee(b, b.natural_range + 0.8, 120.0, info)
+		Audio.play_sfx("swing_heavy", b.global_position)})
+
+func _check_phase() -> void:
+	var phases: Array = b.def.phases
+	var ratio: float = b.hp / maxf(1.0, b.max_hp)
+	var np: int = b.phase
+	for i in phases.size():
+		if ratio <= phases[i].hp + 0.001:
+			np = i
+	if np > b.phase:
+		b.phase = np
+		_enter_phase(np)
+	# escape (nemesis): strong bosses may flee at low health once
+	if not escape_checked and ratio < 0.15 and b.can_escape and b.boss_id != "chronos_avatar" and Game.world and Game.world.dimension == "":
+		escape_checked = true
+		if randf() < 0.22 and b.times_escaped < 1:
+			_escape()
+
+func _enter_phase(i: int) -> void:
+	var ph: Dictionary = b.def.phases[i]
+	Events.boss_phase.emit(b, i)
+	Audio.play_sfx("boss_phase", b.global_position)
+	Audio.play_sfx("boss_roar", b.global_position)
+	b.start_action("skill", 1.4, 0.95, {"anim": "roar"})
+	b.apply_status("invuln", 1.4)
+	VFX.ring(b.global_position, 8.0, Color(1.0, 0.3, 0.2), 0.8)
+	VFX.shake(0.5)
+	if ph.has("msg"):
+		Events.banner.emit("%s — фаза %d" % [b.display_name, i + 1], ph.msg, Color(1.0, 0.45, 0.3))
+	if ph.get("enrage", false):
+		b.apply_status("enrage", 9999.0)
+		b.base_speed *= 1.2
+	if ph.has("form"):
+		var f: float = ph.form
+		var tw = b.rig.create_tween()
+		tw.tween_property(b.rig, "scale", b.rig.scale * f, 1.0)
+		b.base_dmg *= 1.15
+	if ph.get("arena", "") == "break" and Game.world:
+		Game.world.boss_arena_break(b)
+	for ab in b.bonus_abilities:
+		ability_cd[ab] = 2.0
+	global_cd = 1.6
+	ability_cd.clear()
+
+func _available() -> Array:
+	var ph: Dictionary = b.def.phases[b.phase]
+	var out: Array = []
+	for ab in ph.use + b.bonus_abilities:
+		if b.disabled_abilities.has(ab):
+			continue
+		if ability_cd.get(ab, 0.0) > 0.0:
+			continue
+		out.append(ab)
+	return out
+
+func _try_ability(d: float, dir: Vector3) -> bool:
+	var av := _available()
+	if av.is_empty():
+		return false
+	av.shuffle()
+	for ab in av:
+		var spec: Dictionary = b.def.abilities.get(ab, {})
+		if spec.is_empty():
+			continue
+		var typ: String = spec.type
+		if typ in ["cleave", "spin"] and d > 6.0:
+			continue
+		if typ == "slam" and d > spec.get("radius", 5.0) + 1.0:
+			continue
+		if typ == "portal" and (Game.world == null or Game.world.dimension != ""):
+			ability_cd[ab] = 999.0
+			continue
+		ability_cd[ab] = spec.get("cd", 6.0) * (0.75 if b.statuses.has("enrage") else 1.0)
+		global_cd = 1.2 if b.statuses.has("enrage") else 1.8
+		_do(typ, spec, dir)
+		return true
+	return false
+
+func _dmg(spec: Dictionary) -> Dictionary:
+	return {"amount": b.base_dmg * spec.get("dmg", 1.0), "dtype": spec.get("dtype", b.natural_dtype), "src": b, "melee": false, "knock": 4.0}
+
+func _later(t: float, cb: Callable) -> void:
+	b.get_tree().create_timer(t, false).timeout.connect(func():
+		if is_instance_valid(b) and not b.is_dead:
+			cb.call())
+
+func _cast(dur: float) -> void:
+	casting = true
+	_later(dur, func(): casting = false)
+
+func _do(typ: String, spec: Dictionary, dir: Vector3) -> void:
+	var col: Color = Combat.element_color(spec.get("dtype", b.natural_dtype))
+	var tpos: Vector3 = target.global_position if target and is_instance_valid(target) else b.global_position + dir * 5.0
+	match typ:
+		"cleave":
+			var r: float = spec.get("radius", 4.5)
+			var arc: float = spec.get("arc", 120.0)
+			VFX.telegraph(b.global_position, r, 0.7, Color(1, 0.2, 0.1), "cone", dir, arc)
+			b.start_action("skill", 1.0, 0.75, {"anim": "slash"})
+			_cast(0.9)
+			var f: Vector3 = dir
+			_later(0.7, func():
+				for a in Game.actors_near(b.global_position, r + 1.0):
+					if a.is_dead or not Game.is_enemy(b, a):
+						continue
+					var to: Vector3 = a.global_position - b.global_position
+					to.y = 0
+					if to.length() - a.radius() <= r and (to.length() < 1.0 or f.angle_to(to.normalized()) <= deg_to_rad(arc * 0.5)):
+						Combat.deal(b, a, _dmg(spec))
+				Audio.play_sfx("swing_heavy", b.global_position)
+				VFX.shake(0.25))
+		"slam", "nova":
+			var r2: float = spec.get("radius", 5.0)
+			VFX.telegraph(b.global_position, r2, 0.9 if typ == "slam" else 1.1, col if typ == "nova" else Color(1, 0.2, 0.1))
+			b.start_action("skill", 1.2, 0.75, {"anim": "slam" if typ == "slam" else "cast"})
+			_cast(1.1)
+			_later(0.9 if typ == "slam" else 1.1, func():
+				VFX.explosion(b.global_position, r2, col if typ == "nova" else Color(0.8, 0.7, 0.5))
+				var inf := _dmg(spec)
+				if typ == "nova" and spec.get("dtype", "") == "ice":
+					inf.status = {"slow": 0.4}
+				Combat.aoe(b, b.global_position, r2, inf, false))
+		"charge":
+			var len := minf(14.0, b.global_position.distance_to(tpos) + 3.0)
+			var f2: Vector3 = dir
+			VFX.telegraph(b.global_position, 1.3, 0.6, Color(1, 0.2, 0.1), "line", f2, 360.0, len)
+			_cast(1.1)
+			_later(0.6, func():
+				var start: Vector3 = b.global_position
+				b.knockback = f2 * (len / 0.35)
+				b.start_action("skill", 0.5, 0.1, {"anim": "thrust"})
+				_later(0.35, func():
+					b.knockback = Vector3.ZERO
+					for a in Game.actors_near((start + b.global_position) * 0.5, len):
+						if a.is_dead or not Game.is_enemy(b, a):
+							continue
+						var cp := Geometry3D.get_closest_point_to_segment(a.global_position, start, b.global_position)
+						if cp.distance_to(a.global_position) < 2.0:
+							Combat.deal(b, a, _dmg(spec))
+					VFX.shake(0.3)))
+		"fan":
+			var n: int = spec.get("count", 5)
+			b.start_action("skill", 0.6, 0.5, {"anim": "cast" if b.def.rig != "humanoid" or not b.def.has("weapon") or ItemDB.base(b.def.weapon).get("cat", "") == "staff" else "shoot"})
+			_later(0.3, func():
+				for i in n:
+					var a2: float = deg_to_rad(-40.0 + 80.0 * i / maxf(1.0, n - 1))
+					var kind := "magic" if spec.get("dtype", "") in ["fire", "ice", "dark", "time", "lightning"] else "bullet"
+					Projectile.spawn(b, b.chest() + dir * 1.2, dir.rotated(Vector3.UP, a2) * (20.0 if kind == "magic" else 40.0), _dmg(spec), kind, {"range": 26.0, "color": col, "splash": 1.5 if kind == "magic" else 0.0})
+				Audio.play_sfx("fire_cast" if spec.get("dtype", "") == "fire" else "gun_rifle", b.global_position))
+		"volley", "strikes":
+			var n2: int = spec.get("count", 5)
+			b.start_action("skill", 0.8, 0.5, {"anim": "cast"})
+			for i in n2:
+				var off := Vector3(randf_range(-6, 6), 0, randf_range(-6, 6)) if i > 0 else Vector3.ZERO
+				var pt: Vector3 = tpos + off
+				if Game.world:
+					pt.y = Game.world.ground_height(pt)
+				var delay := 0.9 + i * (0.12 if typ == "volley" else 0.2)
+				VFX.telegraph(pt, 2.4, delay, col)
+				_later(delay, func():
+					if typ == "strikes":
+						VFX.beam(pt + Vector3(0, 14, 0), pt, col, 0.2, 0.15, true)
+						Audio.play_sfx("thunder", pt, -6.0)
+					else:
+						VFX.explosion(pt, 2.4, col)
+						Audio.play_sfx("explosion", pt, -6.0)
+					Combat.aoe(b, pt, 2.4, _dmg(spec), false))
+		"summon", "shield":
+			var eid: String = spec.get("enemy", "skeleton")
+			var cnt: int = spec.get("count", 2)
+			b.start_action("skill", 1.0, 0.6, {"anim": "roar" if typ == "summon" else "cast"})
+			_cast(0.9)
+			var adds: Array = []
+			if Game.world and Game.world.get("spawner"):
+				for i in cnt:
+					var p2: Vector3 = b.global_position + Vector3(randf_range(-5, 5), 0, randf_range(-5, 5))
+					var m = Game.world.spawner.spawn_enemy(eid, p2, maxi(1, b.level - 1))
+					if m:
+						m.team = "boss"
+						adds.append(m)
+						VFX.burst(p2 + Vector3(0, 1, 0), col, 14, 0.4)
+			if typ == "shield" and not adds.is_empty():
+				b.shielded = true
+				b.shield_adds = adds
+				Events.notify.emit("%s неуязвим, пока живы его стражи!" % b.display_name, Color(0.7, 0.7, 1.0))
+				_watch_shield()
+		"beam":
+			var f3: Vector3 = dir
+			VFX.telegraph(b.global_position, 0.9, 0.8, col, "line", f3, 360.0, 22.0)
+			b.start_action("skill", 1.1, 0.7, {"anim": "cast"})
+			_cast(1.0)
+			_later(0.8, func():
+				var s: Vector3 = b.chest()
+				var e: Vector3 = s + f3 * 22.0
+				VFX.beam(s, e, col, 0.35, 0.35, false)
+				Audio.play_sfx("laser", b.global_position)
+				for a in Game.actors_near(b.global_position + f3 * 11.0, 13.0):
+					if a.is_dead or not Game.is_enemy(b, a):
+						continue
+					var cp2 := Geometry3D.get_closest_point_to_segment(a.chest(), s, e)
+					if cp2.distance_to(a.chest()) < 1.4 and Combat.line_of_sight(s, a.chest()):
+						Combat.deal(b, a, _dmg(spec)))
+		"blink":
+			var dest: Vector3 = tpos + Vector3(randf_range(-5, 5), 0, randf_range(-5, 5))
+			if Game.world:
+				dest.y = Game.world.ground_height(dest) + 0.1
+			VFX.burst(b.chest(), col, 20, 0.4)
+			b.global_position = dest
+			b.reset_physics_interpolation()
+			VFX.burst(b.chest(), col, 20, 0.4)
+			Audio.play_sfx("teleport", dest)
+		"slowzone":
+			Zone.create("timeslow", b, tpos, 5.0, 6.0, {})
+			Audio.play_sfx("time_slow", tpos)
+		"portal":
+			if Game.world and Game.world.has_method("enter_dimension"):
+				_cast(1.5)
+				b.apply_status("invuln", 2.0)
+				VFX.ring(b.global_position, 6.0, Color(0.6, 0.2, 1.0), 1.0)
+				Audio.play_sfx("portal_open", b.global_position)
+				_later(1.2, func(): Game.world.enter_dimension(spec.get("dimension", "distorted"), {"boss": b}))
+		"hook":
+			var f4: Vector3 = dir
+			VFX.telegraph(b.global_position, 0.8, 0.6, Color(1, 0.2, 0.1), "line", f4, 360.0, 14.0)
+			b.start_action("skill", 0.9, 0.6, {"anim": "throw"})
+			_later(0.6, func():
+				if target and is_instance_valid(target) and not target.is_dead:
+					var cp3 := Geometry3D.get_closest_point_to_segment(target.global_position, b.global_position, b.global_position + f4 * 14.0)
+					if cp3.distance_to(target.global_position) < 1.6 and not target.invulnerable():
+						VFX.beam(b.chest(), target.chest(), Color(0.5, 0.5, 0.5), 0.3, 0.06, false)
+						target.knockback = (b.global_position - target.global_position).normalized() * 16.0
+						Combat.deal(b, target, _dmg(spec))
+						target.apply_status("slow", 1.5, {"f": 0.5})
+				Audio.play_sfx("swing", b.global_position))
+		"spin":
+			var r3: float = spec.get("radius", 4.0)
+			b.start_action("skill", 2.0, 0.05, {"anim": "spin"})
+			for i in 5:
+				_later(0.4 * i, func():
+					VFX.ring(b.global_position, r3, Color(1, 0.6, 0.4), 0.25)
+					Combat.aoe(b, b.global_position, r3, _dmg(spec), false)
+					Audio.play_sfx("swing_heavy", b.global_position, -4.0))
+		"quake":
+			b.start_action("skill", 1.2, 0.5, {"anim": "slam"})
+			_cast(1.0)
+			var f5: Vector3 = dir
+			for i in 4:
+				var pq: Vector3 = b.global_position + f5 * (3.0 + 3.0 * i)
+				VFX.telegraph(pq, 2.6, 0.7 + i * 0.2, Color(1, 0.3, 0.1))
+				_later(0.7 + i * 0.2, func():
+					VFX.explosion(pq, 2.6, Color(0.7, 0.55, 0.4))
+					Combat.aoe(b, pq, 2.6, _dmg(spec), false))
+		"missiles":
+			var n3: int = spec.get("count", 4)
+			b.start_action("skill", 0.8, 0.4, {"anim": "cast"})
+			for i in n3:
+				_later(0.15 * i, func():
+					var d3: Vector3 = dir.rotated(Vector3.UP, randf_range(-1.2, 1.2))
+					Projectile.spawn(b, b.chest() + Vector3(0, 1.0, 0), d3 * 14.0 + Vector3(0, 3, 0), _dmg(spec), "magic", {"range": 30.0, "homing": 1.2, "splash": 2.0, "color": col}))
+			Audio.play_sfx("plasma", b.global_position)
+		"mines":
+			var n4: int = spec.get("count", 6)
+			for i in n4:
+				var pm: Vector3 = b.global_position + Vector3(randf_range(-9, 9), 0, randf_range(-9, 9))
+				if Game.world:
+					pm.y = Game.world.ground_height(pm)
+				Zone.create("mine", b, pm, 1.2, 20.0, _dmg(spec))
+			Audio.play_sfx("reload", b.global_position)
+
+func _watch_shield() -> void:
+	_later(0.5, func():
+		var alive := false
+		for a in b.shield_adds:
+			if is_instance_valid(a) and not a.is_dead:
+				alive = true
+		if alive:
+			_watch_shield()
+		else:
+			b.shielded = false
+			b.shield_adds = []
+			Events.notify.emit("Щит босса пал!", Color(1.0, 0.85, 0.4))
+			Audio.play_sfx("ice_shatter", b.global_position))
+
+func _escape() -> void:
+	b.times_escaped += 1
+	Events.banner.emit("%s отступает!" % b.display_name, "Он запомнит эту встречу и вернётся сильнее.", Color(1.0, 0.6, 0.3))
+	VFX.burst(b.chest(), Color(0.3, 0.3, 0.3), 30, 0.6)
+	Audio.play_sfx("teleport", b.global_position)
+	if Game.world and Game.world.has_method("on_boss_escaped"):
+		Game.world.on_boss_escaped(b, target)
+	b.queue_free()
