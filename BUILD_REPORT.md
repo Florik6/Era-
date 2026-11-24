@@ -1,4 +1,4 @@
-# BUILD REPORT — ERA: Восхождение 0.9.1
+# BUILD REPORT — ERA: Восхождение 0.9.2
 
 ## Инструменты
 
@@ -15,8 +15,8 @@ debug-ключа в editor settings, импортирует ресурсы и э
 
 ## Пресет экспорта (`export_presets.cfg`)
 
-- Платформа Android, архитектура **arm64-v8a** (armv7, x86 и x86_64 выключены).
-- `package/unique_name = com.eraascension.game`, имя «ERA: Восхождение», версия 0.9.1 (code 10).
+- Платформа Android, архитектуры **arm64-v8a + armeabi-v7a** в одном APK: все ARM-телефоны, 64 и 32 бит. x86 и x86_64 нужны только эмуляторам на ПК, они выключены ради размера.
+- `package/unique_name = com.eraascension.game`, имя «ERA: Восхождение», версия 0.9.2 (code 11).
 - Иконки: 192 px и адаптивная 432 px (foreground и background).
 - Immersive mode. Разрешение — только VIBRATE, интернет не требуется.
 - Ориентация горизонтальная (sensor landscape в project.godot).
@@ -28,14 +28,16 @@ debug-ключа в editor settings, импортирует ресурсы и э
 
 | Файл | Размер | SHA-256 |
 |---|---|---|
-| `ERA_Ascension.apk` (release) | 34 488 229 байт | `d95abbc910363340b1b22c7fc7081b5307886c215604ba0f4948ada621ef1c61` |
-| `ERA_Ascension-debug.apk` | 36 303 246 байт | `39e8655ac5b78f16f509947dd4166ca2b38aa597ceed69e9a9219b22ec6c54a0` |
+| `ERA_Ascension.apk` (единый release, arm64-v8a + armeabi-v7a) | 60 395 588 байт | `48093b29fc09e06e7a3b534b5e59eedcd442bc4752b04013bc90bcba2a64bf57` |
+
+Debug-сборка по-прежнему собирается командой `tools/build_apk.sh debug`, но в `dist/` её больше нет: для установки нужен один файл.
 
 ## Проверка APK
 
 - **Формат и подпись:** `file` определяет оба файла как Android package (APK). `apksigner verify` проходит для обоих.
   Подпись debug — `CN=Android Debug, O=Android, C=US`, release — `CN=ERA Ascension, O=ERA, C=RU`.
-- **Манифест (`aapt dump badging`):** `package: name='com.eraascension.game' versionCode='10' versionName='0.9.1'`,
+- **Подпись:** схемы APK Signature v2 и v3 (`apksigner verify -v`). Схема v1 для minSdk 24 не требуется.
+- **Манифест (`aapt dump badging`):** `package: name='com.eraascension.game' versionCode='11' versionName='0.9.2'`,
   `sdkVersion:'24'`, `targetSdkVersion:'36'`, метка `ERA: Восхождение`.
   - `android.hardware.vulkan.level` и `.version` объявлены с `required="false"`, так что устройства без Vulkan не отсекаются.
   - `glEsVersion 0x30000` (OpenGL ES 3 для отката).

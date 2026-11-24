@@ -7,7 +7,7 @@ config_version=5
 
 config/name="ERA: Восхождение"
 config/description="3D Action RPG: пять исторических эпох, живой мир, живые легенды."
-config/version="0.9.1"
+config/version="0.9.2"
 run/main_scene="res://scenes/boot.tscn"
 config/features=PackedStringArray("4.7", "Mobile")
 config/icon="res://assets/icon/icon.png"
