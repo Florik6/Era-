@@ -187,7 +187,8 @@ func _think() -> void:
 	# --- cautious characters avoid much stronger enemies nearby
 	if enemies.size() > 0 and n.role == "bot" and best_goal != "flee":
 		for e in enemies:
-			if e.global_position.distance_to(n.global_position) < 11.0:
+			var avoid_r := 22.0 if (goal == "flee" and threat == e) else 12.0
+			if e.global_position.distance_to(n.global_position) < avoid_r:
 				var r2: float = my_pow / power_of(e)
 				if r2 < 0.55 and p.caution >= 0.45:
 					var av: float = 1.0 + p.caution * 0.6 + (0.55 - r2)

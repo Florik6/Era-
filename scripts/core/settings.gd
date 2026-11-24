@@ -9,7 +9,10 @@ enum Quality { LOW, MEDIUM, HIGH, AUTO }
 var quality: int = Quality.AUTO
 var effective_quality: int = Quality.MEDIUM
 var fog_enabled := true
-var fog_density := 0.5          # 0..1 user multiplier; default is comfortable
+var fog_density := 0.5          # legacy multiplier (kept for old settings files)
+var fog_level := 2              # 0 off, 1 light, 2 standard (both are see-through)
+var cinematics := 2             # 0 off, 1 short, 2 full
+var effects_intensity := 1.0    # colour/screen effects of events (blood moon tint, flashes)
 var music_vol := 0.7
 var sfx_vol := 0.85
 var render_scale := 1.0         # extra multiplier on top of quality profile
@@ -38,6 +41,9 @@ func load_settings() -> void:
 	quality = cf.get_value("gfx", "quality", quality)
 	fog_enabled = cf.get_value("gfx", "fog_enabled", fog_enabled)
 	fog_density = cf.get_value("gfx", "fog_density", fog_density)
+	fog_level = cf.get_value("gfx", "fog_level", fog_level)
+	cinematics = cf.get_value("gfx", "cinematics", cinematics)
+	effects_intensity = cf.get_value("gfx", "effects_intensity", effects_intensity)
 	render_scale = cf.get_value("gfx", "render_scale", render_scale)
 	show_fps = cf.get_value("gfx", "show_fps", show_fps)
 	music_vol = cf.get_value("audio", "music", music_vol)
@@ -55,6 +61,9 @@ func save_settings() -> void:
 	cf.set_value("gfx", "quality", quality)
 	cf.set_value("gfx", "fog_enabled", fog_enabled)
 	cf.set_value("gfx", "fog_density", fog_density)
+	cf.set_value("gfx", "fog_level", fog_level)
+	cf.set_value("gfx", "cinematics", cinematics)
+	cf.set_value("gfx", "effects_intensity", effects_intensity)
 	cf.set_value("gfx", "render_scale", render_scale)
 	cf.set_value("gfx", "show_fps", show_fps)
 	cf.set_value("audio", "music", music_vol)
@@ -90,13 +99,16 @@ func profile() -> Dictionary:
 	match effective_quality:
 		Quality.LOW:
 			return {"scale": 0.7, "shadows": false, "shadow_size": 1024, "chunk_radius": 2, "max_npcs": 12,
-				"particles": 0.4, "props": 0.55, "lod_bias": 0.6, "glow": false}
+				"particles": 0.4, "props": 0.55, "lod_bias": 0.6, "glow": false,
+				"grass": 0.35, "detail_dist": 28.0, "fx": 0, "lights": 4, "decals": false, "ambient_life": false}
 		Quality.HIGH:
 			return {"scale": 1.0, "shadows": true, "shadow_size": 2048, "chunk_radius": 3, "max_npcs": 26,
-				"particles": 1.0, "props": 1.0, "lod_bias": 1.2, "glow": true}
+				"particles": 1.0, "props": 1.0, "lod_bias": 1.2, "glow": true,
+				"grass": 1.0, "detail_dist": 55.0, "fx": 2, "lights": 12, "decals": true, "ambient_life": true}
 		_:
 			return {"scale": 0.85, "shadows": true, "shadow_size": 1024, "chunk_radius": 2, "max_npcs": 18,
-				"particles": 0.7, "props": 0.8, "lod_bias": 1.0, "glow": false}
+				"particles": 0.7, "props": 0.8, "lod_bias": 1.0, "glow": true,
+				"grass": 0.7, "detail_dist": 40.0, "fx": 1, "lights": 8, "decals": true, "ambient_life": true}
 
 func apply() -> void:
 	var p := profile()
@@ -111,9 +123,14 @@ func apply() -> void:
 ## Fog density actually used by the environment. Capped so the screen never
 ## becomes an opaque grey mass (see design requirement on fog).
 func fog_value(base: float) -> float:
-	if not fog_enabled:
+	if not fog_enabled or fog_level <= 0:
 		return 0.0
-	return clampf(base * fog_density * 2.0, 0.0, 0.012)
+	var k := 0.45 if fog_level == 1 else 1.0
+	return clampf(base * k, 0.0, 0.012)
+
+## Profile value with a default (Visual Quality Manager entry point).
+func vq(key: String, default = null):
+	return profile().get(key, default)
 
 func _process(delta: float) -> void:
 	if quality != Quality.AUTO:

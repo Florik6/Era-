@@ -648,7 +648,7 @@ func take_damage(info: Dictionary) -> float:
 			blocking = false
 			apply_status("stun", 0.6)
 		Audio.play_sfx("block", global_position, -3.0)
-		VFX.burst(chest() + from_dir * 0.5, Color(1.0, 0.9, 0.6), 6, 0.3)
+		VFX.block_fx(chest() + from_dir * 0.5, -from_dir)
 	if statuses.has("unstoppable"):
 		amount *= 0.6
 	# shield
@@ -674,15 +674,17 @@ func take_damage(info: Dictionary) -> float:
 				apply_status("slow", 2.5, {"f": float(sv)})
 			else:
 				apply_status(st, float(sv))
+		var heavy_hit: bool = dealt > max_hp * 0.18 or info.get("crit", false) or info.get("knock", 0.0) >= 5.0
+		VFX.hit_fx(chest() + from_dir * radius(), -from_dir, info.get("dtype", "slash"), heavy_hit, DBActors.ENEMIES.get(def_id, {}).get("metal", false) or stat("armor") > 20.0)
 		if rig and (kind != "boss" or dealt > max_hp * 0.03):
-			rig.on_hit()
+			rig.on_hit(-from_dir, heavy_hit)
 			if act.get("name", "") == "melee" and dealt > max_hp * 0.12 and kind == "humanoid" and not statuses.has("unstoppable"):
 				act = {}
 	return dealt
 
 func _parry(src) -> void:
 	Audio.play_sfx("parry", global_position, 0.0)
-	VFX.burst(chest() + facing * 0.6, Color(1.0, 1.0, 0.7), 12, 0.4)
+	VFX.parry_fx(chest() + facing * 0.6, facing)
 	VFX.text(chest() + Vector3(0, 0.5, 0), "Парирование!", Color(1.0, 0.95, 0.5))
 	if src and is_instance_valid(src) and src is Actor:
 		var st := 1.0

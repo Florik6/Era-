@@ -161,7 +161,7 @@ func trigger(act: String) -> void:
 	action = act
 	action_p = 0.0
 
-func on_hit() -> void:
+func on_hit(_dir: Vector3 = Vector3.ZERO, _heavy: bool = false) -> void:
 	hit_t = 0.25
 
 func set_dormant(v: bool) -> void:

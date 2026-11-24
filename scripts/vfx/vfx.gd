@@ -44,3 +44,41 @@ static func telegraph(pos: Vector3, r: float, dur: float, c: Color = Color(1, 0.
 static func shake(amount: float = 0.3) -> void:
 	if Game.world and Game.world.has_method("camera_shake"):
 		Game.world.camera_shake(amount)
+
+## Weapon/spell hit feedback at the point of impact (dir = attack direction).
+static func hit_fx(pos: Vector3, dir: Vector3, dtype: String = "slash", heavy: bool = false, metal: bool = false) -> void:
+	var m = _m()
+	if m and m.has_method("hit_fx"):
+		m.hit_fx(pos, dir, dtype, heavy, metal)
+	elif m:
+		m.burst(pos, Color(1.0, 0.9, 0.8), 6, 0.25)
+
+## Weapon clash on a successful parry.
+static func parry_fx(pos: Vector3, dir: Vector3) -> void:
+	var m = _m()
+	if m and m.has_method("parry_fx"):
+		m.parry_fx(pos, dir)
+	elif m:
+		m.burst(pos, Color(1.0, 1.0, 0.7), 12, 0.4)
+
+## Blocked hit on a shield/weapon.
+static func block_fx(pos: Vector3, dir: Vector3) -> void:
+	var m = _m()
+	if m and m.has_method("block_fx"):
+		m.block_fx(pos, dir)
+	elif m:
+		m.burst(pos, Color(1.0, 0.9, 0.6), 6, 0.3)
+
+## Ground impact of heavy attacks (dust, cracks).
+static func ground_impact(pos: Vector3, r: float = 2.0) -> void:
+	var m = _m()
+	if m and m.has_method("ground_impact"):
+		m.ground_impact(pos, r)
+	elif m:
+		m.ring(pos, r, Color(0.8, 0.7, 0.55), 0.3)
+
+## Temporary decal on the ground (scorch, frost, footprint, crack, blood...).
+static func decal(pos: Vector3, kind: String, size: float = 1.5, life: float = 20.0, rot: float = 0.0) -> void:
+	var m = _m()
+	if m and m.has_method("decal"):
+		m.decal(pos, kind, size, life, rot)

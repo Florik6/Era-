@@ -44,6 +44,7 @@ var poi_nodes := {}
 var settlement_npcs := {}     # settlement id -> Array of NPC
 var flat_ground := false
 var player: Player
+var ext := {}                 # optional subsystems: road_encounters, living_pois, tracking, discovery, traces, cinematic
 var _death_pending := false
 var _rift_picked: Array = []
 var _base_env := {}
@@ -94,6 +95,10 @@ func _ready() -> void:
 	add_child(director)
 	dialogs = Dialogs.new(self)
 	add_child(dialogs)
+	for spec in [["road_encounters", "res://scripts/sim/road_encounters.gd"], ["living_pois", "res://scripts/world/living_poi.gd"],
+			["tracking", "res://scripts/world/tracking.gd"], ["discovery", "res://scripts/world/discovery.gd"],
+			["traces", "res://scripts/world/event_traces.gd"], ["cinematic", "res://scripts/ui/cinematic.gd"]]:
+		_attach_optional(spec[0], spec[1])
 	cam = GameCamera.new()
 	add_child(cam)
 	hud = HUD.new()
@@ -110,6 +115,7 @@ func _ready() -> void:
 			_setup_world()
 		_:
 			_setup_mode()
+	_setup_optional()
 	Events.actor_killed.connect(_on_actor_killed)
 	Events.player_died.connect(_on_player_died)
 	Events.chronicle.connect(_on_chronicle)
@@ -122,6 +128,23 @@ func _ready() -> void:
 			Profile.tutorial_done = true
 			get_tree().create_timer(1.5, false).timeout.connect(func():
 				Events.banner.emit("ЭПОХА I: " + DBEras.era(era).name.to_upper() if era == 0 else DBEras.era(era).name, "Собирайте сферы опыта, ищите оружие, сражайтесь и становитесь легендой.", Color(1.0, 0.85, 0.4)))
+
+## Optional subsystems are plain nodes with setup(world); missing scripts are skipped.
+func _attach_optional(nm: String, path: String) -> void:
+	if not ResourceLoader.exists(path):
+		return
+	var n = load(path).new()
+	n.name = nm
+	add_child(n)
+	ext[nm] = n
+
+func sys(nm: String):
+	return ext.get(nm)
+
+func _setup_optional() -> void:
+	for k in ext:
+		if ext[k].has_method("setup"):
+			ext[k].setup(self)
 
 func _build_environment() -> void:
 	env = WorldEnvironment.new()
