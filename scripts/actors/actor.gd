@@ -126,7 +126,7 @@ func recalc_stats() -> void:
 	var base_st := 100.0
 	if data:
 		var c: Dictionary = DBSkills.CLASSES.get(data.class_id, {})
-		base_hp = c.get("hp", 100) + (data.level - 1) * 12.0
+		base_hp = c.get("hp", 100) * 1.15 + (data.level - 1) * 14.0
 		base_mana = c.get("mana", 40) + (data.level - 1) * 4.0
 		base_st = c.get("stamina", 100)
 		s.armor += c.get("armor", 0.0)
@@ -315,6 +315,8 @@ func _regen(dt: float) -> void:
 
 func _tick_statuses(delta: float) -> void:
 	for k in statuses.keys():
+		if is_dead or not statuses.has(k):
+			continue
 		var s: Dictionary = statuses[k]
 		s.t -= delta
 		if k == "burn":
@@ -772,9 +774,14 @@ func _on_death(_killer) -> void:
 
 ## Experience reward for killing this actor.
 func xp_value() -> int:
+	var v := 0
 	if data:
-		return 20 + data.level * 12 + int(data.xp * 0.25)
-	return 10 + level * 6
+		v = 30 + data.level * 15 + int(data.xp * 0.25)
+	else:
+		v = 16 + level * 9
+	if elite:
+		v *= 2
+	return v
 
 func gain_xp(n: int) -> void:
 	if data == null or n <= 0:

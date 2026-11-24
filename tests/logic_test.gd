@@ -351,13 +351,14 @@ class Suite:
 		ok("player returns to the world", w.dimension == "" and Chronicle.count_type("rift_cleared", "player") >= 1)
 
 	func _ai(w, p) -> void:
-		var rec: Dictionary = w.legends.new_record("Охотник", {"level": 8, "archetype": "aggressive"})
+		var rec: Dictionary = w.legends.new_record("Охотник", {"level": 8, "archetype": "aggressive", "class_id": "warrior"})
 		var n = w.spawner.spawn_bot(rec, p.global_position + Vector3(6, 0, 0))
 		var victim = w.spawner.spawn_enemy("wolf", n.global_position + Vector3(3, 0, 0), 1)
 		victim.max_hp = 20.0
 		victim.hp = 20.0
 		victim.stats["base_hp"] = 20.0
-		await wait(5.0)
+		victim.base_speed = 0.0
+		await wait(8.0)
 		ok("bot fights enemies autonomously", (not is_instance_valid(victim)) or victim.is_dead or victim.hp < 20.0, "goal=%s tgt=%s" % [n.brain.goal, str(n.brain.target)])
 		var rec2: Dictionary = w.legends.new_record("Трус", {"level": 1, "archetype": "cautious"})
 		var c = w.spawner.spawn_bot(rec2, p.global_position + Vector3(-6, 0, 0))

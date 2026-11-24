@@ -409,7 +409,7 @@ static func random_consumable(era_i: int, rng: RandomNumberGenerator = null) -> 
 	if r.randf() < 0.08:
 		pool.append_array(["scroll_purify", "potion_big"])
 	if r.randf() < 0.04:
-		pool.append_array(["tome_fire", "tome_ice", "tome_lightning", "tome_dark", "tome_spacetime"][r.randi() % 5])
+		pool.append(["tome_fire", "tome_ice", "tome_lightning", "tome_dark", "tome_spacetime"][r.randi() % 5])
 	if r.randf() < 0.02:
 		pool.append("mirror_shard")
 	return create(pool[r.randi() % pool.size()], 0, 1, r)

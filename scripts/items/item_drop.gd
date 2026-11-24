@@ -8,6 +8,7 @@ var item := {}
 var gold := 0
 var interact_radius := 2.2
 var by_player_t := 0.0
+var life := 180.0          # seconds before an unattended drop vanishes
 var _t := 0.0
 var _vis: Node3D
 var _label: Label3D
@@ -17,6 +18,10 @@ func setup(it: Dictionary, g: int = 0, by_player: bool = false) -> void:
 	item = it
 	gold = g
 	by_player_t = 4.0 if by_player else 0.0
+	var rar: int = it.get("rarity", 0) if g == 0 else 0
+	life = [180.0, 240.0, 420.0, 420.0, 900.0, 900.0][clampi(rar, 0, 5)]
+	if ItemDB.base(it.get("base", "")).get("relic", false) or it.get("base", "") == "chrono_shard":
+		life = 1800.0
 
 func _ready() -> void:
 	_vis = Node3D.new()
@@ -127,7 +132,11 @@ func interact(a) -> void:
 
 func _process(delta: float) -> void:
 	_t += delta
+	life -= delta
 	by_player_t = maxf(0.0, by_player_t - delta)
+	if life <= 0.0:
+		queue_free()
+		return
 	_vis.rotation.y += delta * 1.2
 	_vis.position.y = 0.1 + sin(_t * 2.5) * 0.06
 	if _beam:
@@ -136,6 +145,9 @@ func _process(delta: float) -> void:
 	if pl == null or not is_instance_valid(pl) or pl.is_dead:
 		return
 	var d: float = pl.global_position.distance_to(global_position)
+	if d > 260.0 and life < 1700.0:
+		queue_free()
+		return
 	if _label:
 		_label.visible = d < 9.0 or item.get("rarity", 0) >= 2
 	if by_player_t <= 0.0 and d < 1.3 and Settings.auto_pickup:

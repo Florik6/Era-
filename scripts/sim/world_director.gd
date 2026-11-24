@@ -110,15 +110,26 @@ func _ambient_population() -> void:
 		elif a.global_position.distance_to(pp) > 110.0:
 			a.queue_free()
 			ambient.erase(a)
-	var target := 4 + (3 if Game.is_night() else 0)
+	for a in Game.actors.duplicate():
+		if not is_instance_valid(a) or a == world.player or a.is_dead:
+			continue
+		if a.team == "player" or a.record.size() > 0 or a.get("settlement_id") != null and a.settlement_id != "":
+			continue
+		if a is Boss and a.lair_id != "":
+			continue
+		if a.global_position.distance_to(pp) > 170.0 and not world._in_dim_region(a.global_position):
+			a.queue_free()
+	var target := 6 + mini(3, world.spawner.era_progress_levels() / 2) + (2 if Game.is_night() else 0)
 	target = int(target * mods.spawn)
 	if ambient.size() >= target:
 		return
 	var era_d: Dictionary = DBEras.era(Profile.current_era)
 	var pool: Array = era_d.night_enemies if (Game.is_night() and randf() < 0.6) else era_d.enemies
+	pool = world.spawner.suitable(pool)
 	var id: String = pool[randi() % pool.size()]
-	var center := _ring_pos(pp, 38.0, 60.0)
-	var pack := 1 + (randi() % 3 if DBActors.ENEMIES[id].rig == "wolf" or DBActors.ENEMIES[id].team == "bandit" else 0)
+	var center := _ring_pos(pp, 30.0, 48.0)
+	var prog: int = world.spawner.era_progress_levels()
+	var pack := 1 + (randi() % (1 + mini(2, prog / 2)) if DBActors.ENEMIES[id].rig == "wolf" or DBActors.ENEMIES[id].team == "bandit" else 0)
 	for i in pack:
 		var m = world.spawner.spawn_enemy(id, center + Vector3(randf_range(-3, 3), 0, randf_range(-3, 3)))
 		if m:
@@ -180,8 +191,9 @@ func _start(type: String, pp: Vector3) -> void:
 			if world.weather and world.weather.has_method("set_override"):
 				world.weather.set_override("cursed_fog", true)
 			mods.spawn = 1.6
-			for i in 4:
-				var nid: String = DBEras.era(era).night_enemies[randi() % DBEras.era(era).night_enemies.size()]
+			var fog_pool: Array = world.spawner.suitable(DBEras.era(era).night_enemies)
+			for i in 2 + mini(2, world.spawner.era_progress_levels() / 2):
+				var nid: String = fog_pool[randi() % fog_pool.size()]
 				var m = world.spawner.spawn_enemy(nid, _ring_pos(pp, 25.0, 40.0))
 				if m:
 					e2.actors.append(m)
@@ -274,10 +286,11 @@ func _invasion(e: Dictionary, p: Vector3) -> void:
 			others.append(i)
 	var from_era: int = others[randi() % others.size()]
 	var ed: Dictionary = DBEras.era(from_era)
-	for i in 3 + randi() % 3:
+	for i in 2 + mini(3, world.spawner.era_progress_levels() / 2) + randi() % 2:
 		var id: String = ed.enemies[randi() % ed.enemies.size()]
-		var m = world.spawner.spawn_enemy(id, p + Vector3(randf_range(-4, 4), 0, randf_range(-4, 4)), world.spawner.level_near_player(1))
+		var m = world.spawner.spawn_enemy(id, p + Vector3(randf_range(-4, 4), 0, randf_range(-4, 4)), world.spawner.level_near_player(0))
 		if m:
+			world.spawner.normalize_to_era(m, from_era)
 			m.display_name = "%s (%s)" % [m.display_name, ed.name]
 			m.team = "monster"
 			e.actors.append(m)
@@ -368,8 +381,9 @@ func start_raid_on(sid: String, qid: String) -> void:
 	var bandits: Array = era_d.enemies.filter(func(x): return DBActors.ENEMIES[x].team == "bandit")
 	if bandits.is_empty():
 		bandits = era_d.enemies
+	bandits = world.spawner.suitable(bandits)
 	var from := _ring_pos(c, 35.0, 45.0)
-	for i in 4 + Profile.current_era:
+	for i in 3 + mini(3, world.spawner.era_progress_levels() / 2):
 		var m = world.spawner.spawn_enemy(bandits[randi() % bandits.size()], from + Vector3(randf_range(-4, 4), 0, randf_range(-4, 4)))
 		if m:
 			m.brain.goal = "travel"

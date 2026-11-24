@@ -21,10 +21,19 @@ var chunks := {}                # Vector2i -> Node3D
 var heights := {}               # Vector2i -> PackedFloat32Array (VERTS*VERTS)
 var buildings := {}             # Vector2i -> Array[Building]
 var build_poi_decor := true
-var budget_ms := 7.0
+var budget_ms := 5.0
 var radius := 2
 var build_times: Array = []
 var _queue: Array = []
+var _bld_jobs: Array = []        # deferred building construction: [key, chunk_node, b, s, st]
+var _terrain_idx := PackedInt32Array()
+var _terrain_tasks: Array = []   # [task_id, TerrainJob]
+var _terrain_pending := {}
+var use_threads := true
+var _stage_jobs: Array = []      # chunks with terrain built, waiting for props/structures: [key, node, hs, st]
+var _defer_buildings := false
+var bld_times: Array = []
+var stage_times := {"terrain": [], "props": [], "struct": [], "signal": []}
 var _center_key := Vector2i(999999, 999999)
 var _poi_idx := {}
 var _set_idx := {}
@@ -113,16 +122,57 @@ func update_center(pos: Vector3) -> void:
 		for k in chunks.keys():
 			if maxi(absi(k.x - ck.x), absi(k.y - ck.y)) > radius + 1:
 				_unload(k)
-	var t0 := Time.get_ticks_msec()
-	var built := 0
+	# Staged streaming: (1) finish chunks whose terrain exists, (2) start new
+	# chunks (terrain + collision only), (3) build houses one by one.
+	# At least one unit of work per frame; more only within the time budget.
+	var t0 := Time.get_ticks_usec()
+	var budget_us := int(budget_ms * 1000.0)
+	var did := false
+	while not _stage_jobs.is_empty() and (not did or Time.get_ticks_usec() - t0 < budget_us):
+		var sj: Array = _stage_jobs.pop_front()
+		if chunks.get(sj[0]) == sj[1] and is_instance_valid(sj[1]):
+			_defer_buildings = true
+			_finish_chunk(sj[0], sj[1], sj[2], sj[3])
+			_defer_buildings = false
+			did = true
+	# completed background terrain computations → nodes (cheap)
+	for i in range(_terrain_tasks.size() - 1, -1, -1):
+		var tt: Array = _terrain_tasks[i]
+		if not WorkerThreadPool.is_task_completed(tt[0]):
+			continue
+		WorkerThreadPool.wait_for_task_completion(tt[0])
+		_terrain_tasks.remove_at(i)
+		var job: TerrainJob = tt[1]
+		_terrain_pending.erase(job.k)
+		if chunks.has(job.k) or maxi(absi(job.k.x - _center_key.x), absi(job.k.y - _center_key.y)) > radius:
+			continue
+		_start_chunk(job.k, job.data)
+		did = true
 	while not _queue.is_empty():
 		var k: Vector2i = _queue.pop_front()
-		if chunks.has(k):
+		if chunks.has(k) or _terrain_pending.has(k):
 			continue
-		_build_chunk(k)
-		built += 1
-		if Time.get_ticks_msec() - t0 >= budget_ms:
-			break
+		if use_threads and OS.get_processor_count() > 1:
+			if _terrain_tasks.size() >= 2:
+				_queue.push_front(k)
+				break
+			var job := TerrainJob.new()
+			job.k = k
+			var tid := WorkerThreadPool.add_task(func(): job.data = _terrain_data(job.k), false, "terrain")
+			_terrain_tasks.append([tid, job])
+			_terrain_pending[k] = true
+		else:
+			if did and Time.get_ticks_usec() - t0 >= budget_us:
+				_queue.push_front(k)
+				break
+			_start_chunk(k)
+			did = true
+	while not _bld_jobs.is_empty() and (not did or Time.get_ticks_usec() - t0 < budget_us):
+		var j: Array = _bld_jobs.pop_front()
+		if chunks.get(j[0]) != j[1] or not is_instance_valid(j[1]):
+			continue
+		_make_building(j[0], j[1], j[2], j[3], j[4])
+		did = true
 
 func force_load_around(pos: Vector3) -> void:
 	radius = int(Settings.profile().get("chunk_radius", 2))
@@ -132,14 +182,27 @@ func force_load_around(pos: Vector3) -> void:
 	for k in _desired(ck):
 		if not chunks.has(k):
 			_build_chunk(k)
+	while not _stage_jobs.is_empty():
+		var sj: Array = _stage_jobs.pop_front()
+		if chunks.get(sj[0]) == sj[1] and is_instance_valid(sj[1]):
+			_finish_chunk(sj[0], sj[1], sj[2], sj[3])
+	_flush_buildings()
+
+func _flush_buildings() -> void:
+	while not _bld_jobs.is_empty():
+		var j: Array = _bld_jobs.pop_front()
+		if chunks.get(j[0]) == j[1] and is_instance_valid(j[1]):
+			_make_building(j[0], j[1], j[2], j[3], j[4])
 
 func pending() -> int:
-	return _queue.size()
+	return _queue.size() + _bld_jobs.size()
 
 func unload_all() -> void:
 	for k in chunks.keys():
 		_unload(k)
 	_queue.clear()
+	_stage_jobs.clear()
+	_bld_jobs.clear()
 	_center_key = Vector2i(999999, 999999)
 
 func _unload(k: Vector2i) -> void:
@@ -185,7 +248,14 @@ func is_loaded(p: Vector3) -> bool:
 	return chunks.has(key_of(Vector2(p.x, p.z)))
 
 # ---------------------------------------------------------------- chunk build
+## Synchronous full build (spawn, teleports).
 func _build_chunk(k: Vector2i) -> void:
+	_start_chunk(k)
+	var sj: Array = _stage_jobs.pop_back()
+	_finish_chunk(sj[0], sj[1], sj[2], sj[3])
+
+## Stage 1: chunk node, terrain mesh and collision (data may come from a worker thread).
+func _start_chunk(k: Vector2i, data: Dictionary = {}) -> void:
 	var t0 := Time.get_ticks_usec()
 	var node := Node3D.new()
 	node.name = "C%d_%d" % [k.x, k.y]
@@ -193,18 +263,36 @@ func _build_chunk(k: Vector2i) -> void:
 	add_child(node)
 	chunks[k] = node
 	var st := _state(k)
-	var hs := _build_terrain(node, k)
+	var hs := _terrain_nodes(node, data if not data.is_empty() else _terrain_data(k))
 	heights[k] = hs
+	_stage_jobs.append([k, node, hs, st])
+	if stage_times.terrain.size() < 4000:
+		stage_times.terrain.append((Time.get_ticks_usec() - t0) / 1000.0)
+
+## Stage 2: props, structures, points of interest, then announce the chunk.
+func _finish_chunk(k: Vector2i, node: Node3D, hs: PackedFloat32Array, st: Dictionary) -> void:
+	var t1 := Time.get_ticks_usec()
 	var rng := RandomNumberGenerator.new()
 	rng.seed = hash("%d|%d|%d|%d" % [gen.seed_v, era, k.x, k.y])
 	_build_props(node, k, hs, rng)
+	var t2 := Time.get_ticks_usec()
 	_build_structures(node, k, st, rng)
+	var t3 := Time.get_ticks_usec()
 	var pois: Array = _poi_idx.get(k, [])
 	var sets: Array = _set_idx.get(k, [])
-	build_times.append((Time.get_ticks_usec() - t0) / 1000.0)
 	chunk_loaded.emit(k, node, pois, sets)
+	var t4 := Time.get_ticks_usec()
+	build_times.append((t4 - t1) / 1000.0)
+	if stage_times.props.size() < 4000:
+		stage_times.props.append((t2 - t1) / 1000.0)
+		stage_times.struct.append((t3 - t2) / 1000.0)
+		stage_times.signal.append((t4 - t3) / 1000.0)
 
 func _build_terrain(node: Node3D, k: Vector2i) -> PackedFloat32Array:
+	return _terrain_nodes(node, _terrain_data(k))
+
+## Pure computation (thread-safe: only reads generator data and noise).
+func _terrain_data(k: Vector2i) -> Dictionary:
 	var ox := k.x * CHUNK
 	var oz := k.y * CHUNK
 	var W := VERTS + 2
@@ -255,28 +343,35 @@ func _build_terrain(node: Node3D, k: Vector2i) -> PackedFloat32Array:
 			if h < wl + 0.25:
 				c = c.lerp(g.sand.darkened(0.25), clampf((wl + 0.25 - h) * 0.8, 0.0, 0.85))
 			cols[idx] = c.lightened(0.06)
-	var idxs := PackedInt32Array()
-	idxs.resize(RES * RES * 6)
-	var q := 0
-	for j in RES:
-		for i in RES:
-			var a := j * VERTS + i
-			var b2 := a + 1
-			var c2 := a + VERTS
-			var d2 := c2 + 1
-			idxs[q] = a
-			idxs[q + 1] = b2
-			idxs[q + 2] = d2
-			idxs[q + 3] = a
-			idxs[q + 4] = d2
-			idxs[q + 5] = c2
-			q += 6
+	return {"hs": hs, "verts": verts, "norms": norms, "cols": cols, "min_h": min_h}
+
+## Main-thread part: mesh, collision and water from computed arrays.
+func _terrain_nodes(node: Node3D, d: Dictionary) -> PackedFloat32Array:
+	var hs: PackedFloat32Array = d.hs
+	var wl := gen.water_level
+	var min_h: float = d.min_h
+	if _terrain_idx.is_empty():
+		_terrain_idx.resize(RES * RES * 6)
+		var q := 0
+		for j in RES:
+			for i in RES:
+				var a := j * VERTS + i
+				var b2 := a + 1
+				var c2 := a + VERTS
+				var d2 := c2 + 1
+				_terrain_idx[q] = a
+				_terrain_idx[q + 1] = b2
+				_terrain_idx[q + 2] = d2
+				_terrain_idx[q + 3] = a
+				_terrain_idx[q + 4] = d2
+				_terrain_idx[q + 5] = c2
+				q += 6
 	var arrays := []
 	arrays.resize(Mesh.ARRAY_MAX)
-	arrays[Mesh.ARRAY_VERTEX] = verts
-	arrays[Mesh.ARRAY_NORMAL] = norms
-	arrays[Mesh.ARRAY_COLOR] = cols
-	arrays[Mesh.ARRAY_INDEX] = idxs
+	arrays[Mesh.ARRAY_VERTEX] = d.verts
+	arrays[Mesh.ARRAY_NORMAL] = d.norms
+	arrays[Mesh.ARRAY_COLOR] = d.cols
+	arrays[Mesh.ARRAY_INDEX] = _terrain_idx
 	var am := ArrayMesh.new()
 	am.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
 	am.surface_set_material(0, _terrain_mat)
@@ -469,20 +564,13 @@ func _chest_level(p: Vector2) -> int:
 
 func _build_structures(node: Node3D, k: Vector2i, st: Dictionary, rng: RandomNumberGenerator) -> void:
 	var origin := node.position
-	var blist: Array = []
-	# buildings whose centre is in this chunk
+	buildings[k] = []
+	# buildings whose centre is in this chunk (deferred while streaming)
 	for pair in _bld_idx.get(k, []):
-		var b: Dictionary = pair[0]
-		var s: Dictionary = pair[1]
-		var bld := Building.new()
-		bld.configure(b, era, st, s.id, _chest_level(s.pos))
-		var bp: Vector2 = b.pos
-		bld.position = Vector3(bp.x - origin.x, float(s.height), bp.y - origin.z)
-		bld.rotation.y = b.rot
-		node.add_child(bld)
-		bld.build()
-		blist.append(bld)
-	buildings[k] = blist
+		if _defer_buildings:
+			_bld_jobs.append([k, node, pair[0], pair[1], st])
+		else:
+			_make_building(k, node, pair[0], pair[1], st)
 	# settlement centres: centrepiece, lamps, destructibles
 	for s in _set_idx.get(k, []):
 		_build_settlement_decor(node, s, st, rng)
@@ -505,6 +593,30 @@ func _build_structures(node: Node3D, k: Vector2i, st: Dictionary, rng: RandomNum
 			c.rotation.y = rng.randf() * TAU
 			node.add_child(c)
 			break
+
+class TerrainJob:
+	extends RefCounted
+	var k := Vector2i.ZERO
+	var data := {}
+
+func _exit_tree() -> void:
+	for tt in _terrain_tasks:
+		WorkerThreadPool.wait_for_task_completion(tt[0])
+	_terrain_tasks.clear()
+
+func _make_building(k: Vector2i, node: Node3D, b: Dictionary, s: Dictionary, st: Dictionary) -> void:
+	var t0 := Time.get_ticks_usec()
+	var bld := Building.new()
+	bld.configure(b, era, st, s.id, _chest_level(s.pos))
+	var bp: Vector2 = b.pos
+	bld.position = Vector3(bp.x - node.position.x, float(s.height), bp.y - node.position.z)
+	bld.rotation.y = b.rot
+	node.add_child(bld)
+	bld.build()
+	if not buildings.has(k):
+		buildings[k] = []
+	buildings[k].append(bld)
+	bld_times.append((Time.get_ticks_usec() - t0) / 1000.0)
 
 func _build_settlement_decor(node: Node3D, s: Dictionary, st: Dictionary, rng: RandomNumberGenerator) -> void:
 	var origin := node.position

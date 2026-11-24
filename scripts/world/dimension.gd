@@ -256,6 +256,7 @@ func _spawn(id: String, lvl: int):
 	var p := center + Vector3(cos(a), 0, sin(a)) * randf_range(radius * 0.2, radius * 0.6)
 	var m = Game.world.spawner.spawn_enemy(id, p, lvl)
 	if m:
+		Game.world.spawner.normalize_to_era(m, Game.world.spawner.enemy_era(id))
 		m.team = "monster"
 		if m is Monster:
 			m.home = p

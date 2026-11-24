@@ -64,10 +64,14 @@ func _on_damaged(t, amount: float, src, _dtype: String) -> void:
 func _on_killed(victim, killer) -> void:
 	if not is_instance_valid(n) or n.is_dead:
 		return
+	if victim == null or not is_instance_valid(victim):
+		return
+	if killer != null and not is_instance_valid(killer):
+		killer = null
 	if killer == n and victim is Actor:
 		r_of(victim.actor_id).wins += 1
 	# someone helped us by killing our attacker
-	if victim is Actor and killer is Actor and is_instance_valid(killer) and killer != n:
+	if killer != null and victim is Actor and killer is Actor and killer != n:
 		if n.last_attacker == victim and n.global_position.distance_to(victim.global_position) < 25.0:
 			var r := r_of(killer.actor_id)
 			r.gratitude += 0.6

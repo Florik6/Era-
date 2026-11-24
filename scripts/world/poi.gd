@@ -260,7 +260,8 @@ func _camp_tick(d: float) -> void:
 		var bandits: Array = era_d.enemies.filter(func(x): return DBActors.ENEMIES[x].team == "bandit")
 		if bandits.is_empty():
 			bandits = era_d.enemies
-		for i in 3 + randi() % 3:
+		bandits = world.spawner.suitable(bandits)
+		for i in 2 + mini(3, world.spawner.era_progress_levels() / 2) + randi() % 2:
 			var m = world.spawner.spawn_enemy(bandits[randi() % bandits.size()], global_position + Vector3(randf_range(-6, 6), 0, randf_range(-6, 6)))
 			if m:
 				m.home = m.global_position

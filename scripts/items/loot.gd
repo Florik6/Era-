@@ -9,6 +9,8 @@ func _init(w) -> void:
 	world = w
 
 func spawn_drop(item: Dictionary, pos: Vector3, by_player: bool = false, gold: int = 0) -> ItemDrop:
+	if gold <= 0 and (item.is_empty() or not item.has("base")):
+		return null
 	var d := ItemDrop.new()
 	d.setup(item, gold, by_player)
 	world.fx_root.add_child(d)

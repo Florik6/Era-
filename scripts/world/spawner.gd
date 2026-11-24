@@ -19,7 +19,75 @@ func level_near_player(offset: int = 0) -> int:
 	if Game.player and is_instance_valid(Game.player) and Game.player.data:
 		pl = Game.player.data.level
 	var r := era_level_range()
-	return clampi(pl + offset + randi_range(-1, 1), r.x, r.y)
+	var lv := pl + int(round(offset * 0.5)) + randi_range(-1, 0)
+	if pl - r.x < 4:
+		lv = mini(lv, pl + 1)   # first levels of an era stay forgiving
+	# under-levelled visitors (test mode "all eras") meet a softened floor
+	return clampi(lv, maxi(1, mini(r.x, pl + 3)), r.y)
+
+const ERA_DMG := [12.0, 22.0, 36.0, 45.0, 70.0]
+const ERA_HP := [90.0, 150.0, 260.0, 430.0, 800.0]
+
+## Re-scale an actor that comes from another era (invasions, rifts) to the
+## power curve of the current era, including its weapon.
+func normalize_to_era(a: Actor, from_era: int) -> void:
+	var to := clampi(Profile.current_era, 0, 4)
+	from_era = clampi(from_era, 0, 4)
+	if from_era == to:
+		return
+	var hp_k: float = ERA_HP[to] / ERA_HP[from_era]
+	var dmg_k: float = ERA_DMG[to] / ERA_DMG[from_era]
+	if a.data:
+		a.base_hp_override = maxf(1.0, a.base_hp_override * hp_k)
+		for s in a.data.inv.equip:
+			var it: Dictionary = a.data.inv.equip[s]
+			if it.stats.has("dmg"):
+				it.stats.dmg = snappedf(it.stats.dmg * dmg_k, 0.01)
+			if it.stats.has("armor"):
+				it.stats.armor = snappedf(it.stats.armor * hp_k, 0.01)
+			it.history.append("Трофей пришельца из эпохи «%s»" % DBEras.era(from_era).name)
+		for it in a.data.inv.items:
+			if it.get("stats", {}).has("dmg"):
+				it.stats.dmg = snappedf(it.stats.dmg * dmg_k, 0.01)
+		a.refresh_gear()
+	else:
+		a.max_hp *= hp_k
+		a.stats["base_hp"] = a.max_hp
+		a.base_dmg *= dmg_k
+		if a.stats.has("armor"):
+			a.stats.armor *= hp_k
+	a.hp = a.max_hp
+
+## Which era an enemy type naturally belongs to (for normalisation).
+func enemy_era(id: String) -> int:
+	for i in DBEras.ERA_COUNT:
+		var e: Dictionary = DBEras.ERAS[i]
+		if id in e.enemies or id in e.night_enemies:
+			return i
+	return 2 if id.begins_with("chrono") else Profile.current_era
+
+## How far the player has progressed inside the current era (0 = just arrived).
+func era_progress_levels() -> int:
+	var pl := 1
+	if Game.player and is_instance_valid(Game.player) and Game.player.data:
+		pl = Game.player.data.level
+	return maxi(0, pl - era_level_range().x)
+
+## Enemy ids from a pool that suit the player's progress (elite/strong types unlock later).
+func suitable(pool: Array) -> Array:
+	var prog := era_progress_levels()
+	var out: Array = []
+	for id in pool:
+		var d: Dictionary = DBActors.ENEMIES.get(id, {})
+		if d.get("lvl", 0) <= prog / 2 + 1 and (not d.get("elite", false) or prog >= 3):
+			out.append(id)
+	if out.is_empty():
+		var weakest = pool[0]
+		for id in pool:
+			if DBActors.ENEMIES[id].get("lvl", 0) < DBActors.ENEMIES[weakest].get("lvl", 0):
+				weakest = id
+		out.append(weakest)
+	return out
 
 func _place(a: Node3D, pos: Vector3) -> void:
 	if world.has_method("ground_height"):

@@ -554,6 +554,9 @@ func _on_player_died() -> void:
 	get_tree().create_timer(1.6, false).timeout.connect(_show_death)
 
 func _show_death() -> void:
+	if player == null or not player.is_dead:
+		_death_pending = false
+		return
 	if mode_ctl and mode_ctl.has_method("on_player_died"):
 		mode_ctl.on_player_died()
 		return
@@ -577,6 +580,12 @@ func _respawn() -> void:
 		terrain.force_load_around(p)
 	p.y = ground_height(p) + 0.3
 	player.respawn_at(p)
+	player.apply_status("invuln", 4.0)
+	for a in Game.actors_near(p, 30.0):
+		if is_instance_valid(a) and not a.is_dead and Game.is_enemy(player, a) and a.record.is_empty() and not (a is Boss):
+			a.aggro.erase("player")
+			if a.global_position.distance_to(p) < 14.0:
+				a.queue_free()
 	cam.snap()
 
 func _nearest_respawn() -> Vector3:
