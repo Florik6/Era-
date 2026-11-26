@@ -27,9 +27,7 @@ func _ready() -> void:
 	display_name = data.name
 	kind = "humanoid"
 	base_speed = 5.6
-	var look := {"build": "normal", "skin": data.appearance.get("skin", 1), "hair": data.appearance.get("hair", 1),
-		"hair_color": data.appearance.get("hair_color", 0), "beard": data.appearance.get("beard", 0),
-		"cloth": data.appearance.get("cloth", 0), "female": data.female}
+	var look := look_from(data)
 	var r := HumanoidRig.new()
 	r.setup(look)
 	set_rig(r)
@@ -251,6 +249,21 @@ func drop_item(item: Dictionary) -> bool:
 	if Game.world and Game.world.get("loot"):
 		Game.world.loot.spawn_drop(it, global_position + facing * 1.2, true)
 	return true
+
+## Dye palette for cloaks and cloth (appearance option, saved as an index).
+const DYES := [Color(0.55, 0.1, 0.1), Color(0.12, 0.25, 0.55), Color(0.15, 0.4, 0.2), Color(0.45, 0.35, 0.15),
+	Color(0.35, 0.15, 0.45), Color(0.12, 0.12, 0.14), Color(0.8, 0.78, 0.72), Color(0.7, 0.4, 0.1)]
+const DYE_NAMES := ["Багровый", "Синий", "Лесной", "Охра", "Пурпур", "Чёрный", "Белый", "Медный"]
+
+## Rig look from the saved appearance (also used by the inventory preview).
+static func look_from(d: CharData) -> Dictionary:
+	var a: Dictionary = d.appearance
+	var look := {"build": "normal", "skin": a.get("skin", 1), "hair": a.get("hair", 1), "hair_color": a.get("hair_color", 0),
+		"beard": a.get("beard", 0), "cloth": a.get("cloth", 0), "female": d.female, "hide_helm": int(a.get("hide_helm", 0)) == 1}
+	var di := int(a.get("dye", -1))
+	if di >= 0 and di < DYES.size():
+		look["dye"] = DYES[di]
+	return look
 
 func use_item(item: Dictionary) -> bool:
 	var b := ItemDB.base(item.base)

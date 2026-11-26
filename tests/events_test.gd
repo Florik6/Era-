@@ -102,6 +102,7 @@ class H:
 				ck("blood-moon vigil needs a blood moon", vigil == "нет кровавой луны", vigil)
 				var tpl_x: Dictionary = DBEvents.get_event("med_smith_no_iron").duplicate()
 				tpl_x.needs = ["observatory"]
+				ctx.hour = 12.0
 				ck("an event needing a missing building is refused", ev2.why_not(tpl_x, ctx, true) == "нет нужного здания")
 				# weights: many picks in a town at noon
 				var tally := {}

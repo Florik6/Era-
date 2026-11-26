@@ -17,6 +17,8 @@ var inv := Inventory.new()
 var kills := 0
 var fame := 0.0
 var companion := {}        # {kind, name, lvl, xp}
+var injuries: Array = []   # Hardcore Mode wounds (see Hardcore)
+var pain_until := 0.0      # game time until which pain relief halves injury penalties
 
 func setup_class(cid: String) -> void:
 	class_id = cid
@@ -166,6 +168,12 @@ func auto_slots(cat: String) -> Array:
 			if s[i] == "":
 				s[i] = id
 				break
+	# a legendary / mythic weapon brings its weapon art into the last slot
+	var art := str(inv.equipped("main").get("art", ""))
+	if art != "":
+		var aid := "art_" + art
+		if not aid in s:
+			s[2] = aid
 	return s
 
 func xp_needed() -> int:
@@ -210,7 +218,7 @@ func hybrids() -> Array:
 func to_dict() -> Dictionary:
 	return {"name": name, "class_id": class_id, "female": female, "appearance": appearance, "level": level, "xp": xp,
 		"gold": gold, "mastery": mastery, "schools": schools, "slots": slots, "inv": inv.to_dict(), "kills": kills,
-		"fame": fame, "companion": companion}
+		"fame": fame, "companion": companion, "injuries": injuries, "pain_until": pain_until}
 
 func from_dict(d: Dictionary) -> void:
 	name = d.get("name", name)
@@ -237,3 +245,10 @@ func from_dict(d: Dictionary) -> void:
 	kills = int(d.get("kills", 0))
 	fame = float(d.get("fame", 0.0))
 	companion = d.get("companion", {})
+	injuries = []
+	for inj in d.get("injuries", []):
+		if inj is Dictionary:
+			for k in ["id", "sev", "bleed"]:
+				inj[k] = int(inj.get(k, 0))
+			injuries.append(inj)
+	pain_until = float(d.get("pain_until", 0.0))

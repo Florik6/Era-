@@ -107,7 +107,8 @@ func _ready() -> void:
 			["perf_lod", "res://scripts/world/perf_lod.gd"], ["dcq", "res://scripts/core/dynamic_quality.gd"],
 			["resonance", "res://scripts/combat/resonance.gd"], ["echoes", "res://scripts/world/echoes.gd"],
 			["city_peace", "res://scripts/world/city_peace.gd"], ["city_life", "res://scripts/world/city_life.gd"],
-			["city_economy", "res://scripts/world/city_economy.gd"], ["events2", "res://scripts/sim/event_director2.gd"]]:
+			["city_economy", "res://scripts/world/city_economy.gd"], ["events2", "res://scripts/sim/event_director2.gd"],
+			["hardcore", "res://scripts/sim/hardcore.gd"], ["housing", "res://scripts/world/housing.gd"]]:
 		if not spec[0] in DISABLED_SUBSYSTEMS:
 			_attach_optional(spec[0], spec[1])
 	cam = GameCamera.new()
@@ -540,6 +541,10 @@ func _populate_settlement(s: Dictionary) -> void:
 	for i in guards:
 		var p2 := c + Vector3(randf_range(-10, 10), 0, randf_range(-10, 10))
 		arr.append(spawner.spawn_villager(owner_s, p2, "guard"))
+	# every town with a few residents has a healer / doctor (Hardcore treatment,
+	# a little healing in the normal mode)
+	if pop >= 3:
+		arr.append(spawner.spawn_villager(owner_s, c + Vector3(randf_range(-8, 8), 0, randf_range(-8, 8)), "healer"))
 	settlement_npcs[s.id] = arr
 	if quests:
 		quests.on_settlement_visited(s)

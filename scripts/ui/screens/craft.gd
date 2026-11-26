@@ -3,11 +3,35 @@ extends UIScreen
 
 var _list: VBoxContainer
 var _gold: Label
+var _flt := {"group": "all", "query": ""}
+const RGROUPS := ["all", "weapon", "armor", "accessory", "medicine", "resource", "home", "upgrade"]
+const RNAMES := {"all": "Все", "weapon": "Оружие", "armor": "Броня", "accessory": "Аксессуары", "medicine": "Лекарства", "resource": "Материалы", "home": "Дом", "upgrade": "Улучшения"}
 
 func build() -> void:
 	make_frame(args.get("title", "Мастерская"), 1000.0, 0.95)
 	_gold = UITheme.label("", 21, Color(1.0, 0.85, 0.4), "bold")
 	content.add_child(_gold)
+	var bar := HBoxContainer.new()
+	bar.add_theme_constant_override("separation", 8)
+	content.add_child(bar)
+	var cat := OptionButton.new()
+	for g in RGROUPS:
+		cat.add_item(RNAMES[g])
+	cat.custom_minimum_size = Vector2(180, 48)
+	cat.focus_mode = Control.FOCUS_NONE
+	bar.add_child(cat)
+	var search := LineEdit.new()
+	search.placeholder_text = "Поиск рецепта…"
+	search.custom_minimum_size = Vector2(260, 48)
+	search.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	bar.add_child(search)
+	var only := CheckBox.new()
+	only.text = "Только доступные"
+	only.focus_mode = Control.FOCUS_NONE
+	bar.add_child(only)
+	cat.item_selected.connect(func(i): _flt.group = RGROUPS[i]; refresh())
+	search.text_changed.connect(func(t): _flt.query = t; refresh())
+	only.toggled.connect(func(v): _flt.only = v; refresh())
 	_list = VBoxContainer.new()
 	content.add_child(UITheme.scroll(_list))
 	refresh()
@@ -28,8 +52,16 @@ func refresh() -> void:
 	var recipes: Array = args.get("recipes", [])
 	if recipes.is_empty():
 		_list.add_child(UITheme.wrap_label("Нет доступных рецептов.", 18))
+	var shown := 0
 	for rc in recipes:
 		var ok := _affordable(d, rc)
+		if _flt.group != "all" and str(rc.get("group", "other")) != _flt.group:
+			continue
+		if str(_flt.get("query", "")).strip_edges() != "" and not str(rc.get("name", "")).to_lower().contains(str(_flt.query).strip_edges().to_lower()):
+			continue
+		if _flt.get("only", false) and not ok:
+			continue
+		shown += 1
 		var p := UITheme.panel(Color(0.08, 0.075, 0.1, 0.9), UITheme.GOLD_DIM if ok else Color(0.25, 0.25, 0.25), 10, 12)
 		var row := HBoxContainer.new()
 		p.add_child(row)

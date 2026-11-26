@@ -122,6 +122,8 @@ static func node(cat: String, id: String) -> Dictionary:
 	return {}
 
 static func find_skill(id: String) -> Dictionary:
+	if id.begins_with("art_"):
+		return LegendaryArts.skill_dict(id)
 	for cat in TREES:
 		for n in TREES[cat]:
 			if n.id == id:

@@ -166,6 +166,7 @@ func _physics_process(delta: float) -> void:
 		if absf(dv.y) < 1.0 * a._scale() and Vector2(dv.x, dv.z).length() < a.radius() + radius:
 			hit_ids[a.actor_id] = true
 			var inf := info.duplicate()
+			inf.hit_pos = closest       # the real point of impact along the flight path
 			Combat.deal(src if (src != null and is_instance_valid(src)) else null, a, inf)
 			if kind in ["arrow", "bolt"] and VFX.mgr() != null and randf() < 0.6:
 				VFX.mgr().stuck_arrow(closest, vel, 0.7 if kind == "arrow" else 0.45, a)

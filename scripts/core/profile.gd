@@ -50,6 +50,9 @@ var arena_tokens := 0
 var play_time := 0.0
 var tutorial_done := false
 var hints_shown := {}         # tip id -> true; "_off" disables tips
+var difficulty := "normal"    # "normal" | "hardcore" (anatomical injuries, see Hardcore)
+var homes := {}               # "era:bid" -> owned house (Housing); kept across eras
+var home_chest := Inventory.new()   # the personal chest shared by all owned houses
 
 func _process(delta: float) -> void:
 	if has_character:
@@ -82,6 +85,9 @@ func new_character(nm: String, cid: String, female: bool, appearance: Dictionary
 	play_time = 0.0
 	tutorial_done = false
 	hints_shown = {}
+	difficulty = "normal"
+	homes = {}
+	home_chest = Inventory.new()
 
 func _main_cat() -> String:
 	var w := char.inv.equipped("main")
@@ -183,7 +189,8 @@ func to_dict() -> Dictionary:
 		"era_progress": era_progress, "achievements": achievements, "stats": stats, "legacy": legacy,
 		"fallen_legends": fallen_legends, "hall_of_legends": hall_of_legends, "artifacts": artifacts, "witness": witness,
 		"world_seed": world_seed, "arena_best": arena_best, "arena_tokens": arena_tokens, "play_time": play_time,
-		"tutorial_done": tutorial_done, "hints_shown": hints_shown}
+		"tutorial_done": tutorial_done, "hints_shown": hints_shown, "difficulty": difficulty,
+		"homes": homes, "home_chest": home_chest.to_dict()}
 
 func from_dict(d: Dictionary) -> void:
 	char = CharData.new()
@@ -210,3 +217,17 @@ func from_dict(d: Dictionary) -> void:
 	play_time = float(d.get("play_time", 0.0))
 	tutorial_done = d.get("tutorial_done", false)
 	hints_shown = d.get("hints_shown", {})
+	difficulty = str(d.get("difficulty", "normal"))
+	homes = d.get("homes", {})
+	for k in homes:
+		var h: Dictionary = homes[k]
+		h.era = int(h.get("era", 0))
+		for f in h.get("furniture", []):
+			f.uid = int(f.get("uid", 0))
+			if f.get("item") is Dictionary:
+				Inventory._fix(f.item)
+			for it in f.get("items", []):
+				Inventory._fix(it)
+	home_chest = Inventory.new()
+	home_chest.from_dict(d.get("home_chest", {}))
+	home_chest.capacity = 999

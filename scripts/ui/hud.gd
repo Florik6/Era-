@@ -105,7 +105,7 @@ class VitalsPanel extends Control:
 		hp_shown = maxf(hpf, move_toward(hp_shown, hpf, get_process_delta_time() * 0.5))
 		var hcol := Color(0.86, 0.2, 0.22) if hpf > 0.3 else Color(1.0, 0.15, 0.1).lerp(Color(1.0, 0.45, 0.4), 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.01))
 		_bar(Vector2(x0, 20), 220, 15, hpf, hcol, hp_shown)
-		var ht := "%d / %d" % [int(ceil(pl.hp)), int(pl.max_hp)]
+		var ht := "%d / %d" % [int(ceil(pl.hp)), int(ceil(pl.max_hp))]
 		draw_string_outline(font, Vector2(x0 + 6, 32), ht, HORIZONTAL_ALIGNMENT_LEFT, -1, 12, 3, Color(0, 0, 0, 0.9))
 		draw_string(font, Vector2(x0 + 6, 32), ht, HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(1, 1, 1, 0.95))
 		if pl.shield_hp > 0.0:
@@ -126,6 +126,16 @@ class VitalsPanel extends Control:
 			draw_rect(Rect2(Vector2(sx, 60), Vector2(3, 17)), spec[1])
 			draw_string(font, Vector2(sx + 7, 73), label, HORIZONTAL_ALIGNMENT_LEFT, -1, 12, spec[1].lightened(0.3))
 			sx += w + 4.0
+		# Hardcore: bleeding / fracture / infection / wound count
+		if Hardcore.active():
+			var hx := x0
+			for chip in Hardcore.inst.hud_chips():
+				var cl: String = chip[0]
+				var cw := font.get_string_size(cl, HORIZONTAL_ALIGNMENT_LEFT, -1, 12).x + 12.0
+				draw_rect(Rect2(Vector2(hx, 80), Vector2(cw, 17)), Color(0, 0, 0, 0.6))
+				draw_rect(Rect2(Vector2(hx, 80), Vector2(3, 17)), chip[1])
+				draw_string(font, Vector2(hx + 7, 93), cl, HORIZONTAL_ALIGNMENT_LEFT, -1, 12, (chip[1] as Color).lightened(0.25))
+				hx += cw + 4.0
 
 class DiamondIcon extends Control:
 	var col := Color(1.0, 0.83, 0.42)

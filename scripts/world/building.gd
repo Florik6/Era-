@@ -24,6 +24,7 @@ var lvl := 1
 var door_out := Vector3.ZERO
 var door_in := Vector3.ZERO
 var interior_points: Array = []
+var door_node: Destructible = null   # the front door (Housing locks the player's house)
 var viewer: Node3D = null          # optional override for roof hiding (tests)
 var chimney_top := Vector3.INF     # local position of the chimney top (smoke), INF = none
 var _roof: MeshInstance3D
@@ -418,6 +419,7 @@ func _build_dynamic() -> void:
 	door.configure("door", id + "_door", state, era, Vector3(gap - 0.06, 2.4, 0.12))
 	door.position = Vector3(door_x, 0.0, d * 0.5)
 	add_child(door)
+	door_node = door
 	var spots := _free_spots()
 	_shuffle(spots)
 	var n_chest := 0

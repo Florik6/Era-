@@ -28,6 +28,9 @@ func open_npc(n) -> void:
 			else:
 				text = "«Добро пожаловать! Лучшие товары эпохи «%s»»." % DBEras.era(Profile.current_era).name
 				opts.append({"text": "Торговать", "cb": func(): open_trade(n)})
+		"healer":
+			_healer_dialog(n)
+			return
 		"guard":
 			var st: Dictionary = world.factions.settlement_state(n.settlement_id)
 			var owner_f: String = st.get("owner", "")
@@ -47,6 +50,55 @@ func open_npc(n) -> void:
 	opts.append({"text": "Слухи", "cb": func(): _rumours(n)})
 	opts.append({"text": "Уйти", "cb": func(): pass})
 	world.ui.open("dialog", {"title": n.display_name, "text": text, "portrait_color": col, "options": opts})
+
+## Town healer / doctor: treats Hardcore injuries for gold (era-appropriate
+## care; a medical capsule in the future), sells medicine, and in the normal
+## mode simply restores health.
+func _healer_dialog(n) -> void:
+	var pl = world.player
+	var opts: Array = []
+	var text := "«Покажите, что болит»."
+	var hc = world.sys("hardcore")
+	var era := Profile.current_era
+	if hc != null and hc.enabled():
+		var inj: Array = hc.list()
+		if inj.is_empty():
+			text = "«Вы целы. Берегите себя — и возьмите бинты в дорогу»."
+		else:
+			var lines: Array = []
+			for i in inj:
+				lines.append("· %s — %s (%s)%s%s" % [Hardcore.ZONE_NAMES[i.zone], Hardcore.TYPE_NAMES[i.type].to_lower(), Hardcore.SEV_NAMES[int(i.sev)],
+					", кровотечение" if int(i.bleed) > 0 and not i.bandaged else "", ", заражение" if i.infected else ""])
+			text = "«Давайте посмотрим…»\n" + "\n".join(lines)
+			var price: int = hc.care_price()
+			var src := "healer" if era <= 1 else "doctor"
+			opts.append({"text": "Лечение (%d %s)" % [price, DBEras.era(era).currency], "cb": func():
+				if pl.data.gold < price:
+					Events.notify.emit("Не хватает денег на лечение", Color(1.0, 0.5, 0.4))
+					return
+				pl.data.gold -= price
+				hc.treat_all(src)
+				pl.heal(pl.max_hp * 0.3)})
+			if era == 4:
+				var cp := price * 3
+				opts.append({"text": "Медицинская капсула — полное восстановление (%d)" % cp, "cb": func():
+					if pl.data.gold < cp:
+						Events.notify.emit("Не хватает денег на капсулу", Color(1.0, 0.5, 0.4))
+						return
+					pl.data.gold -= cp
+					hc.treat_all("capsule")
+					pl.heal(pl.max_hp)})
+	else:
+		var hp_price := 5 * (era + 1)
+		if pl.hp < pl.max_hp:
+			opts.append({"text": "Подлечиться (%d %s)" % [hp_price, DBEras.era(era).currency], "cb": func():
+				if pl.data.gold >= hp_price:
+					pl.data.gold -= hp_price
+					pl.heal(pl.max_hp)
+					Audio.play_sfx("heal", pl.global_position)})
+	opts.append({"text": "Купить лекарства", "cb": func(): open_trade(n)})
+	opts.append({"text": "Уйти", "cb": func(): pass})
+	world.ui.open("dialog", {"title": n.display_name, "text": text, "portrait_color": Color(0.6, 0.9, 0.7), "options": opts})
 
 func _villager_line(n) -> String:
 	var lines := ["«Времена неспокойные. На дорогах опять шалят»", "«Говорят, в руинах видели странный свет»", "«Хорошо, что стража рядом»",
@@ -112,9 +164,25 @@ func open_trade(n) -> void:
 		mult = 0.85
 	if CityEconomy.inst != null and str(n.settlement_id) != "":
 		mult *= CityEconomy.inst.price_mult(n.settlement_id, "goods")      # town supply and shortages
-	for b in ItemCatalog.special_stock(era, "goods").slice(0, 3):
-		if ItemDB.has_base(b):
-			items.append(ItemDB.create(b, 0, lvl))
+	# expansion goods sold in shops of this era (rotating daily)
+	var shop_ids: Array = []
+	for k in ItemCatalog.all():
+		var xb: Dictionary = ItemCatalog.base(k)
+		if int(xb.era) == era and "shop" in xb.src and not xb.has("art"):
+			shop_ids.append(k)
+	shop_ids.sort()
+	var srng := RandomNumberGenerator.new()
+	srng.seed = hash(str(n.actor_id)) + Game.day() * 7
+	for i in mini(8, shop_ids.size()):
+		var sid: String = shop_ids[srng.randi() % shop_ids.size()]
+		var sit := ItemDB.create(sid, 0, lvl)
+		if ItemDB.base(sid).get("stack", false):
+			sit.qty = 3
+		items.append(sit)
+	for med in ItemCatalog.ids_by("medicine", era):
+		var mi := ItemDB.create(med, 0, 1)
+		mi.qty = 4
+		items.append(mi)
 	world.ui.open("trade", {"title": "Торговец: " + n.display_name, "items": items, "price_mult": mult, "sell": true, "sell_mult": 0.35,
 		"buy_cb": func(it): return world.factions.buy(it, mult)})
 

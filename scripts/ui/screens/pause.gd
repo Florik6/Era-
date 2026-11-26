@@ -12,6 +12,7 @@ func build() -> void:
 	content.add_child(grid)
 	var items := [
 		["Продолжить", close],
+		["Персонаж", func(): manager.open("character")],
 		["Инвентарь", func(): manager.open("inventory")],
 		["Навыки", func(): manager.open("skills")],
 		["Задания", func(): manager.open("journal")],

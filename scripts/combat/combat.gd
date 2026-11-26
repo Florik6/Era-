@@ -122,6 +122,8 @@ static func deal(att, tgt, info: Dictionary) -> float:
 		amt *= 1.25
 	if tgt.statuses.has("vulnerable"):
 		amt *= 1.4      # opened up by a perfect parry
+	if tgt.statuses.has("res_down") and info.get("dtype", "") in ["fire", "ice", "lightning", "dark", "time", "energy"]:
+		amt *= 1.3      # «Полярный залп» weakened its magic defence
 	if dtype == "lightning" and tgt.statuses.has("wet"):
 		amt *= 1.6
 	if dtype in PHYSICAL:
@@ -150,6 +152,7 @@ static func deal(att, tgt, info: Dictionary) -> float:
 static func _on_hit(att: Actor, tgt: Actor, dealt: float, info: Dictionary) -> void:
 	if att.data == null:
 		return
+	LegendaryArts.on_hit(att, tgt, dealt, info)
 	var cat: String = info.get("cat", "")
 	if cat != "" and not info.get("proc", false):
 		att.gain_mastery(cat, 2.0 + dealt * 0.06)
@@ -232,10 +235,54 @@ static func melee(att: Actor, rng: float, arc_deg: float, info: Dictionary, max_
 				continue
 		if not line_of_sight(origin, t.chest()):
 			continue
-		var dealt := deal(att, t, info.duplicate())
+		var inf := info.duplicate()
+		inf.hit_pos = strike_point(att, t, anim)
+		var dealt := deal(att, t, inf)
 		hits.append({"target": t, "dmg": dealt, "metal_hit": DBActors.ENEMIES.get(t.def_id, {}).get("metal", false)})
 	_hit_destructibles(att, att.global_position, rng + 0.6, arc_deg, info)
 	return hits
+
+## Where a melee blow lands on the target, from the swing itself: the height
+## of the strike (attacker size and swing kind — overhead, thrust, low sweep,
+## creature bite) and the side it comes from (attacker position relative to
+## the target, alternating with the combo swing direction). Used by Hardcore
+## to pick the injured body zone from real combat data.
+static func strike_point(att: Actor, t, anim: String) -> Vector3:
+	var s: float = att._scale()
+	var h: float
+	var rk: String = str(DBActors.ENEMIES.get(att.def_id, {}).get("rig", "humanoid")) if att.get("def_id") != null else "humanoid"
+	if rk in ["wolf", "spider", "blob", "mimic"]:
+		h = 0.45 * s                                       # low beasts bite and grab the legs
+	elif rk in ["wraith", "drone"]:
+		h = 1.45 * s                                       # floating things strike at head height
+	elif rk in ["troll", "golem", "colossus"]:
+		h = 1.35 * s                                       # giants swing down from above
+	elif att.rig == null:
+		h = 0.75 * s
+	else:
+		match anim:
+			"overhead", "slam", "leap":
+				h = 1.6 * s
+			"thrust", "stab", "lunge":
+				h = 1.15 * s
+			"sweep", "low", "spin":
+				h = 0.6 * s
+			_:
+				h = 1.25 * s
+	var base_y: float = att.global_position.y
+	var ts: float = t._scale()
+	var y := clampf(base_y + h, t.global_position.y + 0.1, t.global_position.y + 1.8 * ts)
+	var to_att: Vector3 = att.global_position - t.global_position
+	to_att.y = 0.0
+	var dir: Vector3 = to_att.normalized() if to_att.length() > 0.05 else -t.facing
+	var right: Vector3 = t.facing.cross(Vector3.UP).normalized() if t.facing.length() > 0.1 else Vector3.RIGHT
+	# horizontal swings land on the side they come from; combo swings alternate
+	var swing := 0.0
+	if anim in ["slash", "sweep", "spin", ""]:
+		swing = 0.3 if att.combo % 2 == 0 else -0.3
+	var p: Vector3 = t.global_position + dir * t.radius() * 0.9 + right * (to_att.normalized().dot(right) * 0.35 + swing) * ts
+	p.y = y
+	return p
 
 ## Swing visuals: weapon wielders get a blade trail from VFXManager, so only
 ## wide sweeps draw an arc for them; creatures (claws, jaws) always do.

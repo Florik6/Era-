@@ -54,6 +54,7 @@ static func _forge(world) -> void:
 			pd.inv.add(ItemDB.create("gears", 0, 1))
 			return true
 		return false})
+	recipes.append_array(Recipes.for_station(world, "forge"))
 	world.ui.open("craft", {"title": "Кузница", "recipes": recipes})
 
 static func _lab(world) -> void:
@@ -72,6 +73,7 @@ static func _lab(world) -> void:
 				Audio.play_sfx("heal")
 				return true
 			return false})
+	recipes.append_array(Recipes.for_station(world, "lab"))
 	world.ui.open("craft", {"title": "Алхимическая лаборатория", "recipes": recipes})
 
 static func _workshop(world) -> void:
@@ -101,6 +103,7 @@ static func _workshop(world) -> void:
 			Profile.milestone("craft_device")
 			return true
 		return false})
+	recipes.append_array(Recipes.for_station(world, "workshop"))
 	world.ui.open("craft", {"title": "Мастерская", "recipes": recipes})
 
 static func _terminal(world, poi) -> void:

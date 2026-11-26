@@ -6,6 +6,8 @@ var _bag: GridContainer
 var _stats: RichTextLabel
 var _gold: Label
 var _press_t := {}
+var _filter := {"group": "all", "query": "", "sort": "type"}
+var _preview: GearPreview
 
 func build() -> void:
 	make_frame("Инвентарь")
@@ -21,6 +23,15 @@ func build() -> void:
 	_equip_box = GridContainer.new()
 	_equip_box.columns = 3
 	left.add_child(_equip_box)
+	# try-on preview: drag to rotate, pinch to zoom
+	_preview = GearPreview.new()
+	_preview.custom_minimum_size = Vector2(380, 300)
+	left.add_child(_preview)
+	var look_row := HBoxContainer.new()
+	look_row.add_theme_constant_override("separation", 6)
+	left.add_child(look_row)
+	look_row.add_child(UITheme.button("Шлем: вкл/выкл", func(): _toggle_helm(), 46, 170))
+	look_row.add_child(UITheme.button("Цвет плаща", func(): _next_dye(), 46, 150))
 	_stats = UITheme.rich()
 	_stats.custom_minimum_size = Vector2(380, 0)
 	left.add_child(UITheme.scroll(_stats))
@@ -35,6 +46,16 @@ func build() -> void:
 	hdr.add_child(bl)
 	_gold = UITheme.label("", 20, Color(1.0, 0.85, 0.4), "bold")
 	hdr.add_child(_gold)
+	var tools := HBoxContainer.new()
+	tools.add_theme_constant_override("separation", 8)
+	right.add_child(tools)
+	tools.add_child(ItemFilter.bar(func(): refresh(), _filter))
+	tools.add_child(UITheme.button("Сортировать", func():
+		player_data().inv.sort_items(_filter.sort)
+		refresh(), 48, 150))
+	tools.add_child(UITheme.button("Объединить", func():
+		player_data().inv.merge_stacks()
+		refresh(), 48, 140))
 	_bag = GridContainer.new()
 	_bag.columns = 6
 	right.add_child(UITheme.scroll(_bag))
@@ -66,7 +87,7 @@ func refresh() -> void:
 		_equip_box.add_child(b)
 	clear(_bag)
 	_bag.columns = _cols_for_bag()
-	for it in d.inv.items:
+	for it in ItemFilter.apply(d.inv.items, _filter.group, _filter.query):
 		var t := item_tile(it)
 		_wire_tile(t, it, "")
 		_bag.add_child(t)
@@ -79,6 +100,29 @@ func refresh() -> void:
 		_bag.add_child(e)
 	_gold.text = "Золото: %d   Вес: %d/%d" % [d.gold, d.inv.items.size(), Inventory.CAPACITY]
 	_stats.text = _stats_text(d)
+
+func _toggle_helm() -> void:
+	var a: Dictionary = player_data().appearance
+	a.hide_helm = 0 if int(a.get("hide_helm", 0)) == 1 else 1
+	_apply_look()
+
+func _next_dye() -> void:
+	var a: Dictionary = player_data().appearance
+	a.dye = (int(a.get("dye", -1)) + 2) % (Player.DYES.size() + 1) - 1
+	_apply_look()
+	Events.notify.emit("Цвет: %s" % (Player.DYE_NAMES[a.dye] if int(a.dye) >= 0 else "исходный"), Color(0.9, 0.85, 0.7))
+
+func _apply_look() -> void:
+	if has_player() and Game.player.rig:
+		var lk := Player.look_from(player_data())
+		for k in ["hide_helm", "dye"]:
+			if lk.has(k):
+				Game.player.rig.look[k] = lk[k]
+			else:
+				Game.player.rig.look.erase(k)
+		Game.player.refresh_gear()
+	if _preview:
+		_preview.clear_try_on()
 
 func _stats_text(d: CharData) -> String:
 	var t := "[b][color=#f5c966]%s[/color][/b] · %s · ур. %d\n" % [d.name, DBSkills.CLASSES.get(d.class_id, {}).get("name", ""), d.level]
@@ -175,6 +219,16 @@ func _card(it: Dictionary, slot: String) -> void:
 		var ub := UITheme.button("Использовать", func(): _do_use(it, msg), 60, 190)
 		ub.disabled = not has_player()
 		row.add_child(ub)
+	if slot == "" and bslot in ItemDB.SLOTS:
+		row.add_child(UITheme.button("Примерить", func():
+			if _preview:
+				_preview.try_on(it)
+			close_modal(), 60, 160))
+	if slot == "" and int(it.get("qty", 1)) > 1:
+		row.add_child(UITheme.button("Разделить", func():
+			var part := d.inv.split(it.uid, int(it.qty) / 2)
+			msg.text = "Стопка разделена" if not part.is_empty() else "Нет места в сумке"
+			refresh(), 60, 150))
 	if slot == "":
 		var db := UITheme.button("Выбросить", func(): _do_drop(it, msg), 60, 160)
 		db.disabled = not has_player()

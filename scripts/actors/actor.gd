@@ -174,14 +174,17 @@ func recalc_stats() -> void:
 	else:
 		base_hp = max_hp if stats.is_empty() else stats.get("base_hp", max_hp)
 		s["base_hp"] = base_hp
+	if is_player and Hardcore.active():
+		Hardcore.inst.mods_into(s)      # Hardcore injuries: real stat penalties
 	var ratio := hp / maxf(1.0, max_hp)
-	max_hp = (base_hp + s.hp) * (0.8 if s.has("frail") else 1.0)
-	max_mana = base_mana + s.mana
-	max_stamina = base_st
+	max_hp = (base_hp + s.hp) * (0.8 if s.has("frail") else 1.0) * (1.0 - float(s.get("hc_hp", 0.0)))
+	max_mana = (base_mana + s.mana) * (1.0 - float(s.get("hc_mana", 0.0)))
+	max_stamina = base_st * (1.0 - float(s.get("hc_st", 0.0)))
 	stats = s
 	if hp > 0:
 		hp = clampf(max_hp * ratio, 1.0, max_hp)
 	mana = minf(mana, max_mana)
+	stamina = minf(stamina, max_stamina)
 	var w := weapon()
 	if not w.is_empty():
 		var b := ItemDB.base(w.base)
@@ -329,6 +332,8 @@ func _tick_timers(delta: float) -> void:
 		dodge_t -= delta
 		if dodge_t <= 0.0 and dodge_kind == "leap" and is_player:
 			VFX.burst(global_position + Vector3(0, 0.1, 0), Color(0.62, 0.55, 0.42, 0.8), 5, 0.2)
+	if has_meta("heat_ss"):
+		LegendaryArts.tick(self, delta)
 	if counter_t > 0.0:
 		counter_t -= delta
 	_regen_t += delta
@@ -350,7 +355,7 @@ func _tick_timers(delta: float) -> void:
 func _regen(dt: float) -> void:
 	var in_combat := combat_t < 5.0
 	if not stats.has("no_regen") and not statuses.has("burn"):
-		var r := stat("regen") + (0.0 if in_combat else max_hp * 0.012)
+		var r := (stat("regen") + (0.0 if in_combat else max_hp * 0.012)) * (1.0 - clampf(stat("hc_regen"), 0.0, 1.0))
 		hp = minf(max_hp, hp + r * dt)
 	if stats.has("drain") and not in_combat:
 		hp = maxf(1.0, hp - max_hp * 0.01 * dt)
@@ -363,7 +368,7 @@ func _regen(dt: float) -> void:
 		mr *= Game.world.director.mods.get("mana_regen", 1.0)
 	mana = minf(max_mana, mana + mr * dt)
 	if not blocking:
-		stamina = minf(max_stamina, stamina + 22.0 * dt)
+		stamina = minf(max_stamina, stamina + 22.0 * dt * (1.0 - clampf(stat("hc_st_regen"), 0.0, 0.8)))
 
 func _tick_statuses(delta: float) -> void:
 	for k in statuses.keys():
@@ -499,6 +504,8 @@ func face_dir(d: Vector3) -> void:
 
 func start_action(nm: String, dur: float, impact: float, payload: Dictionary = {}) -> void:
 	act = {"name": nm, "t": 0.0, "dur": maxf(0.05, dur), "impact": impact, "done": false, "data": payload}
+	if nm == "skill" and not is_player and data == null:
+		LegendaryArts.on_enemy_windup(self, nm)
 	if rig:
 		rig.trigger(payload.get("anim", nm))
 
@@ -802,7 +809,9 @@ func use_ability(id: String, aim: Vector3 = Vector3.ZERO) -> bool:
 		face_dir(aim)
 	combat_t = 0.0
 	var ok := false
-	if DBSkills.is_spell(id):
+	if id.begins_with("art_"):
+		ok = LegendaryArts.use(self, id, aim)
+	elif DBSkills.is_spell(id):
 		ok = Spells.cast(self, id, aim)
 	else:
 		ok = Skills.use(self, id, aim)
@@ -839,6 +848,8 @@ func take_damage(info: Dictionary) -> float:
 	var src = info.get("src")
 	if invulnerable():
 		VFX.text(chest(), "Уклонение", Color(0.8, 0.8, 1.0))
+		if dodge_t > 0.0 and data != null:
+			LegendaryArts.on_dodge(self, src)
 		return 0.0
 	var amount: float = info.get("amount", 0.0)
 	var from_dir := Vector3.ZERO
@@ -859,6 +870,8 @@ func take_damage(info: Dictionary) -> float:
 			_parry(src, info)
 			return 0.0
 		var bv := block_value()
+		if data != null:
+			LegendaryArts.on_block(self, amount * bv)
 		amount *= 1.0 - bv
 		stamina -= 10.0 + info.get("amount", 0.0) * 0.15
 		if stamina <= 0.0:
@@ -877,6 +890,8 @@ func take_damage(info: Dictionary) -> float:
 		if shield_hp <= 0.0:
 			statuses.erase("magic_shield")
 	var dealt := _apply_raw_damage(amount, src, info.get("dtype", "slash"), false, info)
+	if is_player and dealt > 0.0 and Hardcore.active():
+		Hardcore.inst.on_hit(self, dealt, info, src, from_dir)
 	# thorns
 	if info.get("melee", false) and src and is_instance_valid(src) and _has_ability("thorns"):
 		src._apply_raw_damage(dealt * 0.25, self, "pierce", true)
@@ -924,6 +939,8 @@ func _parry(src, info: Dictionary = {}) -> void:
 		src.act = {}
 	if data and data.has_node("sw_riposte"):
 		riposte = true
+	if data != null:
+		LegendaryArts.on_parry(self, src)
 	if is_player:
 		CombatFeel.parry_moment(self, src)
 	block_t = 999.0

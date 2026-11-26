@@ -71,6 +71,8 @@ func town(sid: String) -> Dictionary:
 				_add(t, "shop_customer", L.call(-0.9, 1.6), bas * Vector3(1, 0, -1).normalized(), bid, door)
 				t.has.smithy = true
 			"house":
+				if Housing.is_private(bid):
+					continue          # the player's house (for sale or owned): no residents, no routines
 				_add(t, "home_bed", L.call(-w * 0.5 + 0.75, -d * 0.5 + 1.45), into, bid, door)
 				t.homes.append(bid)
 				t.house_geo[bid] = {"base": base, "rot": float(b.rot), "w": w, "d": d, "door": door}
@@ -102,6 +104,23 @@ func town(sid: String) -> Dictionary:
 	t.patrol = ring
 	towns[sid] = t
 	return t
+
+## Drop every spot of a building (it became the player's house) and re-home
+## whoever lived there.
+func forget_building(sid: String, bid: String) -> void:
+	var t: Dictionary = towns.get(sid, {})
+	if t.is_empty():
+		return
+	t.homes.erase(bid)
+	t.house_geo.erase(bid)
+	for k in t.spots:
+		t.spots[k] = t.spots[k].filter(func(sp): return sp.bid != bid)
+	for a in world.settlement_npcs.get(sid, []):
+		if is_instance_valid(a) and a.get_meta("home_bid", "") == bid:
+			a.remove_meta("home_bid")
+			if not t.homes.is_empty():
+				a.set_meta("home_bid", t.homes[absi(hash(a.actor_id)) % t.homes.size()])
+			a.remove_meta("plan")
 
 func _add(t: Dictionary, kind: String, pos: Vector3, face: Vector3, bid: String, door: Vector3) -> void:
 	if not t.spots.has(kind):
@@ -170,6 +189,8 @@ func assign(n) -> void:
 		prof = "guard"
 	elif role == "trader":
 		prof = "merchant"
+	elif role == "healer":
+		prof = "healer"
 	else:
 		var taken := {}
 		for o in world.settlement_npcs.get(sid, []):
@@ -241,6 +262,19 @@ func plan(n) -> Dictionary:
 				act = "eat"
 				kinds = ["inn_seat", "bench"]
 			elif h >= 22.0 or h < 6.5:
+				act = "sleep"
+				kinds = ["home_bed"]
+			else:
+				act = _leisure(n, blk)
+		"healer":
+			# receives the sick at the square by day
+			if h >= 8.0 and h < 20.0 and not (h >= 13.0 and h < 13.5):
+				act = "bench"
+				kinds = ["bench", "chat"]
+			elif h >= 13.0 and h < 13.5:
+				act = "eat"
+				kinds = ["inn_seat", "bench"]
+			elif h >= 22.0 or h < 7.0:
 				act = "sleep"
 				kinds = ["home_bed"]
 			else:

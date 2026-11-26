@@ -280,6 +280,8 @@ func _legend_aura(n: Actor) -> void:
 	l.shadow_enabled = false
 	n.add_child(l)
 
+const HEALER_TITLES := ["знахарь", "лекарь", "врач", "доктор", "медик"]
+
 func spawn_villager(settlement: Dictionary, pos: Vector3, role: String = "villager") -> NPC:
 	var n := NPC.new()
 	n.role = role
@@ -313,9 +315,13 @@ func spawn_villager(settlement: Dictionary, pos: Vector3, role: String = "villag
 		n.archetype = "cautious"
 	n.data = cd
 	n.display_name = cd.name + (" (стражник)" if role == "guard" else (" (торговец)" if role == "trader" else ""))
+	if role == "healer":
+		n.display_name = cd.name + " (%s)" % HEALER_TITLES[clampi(Profile.current_era, 0, 4)]
 	var look := _rand_look(rng, female)
 	if role == "trader":
 		look.cloth = 6
+	elif role == "healer":
+		look.cloth = 1
 	var r := HumanoidRig.new()
 	r.setup(look)
 	n.set_rig(r)

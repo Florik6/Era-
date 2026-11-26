@@ -20,6 +20,9 @@ const SCREENS := {
 	"eras": "res://scripts/ui/screens/eras.gd",
 	"altar": "res://scripts/ui/screens/altar.gd",
 	"layout_editor": "res://scripts/ui/screens/layout_editor.gd",
+	"character": "res://scripts/ui/screens/character.gd",
+	"anatomy": "res://scripts/ui/screens/anatomy.gd",
+	"storage": "res://scripts/ui/screens/storage.gd",
 }
 
 var stack: Array = []

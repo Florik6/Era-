@@ -179,6 +179,8 @@ static func _fresh(aggro: Dictionary, id: String, now: int) -> bool:
 func can_damage(attacker, target) -> bool:
 	if attacker == null or target == null or not is_instance_valid(target) or target.is_dead:
 		return false
+	if Housing.blocks(attacker, target):
+		return false      # the player's own house is a safe zone
 	if is_enemy(attacker, target):
 		return true
 	var ra = _team_root(attacker)

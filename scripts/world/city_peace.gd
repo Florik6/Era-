@@ -108,12 +108,19 @@ func truce(a, b) -> bool:
 		return false
 	if is_offender(a) or is_offender(b):
 		return false
-	# the truce holds during alarms (a stray beast) too; only a real attack on
-	# the town (raid / siege) lifts it
+	# the truce holds during alarms (a stray beast) too. A real attack on the
+	# town lifts it only for the attackers (raiders are hostile kinds, handled
+	# above; a siege names the besieging faction) — other soldiers and the
+	# townsfolk still do not fight each other in the streets.
 	var ca = city_at(a.global_position)
 	var cb = city_at(b.global_position)
-	if ca == null or cb == null or ca.state == "attack" or cb.state == "attack":
+	if ca == null or cb == null:
 		return false
+	for c in [ca, cb]:
+		if c.state == "attack":
+			var att: String = str(c.get("attacker", ""))
+			if att != "" and (str(a.get("faction_id")) == att or str(b.get("faction_id")) == att):
+				return false
 	# an organised battle event (faction war) is allowed where it was started
 	if a.get("squad") is Dictionary and not a.squad.is_empty() and b.get("squad") is Dictionary and not b.squad.is_empty():
 		return false
@@ -130,10 +137,11 @@ func can_raid(sid: String, allow_reason := "") -> bool:
 		stats.raids_refused += 1
 	return ok
 
-func begin_attack(sid: String, reason: String) -> void:
+func begin_attack(sid: String, reason: String, attacker := "") -> void:
 	var c: Dictionary = cities.get(sid, {})
 	if c.is_empty():
 		return
+	c.attacker = attacker
 	c.last_raid = Game.game_time
 	stats.raids_started += 1
 	_set_state(c, "attack", reason)
@@ -164,6 +172,8 @@ func _set_state(c: Dictionary, st: String, reason: String) -> void:
 	c.state = st
 	c.since = Game.game_time
 	c.reason = reason
+	if st != "attack":
+		c.attacker = ""
 	stats.transitions += 1
 
 # ---------------------------------------------------------------- crimes & threats

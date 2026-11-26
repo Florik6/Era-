@@ -27,7 +27,7 @@ static func A(id: String, era: int, name: String, slot: String, model: String, a
 
 static func X(id: String, era: int, name: String, slot: String, stats: Dictionary, value: int, o: Dictionary = {}) -> Array:
 	var d := {"name": name, "era": era, "slot": slot, "model": "ring" if slot == "ring" else ("amulet" if slot == "amulet" else "module"), "value": value,
-		"group": "accessory", "src": o.get("src", ["shop", "drop", "event"])}
+		"group": "accessory", "src": o.get("src", ["shop", "drop", "event", "craft"])}
 	for k in stats:
 		d[k] = stats[k]
 	for k in o:
@@ -243,7 +243,7 @@ static func _build() -> Array:
 	L.append(W("x_quantum_whisper_rifle", 4, "Винтовка «Квантовый Шёпот»", "firearm", "pulse_rifle", 70.0, 4.0, 38.0, "energy", 2200, {"rarity": 4, "art": "dual_trajectory", "two_h": true, "proj": "pulse", "mag": 30, "reload": 1.8, "spread": 1.2, "src": ["boss", "event"], "desc": "Легенда. «Двойственная траектория»: фантомный энергетический снаряд."}))
 	L.append(W("x_first_era_singularity", 4, "Сингулярность Первой Эры", "heavy", "hammer", 110.0, 0.85, 3.0, "time", 5000, {"rarity": 5, "art": "first_era_rift", "two_h": true, "src": ["boss"], "desc": "Миф. Гравитационное притяжение и «Разрыв первой эпохи»."}))
 	L.append(A("x_chrono_neurohelm", 4, "Нейрошлем хронолога", "head", "visor", 6.0, 220, {"spell": 0.06, "set": "chronologist", "desc": "Шлем с нейроинтерфейсом."}))
-	L.append(A("x_chrono_suit", 4, "Бронекостюм хронолога", "body", "energy", 16.0, 420, {"hp": 70, "set": "chronologist", "desc": "Бронекостюм с хронокомпенсаторами."}))
+	L.append(A("x_chrono_suit", 4, "Бронекостюм хронолога", "body", "energy_armor", 16.0, 420, {"hp": 70, "set": "chronologist", "desc": "Бронекостюм с хронокомпенсаторами."}))
 	L.append(A("x_grav_bracers", 4, "Гравинаручи", "hands", "gauntlets", 3.5, 180, {"aspd": 0.06, "set": "chronologist", "desc": "Наручи с гравитационными стабилизаторами."}))
 	L.append(A("x_phase_greaves", 4, "Фазовые поножи", "legs", "greaves_phase", 7.0, 200, {"speed": 0.03, "set": "chronologist", "desc": "Поножи, смещающиеся в фазе."}))
 	L.append(A("x_jet_boots", 4, "Реактивные ботинки", "feet", "boots", 3.5, 220, {"speed": 0.08, "set": "chronologist", "desc": "Микродвигатели в подошве."}))
@@ -253,8 +253,8 @@ static func _build() -> Array:
 	L.append(X("x_nano_medal", 4, "Наномедальон", "amulet", {"regen": 1.0, "hp": 30}, 320, {"desc": "Наноботы чинят ткани."}))
 	L.append(X("x_quantum_compass", 4, "Квантовый компас", "module", {"detect": 0.5}, 260, {"desc": "Указывает на скрытое в любой эпохе."}))
 	L.append(X("x_interface_seal", 4, "Интерфейсная печать", "ring", {"spell": 0.08, "mana": 40}, 300, {"desc": "Прямой интерфейс к энергосети."}))
-	L.append(R("nano_bandage", 4, "Наноповязка", "med", 40, {"med": {"bleed": 3, "infection": 1, "heal": 0.12}, "desc": "Самозатягивающаяся повязка."}))
-	L.append(R("regen_biogel", 4, "Биогель регенерации", "med", 70, {"med": {"fracture": 1, "burn": 2, "heal": 0.25}, "desc": "Технологическая регенерация тканей."}))
+	L.append(R("nano_bandage", 4, "Наноповязка", "med", 40, {"med": {"bleed": 3, "infection": 1, "regen": 0.2, "heal": 0.12}, "desc": "Самозатягивающаяся повязка."}))
+	L.append(R("regen_biogel", 4, "Биогель регенерации", "med", 70, {"med": {"fracture": 1, "burn": 2, "regen": 0.5, "heal": 0.25}, "desc": "Технологическая регенерация тканей."}))
 	L.append(R("anti_infection_module", 4, "Антиинфекционный модуль", "med", 60, {"med": {"infection": 3, "magic": 1}, "desc": "Модуль очистки крови."}))
 	L.append(R("phase_fabric", 4, "Фазовая ткань", "mat", 45, {"desc": "Ткань, сдвинутая по фазе."}))
 	L.append(R("quantum_alloy", 4, "Квантовый сплав", "mat", 70, {"src": ["shop", "craft", "drop", "event"], "desc": "Сплав для легендарной техники."}))

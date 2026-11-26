@@ -19,7 +19,7 @@ var btn_continue: Button
 var _panel_name := ""
 var _pending_mode := "world"
 # creation form state
-var cf := {"name": "", "class": "warrior", "female": false, "skin": 1, "hair": 1, "hair_color": 0, "beard": 0, "cloth": 0}
+var cf := {"name": "", "class": "warrior", "female": false, "skin": 1, "hair": 1, "hair_color": 0, "beard": 0, "cloth": 0, "difficulty": "normal"}
 var _class_desc: Label
 var _form_labels := {}
 
@@ -359,7 +359,7 @@ func _open_message(title: String, text: String, buttons: Array = []) -> void:
 
 func _start_create(mode: String) -> void:
 	_pending_mode = mode
-	cf = {"name": "", "class": "warrior", "female": false, "skin": 1, "hair": 1, "hair_color": 0, "beard": 0, "cloth": 0}
+	cf = {"name": "", "class": "warrior", "female": false, "skin": 1, "hair": 1, "hair_color": 0, "beard": 0, "cloth": 0, "difficulty": "normal"}
 	_open_panel("create")
 	_preview()
 
@@ -455,6 +455,25 @@ func _panel_create() -> void:
 	vb.add_child(_cycle_row("Борода", "beard", BEARD_NAMES))
 	vb.add_child(_swatch_row("Одежда", "cloth", HumanoidRig.CLOTH_COLORS))
 	vb.add_child(UITheme.separator())
+	# Режим сложности: Hardcore turns on anatomical injuries; the normal mode is untouched
+	vb.add_child(UITheme.label("Режим сложности", 19, UITheme.GOLD, "bold"))
+	var drow := HBoxContainer.new()
+	vb.add_child(drow)
+	var dbtns := {}
+	var ddesc := UITheme.wrap_label("", 15, UITheme.TEXT_DIM)
+	var dtexts := {"normal": "Обычный режим: ранения не учитываются, зелья и отдых восстанавливают здоровье.",
+		"hardcore": "Hardcore Mode: удары ранят конкретные части тела (голова, грудь, живот, руки, ноги). Порезы кровоточат, раны могут воспалиться, переломы замедляют. Лечите их бинтами, антисептиками, у врачей и целителей, отдыхом и на медстанциях. Зелье здоровья тяжёлые раны не лечит."}
+	for dk in ["normal", "hardcore"]:
+		var db := UITheme.button("Обычный" if dk == "normal" else "Hardcore", func():
+			cf.difficulty = dk
+			_refresh_toggle(dbtns, dk)
+			ddesc.text = dtexts[dk], 56, 0)
+		db.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		dbtns[dk] = db
+		drow.add_child(db)
+	_refresh_toggle(dbtns, cf.get("difficulty", "normal"))
+	ddesc.text = dtexts[cf.get("difficulty", "normal")]
+	vb.add_child(ddesc)
 	var go := UITheme.button("Начать восхождение", _confirm_create, 64, 0)
 	go.add_theme_font_size_override("font_size", 24)
 	go.add_theme_color_override("font_color", UITheme.GOLD)
@@ -549,6 +568,7 @@ func _confirm_create() -> void:
 	SaveSys.delete_all()
 	Chronicle.clear()
 	Profile.new_character(nm, cf["class"], cf.female, app)
+	Profile.difficulty = str(cf.get("difficulty", "normal"))
 	SaveSys.save_game()
 	btn_continue.disabled = false
 	_launch(_pending_mode, {"new": true})

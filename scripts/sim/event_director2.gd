@@ -1073,7 +1073,15 @@ func _start_echo(e: Dictionary) -> void:
 				cand = {"authored": ep, "pos": Vector2(e.pos.x, e.pos.z)}
 				break
 	if not cand.is_empty():
-		ec.play(cand)      # the echo frees itself after a few seconds
-		finish(e, "на улице мелькнул отголосок прошлого", true)
+		var en = ec.play(cand)      # the echo frees itself after a few seconds
+		if en != null and is_instance_valid(en):
+			e.nodes.append(en)
+		e.objective = "Увидеть отголосок прошлого"
+		# the event lasts as long as the echo is visible
+		var ref: WeakRef = weakref(self)
+		get_tree().create_timer(7.0, false).timeout.connect(func():
+			var me = ref.get_ref()
+			if me != null and e in me.active:
+				me.finish(e, "на улице мелькнул отголосок прошлого", true))
 	else:
 		finish(e, "отголосок не проявился", false)

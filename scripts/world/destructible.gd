@@ -24,6 +24,7 @@ var state: Dictionary = {}       # chunk state dict {destroyed:[], opened:[]}
 var size := Vector3.ONE
 var _visual: Node3D
 var _door_pivot: Node3D
+var lock := ""                  # doors: "" opens for anyone, "owner" only for the player (own house), "closed" for nobody
 var _door_open := 0.0
 var _check_t := 0.0
 var _burn_acc := 0.0
@@ -150,6 +151,8 @@ func _process(delta: float) -> void:
 		_check_t = 0.2
 		var near := false
 		for a in Game.actors_near(global_position, 2.2):
+			if lock == "closed" or (lock == "owner" and not a.is_player):
+				continue
 			if not a.is_dead and a.global_position.distance_to(global_position) < 1.9:
 				near = true
 				break
@@ -163,7 +166,7 @@ func _process(delta: float) -> void:
 
 ## Damage from weapons, projectiles, spells and explosions.
 func take_hit(amount: float, dtype: String = "blunt", src = null) -> void:
-	if is_destroyed:
+	if is_destroyed or lock != "":
 		return
 	if flammable and dtype == "fire":
 		ignite()

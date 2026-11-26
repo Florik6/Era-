@@ -446,6 +446,8 @@ func _home_building():
 	var best = null
 	var bd := 40.0
 	for b in n.get_tree().get_nodes_in_group("buildings"):
+		if Housing.is_private_building(b):
+			continue          # the player's house is never anyone else's home
 		var d: float = b.global_position.distance_to(n.home)
 		if d < bd:
 			bd = d
@@ -463,6 +465,8 @@ func _plan_explore() -> void:
 			tries += 1
 			if tries > 12:
 				break
+			if Housing.is_private_building(b):
+				continue
 			if b.global_position.distance_to(n.global_position) < 70.0 and b.get("door_out") != null:
 				path = [b.door_out, b.door_in]
 				if b.interior_points.size() > 0:

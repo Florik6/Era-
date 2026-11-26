@@ -385,8 +385,13 @@ func set_gear(equip: Dictionary, faction_color: Color = Color(0, 0, 0, 0), cape:
 			mythic = true
 	var armor_model: String = ItemDB.base(body_it.get("base", "")).get("model", look.get("armor", "")) if not body_it.is_empty() else look.get("armor", "")
 	var hm: String = ItemDB.base(head_it.get("base", "")).get("model", "") if not head_it.is_empty() else look.get("hat", "")
+	# the player may hide the helmet (appearance option, stats still count)
+	if _is_player() and bool(look.get("hide_helm", false)):
+		hm = ""
 	var humanish := build_type in ["normal", "skeleton"]
 	_apply_armor(armor_model, body_it, faction_color, top_rar, mythic)
+	if humanish or build_type == "bulky":
+		_apply_limbs(equip)
 	if build_type in ["normal", "bulky"]:
 		if hm != "":
 			_apply_helmet(hm, head_it, cls)
@@ -426,6 +431,17 @@ func set_gear(equip: Dictionary, faction_color: Color = Color(0, 0, 0, 0), cape:
 			offhand_node.position = Vector3(0, -0.06, -0.02)
 	if humanish:
 		_class_gear(cls, armor_model, hm)
+	# ---- an equipped cloak replaces the default cape
+	var cloak_it: Dictionary = equip.get("cloak", {})
+	if not cloak_it.is_empty() and build_type in ["normal", "bulky", "skeleton"]:
+		var cb := ItemDB.base(cloak_it.base)
+		var ccol: Color = cb.get("color", Color(0.4, 0.15, 0.12))
+		if _is_player() and look.has("dye"):
+			ccol = ccol.lerp(look.dye, 0.65)
+		_build_cape(ccol, String(cb.get("model", "")) in ["cloak_wool", "cloak_void", "cloak_soot"], int(cloak_it.get("rarity", 0)), String(cb.get("model", "")))
+		_set_visuals(equip)
+		return
+	_set_visuals(equip)
 	# ---- capes: legends/commanders long, faction soldiers short, warrior heroes long
 	var hero := _is_player()
 	var want_cape := cape or (hero and cls == "warrior" and build_type == "normal")
@@ -439,6 +455,86 @@ func set_gear(equip: Dictionary, faction_color: Color = Color(0, 0, 0, 0), cape:
 		# high camera; long capes only for legends/commanders
 		cc = cc.lerp(Color(0.25, 0.22, 0.2), 0.18)
 		_build_cape(cc, cape, top_rar)
+
+## Gloves, leg armour, boots: each slot changes its own part of the body.
+func _apply_limbs(equip: Dictionary) -> void:
+	var hands: Dictionary = equip.get("hands", {})
+	var legs: Dictionary = equip.get("legs", {})
+	var feet: Dictionary = equip.get("feet", {})
+	var dye: Color = look.get("dye", Color(0, 0, 0, 0)) if _is_player() else Color(0, 0, 0, 0)
+	if not hands.is_empty():
+		var hb := ItemDB.base(hands.base)
+		var metal: bool = String(hb.get("model", "")) == "gauntlets"
+		var hc := Color(0.55, 0.56, 0.6) if metal else Color(0.33, 0.22, 0.13)
+		if int(hb.get("era", 0)) >= 3 and not metal:
+			hc = Color(0.15, 0.16, 0.17)
+		var hm2 := MeshLib.mat(hc, 0.8 if metal else 0.0, 0.35 if metal else 0.7)
+		for side in ["l", "r"]:
+			if parts.has("fist_" + side):
+				parts["fist_" + side].material_override = hm2
+			if metal and j.has("elbow_" + side):
+				_extra(j["elbow_" + side], MeshLib.cyl(0.055, 0.06, 0.16, 8), hm2, Vector3(0, -0.15, 0), Vector3.ZERO, Vector3.ONE, true)
+	if not legs.is_empty():
+		var lb := ItemDB.base(legs.base)
+		var lm: String = String(lb.get("model", ""))
+		var plate: bool = lm.begins_with("greaves")
+		var lc := Color(0.5, 0.5, 0.54) if plate else Color(0.27, 0.24, 0.22)
+		match lm:
+			"trousers":
+				lc = Color(0.35, 0.12, 0.14)
+			"pants_armored":
+				lc = Color(0.2, 0.22, 0.2)
+			"greaves_phase":
+				lc = Color(0.25, 0.28, 0.38)
+		if dye.a > 0.5 and not plate:
+			lc = lc.lerp(dye, 0.6)
+		var lmat := MeshLib.mat(lc, 0.75 if plate else 0.0, 0.4 if plate else 0.8)
+		for side in ["l", "r"]:
+			if parts.has("thigh_" + side):
+				parts["thigh_" + side].material_override = lmat
+			if plate and j.has("knee_" + side):
+				_extra(j["knee_" + side], MeshLib.box(Vector3(0.12, 0.1, 0.07)), lmat, Vector3(0, -0.02, -0.06), Vector3.ZERO, Vector3.ONE, true)
+			if lm == "greaves_phase" and j.has("knee_" + side):
+				_extra(j["knee_" + side], MeshLib.box(Vector3(0.02, 0.3, 0.02)), MeshLib.glow(Color(0.4, 0.8, 1.0), 1.6), Vector3(0.06, -0.18, -0.05), Vector3.ZERO, Vector3.ONE, true)
+			if lm == "pants_armored" and j.has("knee_" + side):
+				_extra(j["knee_" + side], MeshLib.box(Vector3(0.11, 0.1, 0.06)), MeshLib.mat(Color(0.12, 0.12, 0.12)), Vector3(0, -0.03, -0.06), Vector3.ZERO, Vector3.ONE, true)
+	if not feet.is_empty():
+		var fb := ItemDB.base(feet.base)
+		var sab: bool = String(fb.get("model", "")) == "sabatons"
+		var fc2 := Color(0.5, 0.5, 0.54) if sab else Color(0.25, 0.17, 0.1)
+		if int(fb.get("era", 0)) >= 3 and not sab:
+			fc2 = Color(0.12, 0.12, 0.13)
+		var fmat := MeshLib.mat(fc2, 0.8 if sab else 0.0, 0.35 if sab else 0.65)
+		for side in ["l", "r"]:
+			if parts.has("foot_" + side):
+				parts["foot_" + side].material_override = fmat
+			if parts.has("shin_" + side) and (sab or "jet" in String(feet.base) or "steam" in String(feet.base)):
+				parts["shin_" + side].material_override = fmat
+		if "jet" in String(feet.base) or "steam" in String(feet.base):
+			for side in ["l", "r"]:
+				if j.has("knee_" + side):
+					_extra(j["knee_" + side], MeshLib.cyl(0.03, 0.04, 0.08, 8), MeshLib.glow(Color(0.4, 0.75, 1.0) if "jet" in String(feet.base) else Color(1.0, 0.6, 0.3), 1.6), Vector3(0, -0.44, 0.08), Vector3(90, 0, 0), Vector3.ONE, true)
+
+## Visible accessories (amulet pendant, ring glint) and the set emblem when
+## four or more pieces of one set are worn.
+func _set_visuals(equip: Dictionary) -> void:
+	var am: Dictionary = equip.get("amulet", {})
+	if not am.is_empty() and j.has("chest"):
+		var col: Color = ItemDB.RARITY_COLORS[clampi(int(am.get("rarity", 0)), 0, 5)]
+		_extra(j.chest, MeshLib.sphere(0.035, 8, 5), MeshLib.glow(col.lerp(Color(1, 0.85, 0.4), 0.4), 1.4), Vector3(0, 0.2, -0.13), Vector3.ZERO, Vector3.ONE, true)
+	var rg: Dictionary = equip.get("ring", {})
+	if not rg.is_empty() and j.has("hand_r"):
+		_extra(j.hand_r, MeshLib.torus(0.035, 0.045), MeshLib.mat(Color(0.95, 0.8, 0.35), 0.9, 0.25), Vector3(0, -0.06, 0), Vector3(0, 0, 90), Vector3.ONE, true)
+	var sets := {}
+	for sl in equip:
+		var sid: String = str(ItemDB.base(equip[sl].get("base", "")).get("set", ""))
+		if sid != "":
+			sets[sid] = int(sets.get(sid, 0)) + 1
+	for sid in sets:
+		if int(sets[sid]) >= 4 and j.has("chest"):
+			var ec: Color = {"black_outpost": Color(0.75, 0.75, 0.8), "duelist": Color(0.9, 0.2, 0.25), "steelworker": Color(1.0, 0.55, 0.2), "operative": Color(0.4, 0.9, 0.5), "chronologist": Color(0.3, 0.9, 1.0)}.get(sid, Color(1, 1, 1))
+			_extra(j.chest, MeshLib.box(Vector3(0.09, 0.09, 0.02)), MeshLib.glow(ec, 1.8), Vector3(0.09, 0.14, -0.14), Vector3(0, 0, 45), Vector3.ONE, true)
+			set_meta("set_full", sid)
 
 func _class_of() -> String:
 	var p := get_parent()
@@ -462,7 +558,7 @@ func _is_player() -> bool:
 		return true
 	return look.get("hero", false)
 
-func _build_cape(cc: Color, long: bool, rar: int) -> void:
+func _build_cape(cc: Color, long: bool, rar: int, style := "") -> void:
 	var cp := MeshLib.pivot(j.chest, Vector3(0, 0.36, 0.13), "cape")
 	var cmat := MeshLib.mat(cc, 0.0, 0.92)
 	var cmat_d := MeshLib.mat(cc.darkened(0.25), 0.0, 0.92)
@@ -476,6 +572,13 @@ func _build_cape(cc: Color, long: bool, rar: int) -> void:
 	_small(MeshLib.part(cp, MeshLib.box(Vector3(0.37 * _width, 0.025, 0.03)), MeshLib.mat(Color(0.55, 0.45, 0.25), 0.6, 0.4), Vector3(0, -top_h + 0.01, 0.02)))
 	j.cape = cp
 	extras.append(cp)
+	match style:
+		"poncho":
+			_extra(cp, MeshLib.box(Vector3(0.5 * _width, 0.12, 0.3)), MeshLib.mat(cc.darkened(0.1)), Vector3(0, -0.02, -0.12))
+		"cloak_void":
+			_small(MeshLib.part(cp, MeshLib.box(Vector3(0.37 * _width, 0.02, 0.03)), MeshLib.glow(Color(0.35, 0.3, 0.9), 1.4), Vector3(0, -top_h + 0.02, 0.025)))
+		"cloak_duelist":
+			_small(MeshLib.part(cp, MeshLib.box(Vector3(0.38 * _width, 0.03, 0.03)), MeshLib.mat(Color(0.85, 0.7, 0.3), 0.7, 0.3), Vector3(0, -top_h + 0.02, 0.025)))
 	if long:
 		var c2 := MeshLib.pivot(cp, Vector3(0, -top_h, 0.02), "cape2")
 		MeshLib.part(c2, MeshLib.box(Vector3(0.34 * _width, 0.4, 0.022)), cmat, Vector3(0, -0.2, 0))
@@ -746,6 +849,10 @@ func _apply_helmet(model: String, it: Dictionary, cls: String) -> void:
 		"tac_helm":
 			_extra(h, MeshLib.sphere(0.155, 10, 6), MeshLib.mat(Color(0.3, 0.32, 0.26)), Vector3(0, 0.06, 0), Vector3.ZERO, Vector3(1, 0.85, 1.05))
 			_extra(h, MeshLib.box(Vector3(0.03, 0.04, 0.06)), MeshLib.mat(Color(0.1, 0.1, 0.1)), Vector3(0.14, 0.05, -0.04), Vector3.ZERO, Vector3.ONE, true)
+		"mask":
+			_extra(h, MeshLib.box(Vector3(0.24, 0.07, 0.03)), MeshLib.mat(Color(0.08, 0.05, 0.08)), Vector3(0, 0.05, -0.14))
+			for sx in [-0.055, 0.055]:
+				_extra(h, MeshLib.box(Vector3(0.045, 0.025, 0.01)), MeshLib.mat(Color(0.95, 0.85, 0.5), 0.7, 0.3), Vector3(sx, 0.055, -0.158), Vector3.ZERO, Vector3.ONE, true)
 		"visor":
 			_extra(h, MeshLib.sphere(0.158, 10, 6), MeshLib.mat(Color(0.2, 0.22, 0.28), 0.7, 0.3), Vector3(0, 0.03, 0))
 			var vc: Color = Color(0.3, 0.9, 1.0) if it.get("rarity", 0) < 2 else ItemDB.RARITY_COLORS[it.rarity]

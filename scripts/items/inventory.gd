@@ -6,9 +6,10 @@ const CAPACITY := 40
 
 var items: Array = []
 var equip: Dictionary = {}
+var capacity := CAPACITY        # the bag holds 40; a home chest gets its capacity from Housing
 
 func is_full() -> bool:
-	return items.size() >= CAPACITY
+	return items.size() >= capacity
 
 func add(item: Dictionary) -> bool:
 	if item.is_empty():
@@ -23,6 +24,52 @@ func add(item: Dictionary) -> bool:
 		return false
 	items.append(item)
 	return true
+
+## Split a stack: n items move into a new stack. Returns the new stack.
+func split(uid: int, n: int) -> Dictionary:
+	var it := find(uid)
+	if it.is_empty() or int(it.get("qty", 1)) <= n or n < 1 or is_full():
+		return {}
+	it.qty = int(it.qty) - n
+	var part: Dictionary = it.duplicate(true)
+	part.uid = ItemDB.next_uid()
+	part.qty = n
+	items.append(part)
+	return part
+
+## Merge every stackable item of the same base into one stack.
+func merge_stacks() -> int:
+	var first := {}
+	var merged := 0
+	var keep: Array = []
+	for it in items:
+		var b := ItemDB.base(it.base)
+		if b.get("stack", false) and it.get("curse", {}).is_empty():
+			if first.has(it.base):
+				first[it.base].qty = int(first[it.base].get("qty", 1)) + int(it.get("qty", 1))
+				merged += 1
+				continue
+			first[it.base] = it
+		keep.append(it)
+	items = keep
+	return merged
+
+## Sort the bag: "type", "rarity", "name", "value".
+func sort_items(mode := "type") -> void:
+	var order := {"weapon": 0, "armor": 1, "accessory": 2, "medicine": 3, "resource": 4, "home": 5, "other": 6}
+	items.sort_custom(func(a, b):
+		match mode:
+			"rarity":
+				return int(a.get("rarity", 0)) > int(b.get("rarity", 0))
+			"name":
+				return ItemDB.display_name(a) < ItemDB.display_name(b)
+			"value":
+				return ItemDB.value(a) > ItemDB.value(b)
+		var ga: int = order.get(ItemFilter.group_of(a), 9)
+		var gb: int = order.get(ItemFilter.group_of(b), 9)
+		if ga != gb:
+			return ga < gb
+		return int(a.get("rarity", 0)) > int(b.get("rarity", 0)))
 
 func find(uid: int) -> Dictionary:
 	for it in items:
