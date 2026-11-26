@@ -106,8 +106,24 @@ func _enter_phase(i: int) -> void:
 	VFX.ring(b.global_position, 8.0, Color(1.0, 0.3, 0.2), 0.8)
 	MagicFX.phase_burst(b.global_position, Combat.element_color(b.natural_dtype) if b.natural_dtype in ["fire", "ice", "lightning", "dark", "time", "energy"] else Color(1.0, 0.35, 0.2), clampf(float(b.def.get("scale", 1.5)), 1.0, 2.5))
 	VFX.shake(0.5)
+	var cine = Game.world.sys("cinematic") if Game.world and Game.world.has_method("sys") else null
+	if cine and cine.has_method("play"):
+		cine.play("boss", "%s — фаза %d" % [b.display_name, i + 1], String(ph.get("msg", "")), "cine_bossphase_%s_%d" % [b.boss_id, i], b.global_position + Vector3(0, 2.0, 0))
 	if ph.has("msg"):
 		Events.banner.emit("%s — фаза %d" % [b.display_name, i + 1], ph.msg, Color(1.0, 0.45, 0.3))
+	# the phase change is an event: shockwave pushes the hero back, a short
+	# slow-motion beat, a title card, and the arena changes with the boss
+	var pl = Game.player
+	if pl and is_instance_valid(pl) and pl.global_position.distance_to(b.global_position) < 10.0:
+		var away: Vector3 = pl.global_position - b.global_position
+		away.y = 0
+		pl.knockback = away.normalized() * 8.0
+	VFX.shock(b.global_position, 9.0, Color(1.0, 0.45, 0.3), 0.5)
+	CombatFeel.slowmo(0.4, 0.25)
+	CombatFeel.flash(Color(1.0, 0.5, 0.35), 0.15)
+	_arena_shift(i)
+	if ph.get("enrage", false) or i >= 2:
+		_rage_aura()
 	if ph.get("enrage", false):
 		b.apply_status("enrage", 9999.0)
 		b.base_speed *= 1.2
@@ -406,3 +422,54 @@ func _boss_beam(s: Vector3, e: Vector3, col: Color) -> void:
 	mg.glow(s, col, 2.0, 0.4)
 	mg.light((s + e) * 0.5, col, 4.0, 10.0, 0.35)
 	mg.decal(MagicFX.ground_point(e), "scorch", 2.0, 12.0, randf() * TAU)
+
+
+## Arena reacts to the phase: hazards in the boss's element around the arena.
+func _arena_shift(i: int) -> void:
+	var center: Vector3 = b.arena_center if b.get("arena_center") != null and b.arena_center != Vector3.ZERO else b.global_position
+	var dt: String = String(b.natural_dtype)
+	var n := 3 + i * 2
+	for k in n:
+		var a := TAU * k / n + randf() * 0.4
+		var p: Vector3 = center + Vector3(cos(a), 0, sin(a)) * randf_range(6.0, 11.0)
+		match dt:
+			"fire":
+				Zone.create("fire", b, p, 1.4, 8.0, {"amount": 6.0 + b.level, "dtype": "fire", "status": {"burn": 4.0}})
+			"ice":
+				MagicFX.ice_spikes(p, 1.6, 4)
+				Zone.create("blizzard", b, p, 1.6, 6.0, {"amount": 4.0 + b.level, "dtype": "ice", "status": {"slow": 0.5}})
+			"lightning", "energy":
+				var pp := p
+				b.get_tree().create_timer(0.4 * k, false).timeout.connect(func():
+					if is_instance_valid(b) and not b.is_dead:
+						VFX.telegraph(pp, 2.0, 0.8, Color(0.7, 0.8, 1.0))
+						b.get_tree().create_timer(0.8, false).timeout.connect(func():
+							MagicFX.sky_strike(pp, Color(0.8, 0.85, 1.0), 2.0)
+							Combat.aoe(b if is_instance_valid(b) else null, pp, 2.0, {"amount": 10.0 + b.level * 1.5, "dtype": "lightning"})))
+			"dark", "time":
+				Zone.create("timeslow" if dt == "time" else "dark", b, p, 1.8, 7.0, {"amount": 5.0 + b.level, "dtype": "dark"}, {"hostile_all": false})
+			_:
+				VFX.decal(p, "crack", 3.0, 25.0, randf() * TAU)
+				VFX.ground_impact(p, 2.0)
+
+## Persistent rage aura: embers swirling around the boss.
+func _rage_aura() -> void:
+	if b.rig == null or b.rig.has_node("RageAura"):
+		return
+	var pr := CPUParticles3D.new()
+	pr.name = "RageAura"
+	pr.amount = CombatFeel.particles(26)
+	pr.lifetime = 1.0
+	pr.emission_shape = CPUParticles3D.EMISSION_SHAPE_SPHERE
+	pr.emission_sphere_radius = 1.2 * float(b.def.get("scale", 1.5))
+	pr.direction = Vector3.UP
+	pr.spread = 25.0
+	pr.gravity = Vector3(0, 2.0, 0)
+	pr.initial_velocity_min = 0.6
+	pr.initial_velocity_max = 1.6
+	pr.mesh = MeshLib.box(Vector3(0.08, 0.08, 0.08))
+	var c := Combat.element_color(b.natural_dtype) if b.natural_dtype in ["fire", "ice", "lightning", "dark", "time", "energy"] else Color(1.0, 0.3, 0.15)
+	pr.material_override = MeshLib.glow(c, 3.0)
+	pr.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	pr.position.y = 1.4
+	b.rig.add_child(pr)

@@ -82,8 +82,10 @@ func is_playing() -> bool:
 
 ## True if this title was just shown as a cinematic (HUD skips the banner).
 func claims(title: String) -> bool:
+	var lt := title.to_lower()
 	for t in _recent:
-		if _clock - float(_recent[t]) < 5.0 and (t == title or title.find(t) >= 0 or t.find(title) >= 0):
+		var lr := String(t).to_lower()
+		if _clock - float(_recent[t]) < 5.0 and (lr == lt or lt.find(lr) >= 0 or lr.find(lt) >= 0):
 			return true
 	return false
 
@@ -136,7 +138,9 @@ func play(kind: String, title: String, sub: String = "", seen_key: String = "", 
 		"era":
 			Audio.play_sting("era_unlock")
 
-func _process(delta: float) -> void:
+func _process(delta_scaled: float) -> void:
+	# title cards run on real time: slow-motion beats must not stretch them
+	var delta := delta_scaled / maxf(0.05, Engine.time_scale)
 	_clock += delta
 	if _focus_until > 0.0 and _clock > _focus_until:
 		_focus_until = 0.0

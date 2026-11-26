@@ -58,8 +58,20 @@ func hit_stop(dur: float = 0.05) -> void:
 	_hit_stop_next = Time.get_ticks_msec() + 300
 	Engine.time_scale = 0.06
 	get_tree().create_timer(dur, true, false, true).timeout.connect(func():
-		Engine.time_scale = 1.0
-		_hit_stop = false)
+		_hit_stop = false
+		Engine.time_scale = 1.0)
+
+var _slow_until := 0
+## Short dramatic slow-motion (real-time duration). Never pauses input.
+func slow_motion(scale: float, real_dur: float) -> void:
+	if get_tree().paused or real_dur <= 0.0:
+		return
+	_slow_until = Time.get_ticks_msec() + int(real_dur * 1000.0)
+	if not _hit_stop:
+		Engine.time_scale = clampf(scale, 0.1, 1.0)
+	get_tree().create_timer(real_dur, true, false, true).timeout.connect(func():
+		if Time.get_ticks_msec() >= _slow_until - 5 and not _hit_stop:
+			Engine.time_scale = 1.0)
 
 # ---------------------------------------------------------------- scene flow
 func start(new_mode: String, opts: Dictionary = {}) -> void:

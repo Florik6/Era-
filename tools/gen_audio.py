@@ -840,7 +840,99 @@ def L_magic_storm():
     return x
 
 
+# ---- combat spectacle SFX (0.10.1) ----
+def S_parry_ring():
+    t = T(1.4)
+    x = 0.8 * metal(t, 1480, taus=(1.0, 0.7, 0.45, 0.3, 0.2))
+    x += 0.5 * metal(t, 2217, taus=(0.8, 0.5, 0.3, 0.2, 0.12))
+    x += 0.9 * ffilt(N(len(t)), lo=2500, hi=11000) * eperc(t, 0.0003, 0.012)
+    x += 0.25 * tone(t, 2960) * eperc(t, 0.02, 0.9) * (1 + 0.4 * np.sin(TAU * 6 * t))
+    x += 0.3 * whoosh(1.4, 6000, 1500, 1.5, 0.2)[:len(t)]
+    return x
+
+
+def S_impact_heavy():
+    t = T(0.9)
+    x = 1.3 * tone(t, expsweep(t, 120, 38, 0.3)) * eperc(t, 0.001, 0.22)
+    x += 0.9 * ffilt(N(len(t)), lo=60, hi=900) * eperc(t, 0.0008, 0.12)
+    x += 0.5 * ffilt(N(len(t)), lo=1500, hi=6000) * eperc(t, 0.0003, 0.03)
+    deb = (rng.random(len(t)) > 0.993).astype(float) * N(len(t)) * (t > 0.05)
+    x += 0.35 * ffilt(deb, lo=900, hi=5000) * np.exp(-t / 0.3)
+    return np.tanh(1.8 * x)
+
+
+def S_slash_air():
+    x = whoosh(0.32, 2600, 500, 2.2, 0.6)
+    t = T(0.32)
+    x += 0.25 * tone(t, expsweep(t, 1800, 700, 0.32)) * eperc(t, 0.01, 0.12)
+    return x
+
+
+def S_ground_crack():
+    t = T(1.1)
+    cr = (rng.random(len(t)) > 0.97).astype(float) * N(len(t))
+    x = 1.0 * ffilt(cr, lo=300, hi=5000) * np.exp(-t / 0.35)
+    x += 0.9 * tone(t, expsweep(t, 70, 32, 0.5)) * eperc(t, 0.002, 0.4)
+    x += 0.4 * svf(N(len(t)), expsweep(t, 2500, 200), 0.7, "lp") * eperc(t, 0.001, 0.5)
+    return np.tanh(1.6 * x)
+
+
+def S_ultimate_boom():
+    t = T(2.2)
+    x = 1.4 * tone(t, expsweep(t, 70, 24, 1.2)) * eperc(t, 0.004, 0.8)
+    x += 1.0 * svf(N(len(t)), expsweep(t, 5000, 120), 0.6, "lp") * eperc(t, 0.001, 0.9)
+    x += 0.5 * ffilt(N(len(t)), lo=2000, hi=9000) * eperc(t, 0.0005, 0.06)
+    x += 0.35 * (tone(t, 220) + 0.6 * tone(t, 330) + 0.4 * tone(t, 440)) * eperc(t, 0.05, 1.2)
+    return np.tanh(1.4 * x)
+
+
+def S_elec_crackle():
+    t = T(0.7)
+    zaps = (rng.random(len(t)) > 0.9).astype(float) * N(len(t))
+    env = eperc(t, 0.001, 0.35) * (0.5 + 0.5 * (np.sin(TAU * 31 * t) > 0))
+    x = ffilt(zaps, lo=2000, hi=11000) * env * 2.2
+    x += 0.3 * tone(t, 90) * np.sign(np.sin(TAU * 50 * t)) * eperc(t, 0.002, 0.25)
+    return np.tanh(2.5 * x / max(np.max(np.abs(x)), 1e-6))
+
+
+def S_ice_crack():
+    t = T(0.8)
+    x = 0.0 * t
+    for k in range(7):
+        st = k * 0.06 + rng.uniform(0, 0.03)
+        seg = (t >= st).astype(float)
+        x += 0.6 * ffilt(N(len(t)), lo=3000, hi=10000) * np.exp(-np.clip(t - st, 0, None) / 0.012) * seg
+    x += 0.5 * metal(t, 2600, taus=(0.3, 0.2, 0.15, 0.1, 0.06))
+    return x
+
+
+def S_dark_hum():
+    t = T(1.3)
+    x = 0.8 * (tone(t, 55) + 0.7 * tone(t, 58.5) + 0.5 * tone(t, 110.6)) * eadsr(t, 1.3, 0.15, 0.2, 0.8, 0.6)
+    x += 0.4 * svf(N(len(t)), 400 + 300 * np.sin(TAU * 1.5 * t), 3.0, "bp") * eadsr(t, 1.3, 0.2, 0.2, 0.7, 0.5)
+    return x
+
+
+def S_time_warp():
+    t = T(1.2)
+    f = expsweep(t, 1400, 180, 1.2)
+    x = 0.6 * tone(t, f) * eadsr(t, 1.2, 0.02, 0.2, 0.7, 0.5)
+    x += 0.4 * tone(t, f * 1.5) * eadsr(t, 1.2, 0.05, 0.2, 0.5, 0.5) * (1 + 0.5 * np.sin(TAU * 9 * t))
+    x += 0.3 * whoosh(1.2, 300, 3000, 1.0, 0.3)[:len(t)]
+    return x
+
+
+def S_dash_whoosh():
+    x = whoosh(0.3, 1800, 250, 1.4, 0.7)
+    t = T(0.3)
+    x += 0.2 * ffilt(N(len(t)), lo=4000, hi=10000) * eperc(t, 0.005, 0.04)
+    return x
+
+
 SFX = {
+    "parry_ring": S_parry_ring, "impact_heavy": S_impact_heavy, "slash_air": S_slash_air, "ground_crack": S_ground_crack,
+    "ultimate_boom": S_ultimate_boom, "elec_crackle": S_elec_crackle, "ice_crack": S_ice_crack, "dark_hum": S_dark_hum,
+    "time_warp": S_time_warp, "dash_whoosh": S_dash_whoosh,
     "step": S_step, "step_metal": S_step_metal, "swing": S_swing, "swing_heavy": S_swing_heavy,
     "hit_flesh": S_hit_flesh, "hit_metal": S_hit_metal, "block": S_block, "parry": S_parry,
     "dodge": S_dodge, "bow_draw": S_bow_draw, "bow_release": S_bow_release, "crossbow": S_crossbow,

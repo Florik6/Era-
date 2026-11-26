@@ -62,6 +62,7 @@ var dead := false
 var crouch := false
 var yielding := false
 var casting := false
+var gait := ""              # class gait: heavy (warrior), light (rogue/archer), soft (mage)
 var hit_t := 0.0
 var parry_t := 0.0
 var _hit_max := 0.3
@@ -861,6 +862,23 @@ func animate(delta: float) -> void:
 	var run_k := clampf((sp - 0.6) / 0.5, 0.0, 1.0)
 	var heavy_build := build_type in ["golem", "colossus", "bulky"]
 	var gait_k := 0.72 if heavy_build else 1.0
+	var g_amp := 1.0
+	var g_arm := 1.0
+	var g_bounce := 1.0
+	var g_low := 0.0
+	match gait:
+		"heavy":   # armoured, planted strides
+			gait_k *= 0.88
+			g_amp = 1.1
+			g_bounce = 1.5
+		"light":   # quick, low, springy
+			gait_k *= 1.14
+			g_arm = 0.85
+			g_low = 0.035
+		"soft":    # composed, gliding, hands ready to cast
+			gait_k *= 0.95
+			g_arm = 0.55
+			g_bounce = 0.6
 	if sp > 0.04:
 		_phase += delta * (4.4 + 4.6 * sp) * gait_k
 	_breath += delta * (1.9 if build_type != "robot" else 0.0)
@@ -869,13 +887,13 @@ func animate(delta: float) -> void:
 	var g := minf(sp, 1.3)
 	var idle_k := clampf(1.0 - sp / 0.15, 0.0, 1.0)
 	# ---- locomotion
-	var amp := (0.5 * g + 0.12 * run_k) * (0.8 if heavy_build else 1.0)
+	var amp := (0.5 * g + 0.12 * run_k) * (0.8 if heavy_build else 1.0) * g_amp
 	var kb := (0.55 + 0.75 * run_k) * g
 	t.leg_l = Vector3(s * amp, 0, -0.04 * idle_k)
 	t.leg_r = Vector3(-s * amp, 0, 0.04 * idle_k)
 	t.knee_l = Vector3(-maxf(0.0, c) * kb - 0.05 - 0.15 * run_k * maxf(0.0, -c), 0, 0)
 	t.knee_r = Vector3(-maxf(0.0, -c) * kb - 0.05 - 0.15 * run_k * maxf(0.0, c), 0, 0)
-	var arm_amp := (0.42 * g + 0.25 * run_k) * (0.5 if build_type == "robot" else 1.0)
+	var arm_amp := (0.42 * g + 0.25 * run_k) * (0.5 if build_type == "robot" else 1.0) * g_arm
 	t.arm_l = Vector3(-s * arm_amp, 0, -0.1 - 0.04 * idle_k)
 	t.arm_r = Vector3(s * arm_amp, 0, 0.1 + 0.04 * idle_k)
 	t.elbow_l = Vector3(0.22 + 0.25 * g + 0.65 * run_k, 0, 0)
@@ -886,7 +904,7 @@ func animate(delta: float) -> void:
 	t.spine = Vector3(-0.05 * g - 0.16 * run_k + breathe, -s * 0.16 * g, 0)
 	t.hips = Vector3(0, s * 0.12 * g, sin(_clock * 0.7) * 0.03 * idle_k)
 	t.neck = Vector3(0.05 * g + 0.12 * run_k - breathe * 0.5, s * 0.1 * g, 0)
-	var hips_y := 0.95 + absf(c) * (0.03 + 0.035 * run_k) * g - 0.035 * run_k
+	var hips_y := 0.95 + absf(c) * (0.03 + 0.035 * run_k) * g * g_bounce - 0.035 * run_k - g_low * run_k
 	# idle look-around
 	if idle_k > 0.5 and action == "":
 		if _clock > _look_next:

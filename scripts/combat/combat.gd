@@ -131,15 +131,16 @@ static func deal(att, tgt, info: Dictionary) -> float:
 	if tgt.data:
 		res += tgt.stat("res_" + dtype)
 	amt *= 1.0 - clampf(res, -1.0, 0.85)
+	if info.get("crit_force", false) and not crit:
+		crit = true
+		amt *= 1.6
 	info.amount = amt
 	info.crit = crit
 	var dealt: float = tgt.take_damage(info)
 	if dealt > 0.0 and att != null and is_instance_valid(att):
 		_on_hit(att, tgt, dealt, info)
-		if att.is_player and info.get("melee", false) and not info.get("proc", false) and (crit or tgt.is_dead or dealt > tgt.max_hp * 0.2):
-			Game.hit_stop(0.07 if tgt.is_dead else 0.045)
-			if tgt.is_dead or crit:
-				VFX.shake(0.12)
+		if att.is_player and not info.get("proc", false):
+			CombatFeel.on_player_hit(att, tgt, dealt, info)
 	return dealt
 
 static func _on_hit(att: Actor, tgt: Actor, dealt: float, info: Dictionary) -> void:

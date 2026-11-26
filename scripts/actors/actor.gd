@@ -59,6 +59,18 @@ var block_t := 0.0
 var dodge_t := 0.0
 var dodge_cd := 0.0
 var dodge_dir := Vector3.ZERO
+var dodge_total := 0.45
+var dodge_kind := "roll"
+var move_vel := Vector3.ZERO      # planar velocity with inertia
+var lunge_vel := Vector3.ZERO     # attack step-in impulse
+var counter_t := 0.0              # window after a parry: next attack is a counter
+var counter_target = null
+var _skid_t := 0.0
+var _ghost_t := 0.0
+var _mstyle: Dictionary = {}
+var _lean := 0.0
+var _pitch := 0.0
+var _prev_yaw := 0.0
 var skill_cd := {}
 var statuses := {}
 var riposte := false
@@ -70,7 +82,7 @@ var hit_count := 0
 var dead_t := 0.0
 var in_water := false
 var gravity := 24.0
-var _grid_t := 0.0
+var _grid_t := 1.0     # first physics tick re-files the actor at its real position
 var _regen_t := 0.0
 var _echo_queue: Array = []
 
@@ -279,6 +291,10 @@ func _tick_timers(delta: float) -> void:
 			ammo = weapon_base().get("mag", 1)
 	if dodge_t > 0.0:
 		dodge_t -= delta
+		if dodge_t <= 0.0 and dodge_kind == "leap" and is_player:
+			VFX.burst(global_position + Vector3(0, 0.1, 0), Color(0.62, 0.55, 0.42, 0.8), 5, 0.2)
+	if counter_t > 0.0:
+		counter_t -= delta
 	_regen_t += delta
 	if _regen_t >= 0.5:
 		_regen(_regen_t)
@@ -336,10 +352,22 @@ func _tick_statuses(delta: float) -> void:
 			if k == "stealth" and rig:
 				rig.crouch = false
 
+func move_style() -> Dictionary:
+	if _mstyle.is_empty():
+		_mstyle = CombatFeel.move_style(self)
+	return _mstyle
+
 func _move(delta: float) -> void:
+	var ms := move_style()
 	var v := Vector3.ZERO
 	if dodge_t > 0.0:
-		v = dodge_dir * 13.0
+		v = dodge_dir * (float(ms.dist) / maxf(0.05, dodge_total)) if dodge_kind != "blink" else Vector3.ZERO
+		move_vel = v * 0.45
+		if dodge_kind == "shadow":
+			_ghost_t -= delta
+			if _ghost_t <= 0.0 and rig:
+				_ghost_t = 0.05
+				MagicFX.ghost(self, Color(0.45, 0.3, 0.8, 0.55), 0.35)
 	elif can_act():
 		var mi := move_input
 		mi.y = 0
@@ -348,38 +376,70 @@ func _move(delta: float) -> void:
 		var spd := speed()
 		if busy() and not is_ranged():
 			spd *= 0.35
-		v = mi * spd
+		var target := mi * spd
+		var cur_len := move_vel.length()
+		# hard reversal at speed: a short skid with dust (feels the body's weight)
+		if ms.skid and _skid_t <= 0.0 and cur_len > spd * 0.6 and target.length() > 0.1 and move_vel.normalized().dot(target.normalized()) < -0.25:
+			_skid_t = 0.16 + 0.1 * float(CombatFeel.weapon_feel(weapon_cat()).weight)
+			if is_on_floor():
+				VFX.burst(global_position + Vector3(0, 0.1, 0) + move_vel.normalized() * 0.3, Color(0.6, 0.52, 0.4, 0.8), 6, 0.22)
+		var rate: float = ms.accel if target.length() > cur_len * 0.95 else ms.decel
+		if _skid_t > 0.0:
+			_skid_t -= delta
+			target = Vector3.ZERO
+			rate = float(ms.decel) * 1.7
+		move_vel = move_vel.move_toward(target, rate * delta)
+		v = move_vel
+	else:
+		move_vel = move_vel.move_toward(Vector3.ZERO, 30.0 * delta)
 	if statuses.has("fear") and last_attacker and is_instance_valid(last_attacker):
 		v = (global_position - last_attacker.global_position).normalized() * speed()
 		v.y = 0
-	v += knockback
+	v += knockback + lunge_vel
 	knockback = knockback.move_toward(Vector3.ZERO, delta * 20.0)
+	lunge_vel = lunge_vel.move_toward(Vector3.ZERO, delta * 60.0)
 	velocity.x = v.x
 	velocity.z = v.z
 	if is_on_floor():
-		velocity.y = -0.5
+		velocity.y = -0.5 if velocity.y <= 0.0 else velocity.y - gravity * delta
 	else:
 		velocity.y -= gravity * delta
 	move_and_slide()
 	# world bounds and fall-through guard
 	if Game.world and Game.world.has_method("clamp_to_world"):
 		Game.world.clamp_to_world(self)
-	# facing
+	# facing: class turn rate
 	var want := facing
 	if act.is_empty() and v.length() > 0.5 and dodge_t <= 0.0 and not blocking:
 		want = Vector3(v.x, 0, v.z).normalized()
-		facing = facing.slerp(want, minf(1.0, delta * 12.0)).normalized()
+		facing = facing.slerp(want, minf(1.0, delta * float(ms.turn))).normalized()
 	if rig:
 		var target_yaw := atan2(-facing.x, -facing.z)
-		rig.rotation.y = lerp_angle(rig.rotation.y, target_yaw, minf(1.0, delta * 16.0))
+		rig.rotation.y = lerp_angle(rig.rotation.y, target_yaw, minf(1.0, delta * (float(ms.turn) + 4.0)))
+		# lean into turns and accelerations (humanoids with a class style)
+		if float(ms.lean) > 0.0 and delta > 0.0:
+			var yaw_rate := wrapf(rig.rotation.y - _prev_yaw, -PI, PI) / delta
+			# lean into the turn (positive yaw rate = turning left = lean left)
+			_lean = lerpf(_lean, clampf(yaw_rate * float(ms.lean) * 0.08, -0.22, 0.22), minf(1.0, delta * 8.0))
+			var want_pitch := 0.0
+			if _skid_t > 0.0:
+				want_pitch = 0.16          # braking: lean back
+			elif move_input.length() > 0.2 and Vector2(move_vel.x, move_vel.z).length() < speed() * 0.6:
+				want_pitch = -0.1          # pushing off into a run: lean forward
+			_pitch = lerpf(_pitch, want_pitch, minf(1.0, delta * 9.0))
+			rig.rotation.z = _lean
+			rig.rotation.x = _pitch
+		_prev_yaw = rig.rotation.y
 
 func _update_rig(delta: float) -> void:
 	var hv := Vector2(velocity.x, velocity.z).length()
 	rig.move_speed = hv / 5.0
+	if rig is HumanoidRig and rig.gait == "" and (is_player or data != null):
+		rig.gait = String(move_style().get("step", ""))
 	rig.blocking = blocking
-	rig.dodging = dodge_t > 0.0
+	rig.dodging = dodge_t > 0.0 and dodge_kind in ["roll", "leap"]
 	if dodge_t > 0.0:
-		rig.dodge_p = 1.0 - dodge_t / 0.45
+		rig.dodge_p = 1.0 - dodge_t / maxf(0.05, dodge_total)
 	if not act.is_empty():
 		rig.action_p = clampf(act.t / act.dur, 0.0, 1.0)
 	elif rig.action != "":
@@ -428,6 +488,9 @@ func attack_interval() -> float:
 
 ## Primary attack toward aim (xz direction). Returns true if an attack started.
 func attack(aim: Vector3 = Vector3.ZERO) -> bool:
+	# the end of a dodge can flow straight into an attack
+	if dodge_t > 0.0 and dodge_t < dodge_total * 0.35 and attack_cd <= 0.0:
+		dodge_t = 0.0
 	if not can_act() or attack_cd > 0.0 or busy() or dodge_t > 0.0:
 		return false
 	if aim.length() > 0.01:
@@ -464,14 +527,52 @@ func attack(aim: Vector3 = Vector3.ZERO) -> bool:
 			var idx := combo % chain.size()
 			var mult = [1.0, 1.1, 1.3, 1.6][mini(idx, 3)]
 			var anim: String = chain[idx]
-			var dur := clampf(interval * 0.95, 0.3, 0.75)
+			var fin := idx == chain.size() - 1
+			var counter := counter_t > 0.0
+			var wf := CombatFeel.weapon_feel(cat)
+			# heavier weapons swing slower, light blades faster
+			var dur := clampf(interval * 0.95 * lerpf(0.85, 1.2, float(wf.weight)), 0.26, 0.85)
 			if anim == "spin":
 				dur = 0.6
-			start_action("melee", dur, 0.42, {"anim": anim, "mult": mult, "combo": idx})
+			if fin:
+				dur *= 1.12
+			start_action("melee", dur, 0.42, {"anim": anim, "mult": mult * (1.6 if counter else 1.0), "combo": idx, "finisher": fin, "counter": counter})
 			combo += 1
 			combo_t = interval + 0.6
-			Audio.play_sfx("swing_heavy" if cat == "heavy" else "swing", global_position, -4.0)
+			# step in toward the target (magnetised lunge), longer for counters and finishers
+			var tgt = counter_target if counter and counter_target != null and is_instance_valid(counter_target) else _melee_target(weapon_range() + float(wf.lunge) + 1.0)
+			if tgt != null:
+				var to: Vector3 = tgt.global_position - global_position
+				to.y = 0
+				var gap := to.length() - weapon_range() * 0.7
+				if gap > 0.1:
+					var step := minf(gap, float(wf.lunge) * (1.8 if counter else (1.3 if fin else 1.0)))
+					lunge_vel = to.normalized() * sqrt(2.0 * 60.0 * step)
+				face_dir(to)
+			if counter:
+				counter_t = 0.0
+				VFX.text(chest() + Vector3(0, 0.6, 0), "Контратака!", Color(1.0, 0.85, 0.4))
+				if is_player:
+					CombatFeel.speed_lines(0.25, 1.0)
+			Audio.play_sfx("swing_heavy" if cat == "heavy" or fin else "swing", global_position, -4.0 if not fin else -1.0)
 	return true
+
+## Nearest enemy in front within r (for the attack step-in).
+func _melee_target(r: float):
+	var best = null
+	var bd := INF
+	for a in Game.actors_near(global_position, r):
+		if a == self or a.is_dead or not Game.is_enemy(self, a):
+			continue
+		var to: Vector3 = a.global_position - global_position
+		to.y = 0
+		var d := to.length()
+		if d > 0.1 and facing.angle_to(to / d) > deg_to_rad(70.0):
+			continue
+		if d < bd:
+			bd = d
+			best = a
+	return best
 
 func _combo_chain(cat: String) -> Array:
 	match cat:
@@ -501,9 +602,21 @@ func _on_impact(a: Dictionary) -> void:
 				info.status = {"stun": 1.0}
 			if anim == "spin" or anim == "slam":
 				r *= 1.1
+			var wf := CombatFeel.weapon_feel(weapon_cat())
+			var fin: bool = p.get("finisher", false)
+			info.knock = maxf(float(info.get("knock", 0.0)), float(wf.fin_knock) if fin else float(wf.knock))
+			if fin:
+				info.finisher = true
+				info.launch = float(wf.launch)
+				r *= 1.15
+				arc = maxf(arc, 140.0)
+			if p.get("counter", false):
+				info.crit_force = true
 			var hits := Combat.melee(self, r, arc, info)
 			if hits.size() > 0:
 				Audio.play_sfx("hit_metal" if hits[0].get("metal_hit", false) else "hit_flesh", global_position, -2.0)
+			if fin and is_player:
+				_finisher_fx(r, hits.size() > 0)
 		"shoot":
 			Combat.fire_weapon(self)
 		"cast_bolt":
@@ -512,6 +625,24 @@ func _on_impact(a: Dictionary) -> void:
 			var cb: Callable = a.data.get("cb", Callable())
 			if cb.is_valid():
 				cb.call()
+
+## Visual/physical accent of the last hit of a combo.
+func _finisher_fx(r: float, landed: bool) -> void:
+	var wf := CombatFeel.weapon_feel(weapon_cat())
+	var heavy: bool = float(wf.weight) >= 0.9
+	var c := Color(1.0, 0.85, 0.55) if not heavy else Color(1.0, 0.6, 0.3)
+	VFX.slash(global_position + Vector3(0, 1.0, 0), facing, r * 1.25, 150.0, "slash", c)
+	if heavy:
+		VFX.ground_impact(global_position + facing * 1.4, 2.6)
+		VFX.decal(global_position + facing * 1.4, "crack", 2.4, 14.0, randf() * TAU)
+		VFX.shock(global_position + facing * 1.2, 3.6, c, 0.35)
+		Audio.play_sfx("impact_heavy", global_position, -1.0)
+		Audio.play_sfx("ground_crack", global_position, -6.0)
+	else:
+		VFX.shock(global_position + facing * 0.8, 2.2, c, 0.25)
+		Audio.play_sfx("slash_air", global_position, -3.0)
+	if landed:
+		CombatFeel.punch(0.08, 0.22)
 
 func reload() -> void:
 	var b := weapon_base()
@@ -551,22 +682,61 @@ func dodge(dir: Vector3) -> bool:
 		dir = facing
 	dodge_dir = dir.normalized()
 	face_dir(dodge_dir)
-	dodge_t = 0.45
-	var cd := 0.9
+	var ms := move_style()
+	dodge_kind = String(ms.dodge)
+	dodge_total = float(ms.dur)
+	var cd := 0.9 if dodge_kind != "blink" else 1.1
 	if data and data.has_node("dg_evasion"):
 		cd *= 0.6
-		dodge_t = 0.5
+		dodge_total *= 1.1
+	dodge_t = dodge_total
 	dodge_cd = cd
 	stamina -= 18.0
 	act = {}
 	blocking = false
-	Audio.play_sfx("dodge", global_position, -6.0)
+	move_vel = Vector3.ZERO
+	match dodge_kind:
+		"blink":
+			# short teleport, stops before walls
+			var from := global_position
+			var dist := float(ms.dist)
+			if is_inside_tree():
+				var q := PhysicsRayQueryParameters3D.create(chest(), chest() + dodge_dir * dist, 1)
+				q.exclude = [get_rid()]
+				var hit := get_world_3d().direct_space_state.intersect_ray(q)
+				if not hit.is_empty():
+					dist = maxf(0.0, (hit.position - chest()).length() - 0.6)
+			MagicFX.blink_out(self, "time")
+			global_position = from + dodge_dir * dist
+			if Game.world and Game.world.has_method("ground_height"):
+				global_position.y = maxf(global_position.y, Game.world.ground_height(global_position))
+			if has_method("reset_physics_interpolation"):
+				reset_physics_interpolation()
+			MagicFX.blink_in(self, from, "time")
+			Audio.play_sfx("teleport", global_position, -4.0)
+		"shadow":
+			_ghost_t = 0.0
+			Audio.play_sfx("dash_whoosh", global_position, -2.0)
+			if is_player:
+				CombatFeel.speed_lines(0.28, 0.9)
+		"leap":
+			Audio.play_sfx("dash_whoosh", global_position, -5.0)
+			if is_player:
+				CombatFeel.speed_lines(0.22, 0.6)
+		_:
+			Audio.play_sfx("dodge", global_position, -6.0)
+			VFX.burst(global_position + Vector3(0, 0.1, 0), Color(0.62, 0.55, 0.42, 0.8), 5, 0.22)
 	if data and "shadow_dancer" in data.hybrids():
 		Spells.shadow_clone_burst(self, global_position)
 	return true
 
 func invulnerable() -> bool:
-	return dodge_t > 0.12 and dodge_t < 0.42 or statuses.has("invuln")
+	if statuses.has("invuln"):
+		return true
+	if dodge_t <= 0.0:
+		return false
+	var p := 1.0 - dodge_t / maxf(0.05, dodge_total)
+	return p < 0.88       # i-frames start immediately (forgiving on touch screens)
 
 ## Use the skill in slot i (0..2) of the current weapon category.
 func use_slot(i: int, aim: Vector3 = Vector3.ZERO) -> bool:
@@ -665,7 +835,15 @@ func take_damage(info: Dictionary) -> float:
 	if dealt > 0.0 and not is_dead:
 		var kb: float = info.get("knock", 0.0)
 		if kb > 0.0 and from_dir.length() > 0.1 and kind != "boss":
-			knockback = -from_dir * kb
+			# heavier bodies (big scale) are pushed less
+			knockback = -from_dir * kb / maxf(1.0, _scale())
+		# finishers stagger and can briefly launch lighter foes off their feet
+		if info.get("finisher", false) and kind != "boss" and not statuses.has("unstoppable"):
+			act = {}
+			apply_status("stun", 0.35)
+			var la: float = info.get("launch", 0.0)
+			if la > 0.0 and _scale() <= 1.3 and is_on_floor():
+				velocity.y = la
 		for st in info.get("status", {}):
 			var sv = info.status[st]
 			if st == "burn":
@@ -694,6 +872,8 @@ func _parry(src) -> void:
 		src.act = {}
 	if data and data.has_node("sw_riposte"):
 		riposte = true
+	if is_player:
+		CombatFeel.parry_moment(self, src)
 	block_t = 999.0
 
 func _apply_raw_damage(amount: float, src, dtype: String, quiet: bool = false, info: Dictionary = {}) -> float:

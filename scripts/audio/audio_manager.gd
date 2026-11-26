@@ -101,6 +101,9 @@ func _get_sfx(sfx_name: String) -> AudioStream:
 
 
 # ---------------------------------------------------------------- SFX
+func has_sfx(sfx_name: String) -> bool:
+	return _cache.has(sfx_name) or ResourceLoader.exists(SFX_PATH % sfx_name)
+
 func play_sfx(sfx_name: String, pos = null, vol_db := 0.0, pitch_var := 0.08) -> void:
 	if sfx_name.is_empty():
 		return

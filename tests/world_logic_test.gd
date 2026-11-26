@@ -63,7 +63,7 @@ func _ready() -> void:
 	for i in 20:
 		var p := tp + Vector3(randf_range(-50, 50), 0, randf_range(-50, 50))
 		var r := space.intersect_ray(PhysicsRayQueryParameters3D.create(p + Vector3(0, 80, 0), p - Vector3(0, 80, 0), 1))
-		if not r.is_empty() and cs.building_at(r.position) == null and absf(r.position.y - cs.ground_height(p)) < 2.0:
+		if not r.is_empty() and _is_terrain(r.collider) and cs.building_at(r.position) == null and absf(r.position.y - cs.ground_height(p)) < 2.0:
 			maxerr = maxf(maxerr, absf(r.position.y - cs.ground_height(p)))
 	check(maxerr < 0.35, "ground_height matches collision (max err %.3f)" % maxerr)
 	# buildings
@@ -219,3 +219,13 @@ func _ready() -> void:
 	check(img.get_width() == 64, "overview image")
 	print("WORLD_LOGIC_DONE fails=%d" % fails)
 	get_tree().quit(1 if fails > 0 else 0)
+
+
+## Only the heightmap counts as ground (props, fences and wells have colliders too).
+func _is_terrain(c) -> bool:
+	if c == null or not (c is Node):
+		return false
+	for ch in c.get_children():
+		if ch is CollisionShape3D and ch.shape is HeightMapShape3D:
+			return true
+	return false

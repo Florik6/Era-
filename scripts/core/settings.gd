@@ -13,6 +13,7 @@ var fog_density := 0.5          # legacy multiplier (kept for old settings files
 var fog_level := 2              # 0 off, 1 light, 2 standard (both are see-through)
 var cinematics := 2             # 0 off, 1 short, 2 full
 var effects_intensity := 1.0    # colour/screen effects of events (blood moon tint, flashes)
+var combat_fx := 2              # combat spectacle: 0 off, 1 minimal, 2 standard, 3 epic
 var music_vol := 0.7
 var sfx_vol := 0.85
 var render_scale := 1.0         # extra multiplier on top of quality profile
@@ -48,6 +49,7 @@ func load_settings() -> void:
 	fog_level = cf.get_value("gfx", "fog_level", fog_level)
 	cinematics = cf.get_value("gfx", "cinematics", cinematics)
 	effects_intensity = cf.get_value("gfx", "effects_intensity", effects_intensity)
+	combat_fx = cf.get_value("gfx", "combat_fx", combat_fx)
 	render_scale = cf.get_value("gfx", "render_scale", render_scale)
 	show_fps = cf.get_value("gfx", "show_fps", show_fps)
 	music_vol = cf.get_value("audio", "music", music_vol)
@@ -73,6 +75,7 @@ func save_settings() -> void:
 	cf.set_value("gfx", "fog_level", fog_level)
 	cf.set_value("gfx", "cinematics", cinematics)
 	cf.set_value("gfx", "effects_intensity", effects_intensity)
+	cf.set_value("gfx", "combat_fx", combat_fx)
 	cf.set_value("gfx", "render_scale", render_scale)
 	cf.set_value("gfx", "show_fps", show_fps)
 	cf.set_value("audio", "music", music_vol)

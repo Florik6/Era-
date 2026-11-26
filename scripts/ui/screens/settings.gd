@@ -29,6 +29,7 @@ func build() -> void:
 		Settings.apply()))
 	vb.add_child(UITheme.wrap_label("Туман никогда не закрывает обзор полностью: персонаж, дорога, враги и предупреждения об атаках всегда видны.", 15))
 	vb.add_child(_choice("Кинематографические сцены", ["Выключены", "Короткие", "Полные"], Settings.cinematics, func(i): Settings.cinematics = i))
+	vb.add_child(_choice("Боевые эффекты (замедления, вспышки, тряска)", ["Выкл", "Минимально", "Стандартно", "Эпично"], Settings.combat_fx, func(i): Settings.combat_fx = i))
 	vb.add_child(_slider("Яркость эффектов событий (кровавая луна, вспышки)", 0.0, 1.0, 0.05, Settings.effects_intensity, func(v):
 		Settings.effects_intensity = v, true))
 	vb.add_child(_check("Показывать FPS", Settings.show_fps, func(v): Settings.show_fps = v))

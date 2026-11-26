@@ -18,6 +18,10 @@ var _look := Vector3.ZERO
 var _scan_t := 0.0
 var _want_k := 1.0
 var cine_offset := Vector3.ZERO      # temporary offset from the cinematic director
+var _punch := 0.0                    # >0 punch-in, <0 pull-out (fraction of distance)
+var _punch_t := 0.0
+var _punch_dur := 0.25
+var _kick := Vector3.ZERO
 var cine_focus = null                # optional Vector3 to bias the focus toward
 
 func _ready() -> void:
@@ -31,6 +35,18 @@ func snap() -> void:
 
 func shake(a: float) -> void:
 	_shake = maxf(_shake, a * clampf(Settings.effects_intensity * 1.2, 0.3, 1.2))
+
+## Brief zoom accent: amount > 0 moves in, < 0 pulls out (fraction of distance).
+func punch(amount: float, dur: float = 0.25) -> void:
+	_punch = clampf(amount, -0.3, 0.3)
+	_punch_dur = maxf(0.05, dur)
+	_punch_t = _punch_dur
+
+## Directional camera jolt (e.g. the weight of a hit).
+func kick(dir: Vector3, amount: float) -> void:
+	dir.y = 0
+	if dir.length() > 0.01:
+		_kick += dir.normalized() * clampf(amount, 0.0, 0.5)
 
 func _process(delta: float) -> void:
 	if target == null or not is_instance_valid(target):
@@ -67,11 +83,16 @@ func _process(delta: float) -> void:
 	else:
 		_focus = _focus.lerp(focus_target, 1.0 - exp(-delta * 8.0))
 	var dist := base_dist * _dist_k / clampf(Settings.camera_zoom, 0.6, 1.6)
+	if _punch_t > 0.0:
+		_punch_t = maxf(0.0, _punch_t - delta)
+		var pk := _punch_t / _punch_dur
+		dist *= 1.0 - _punch * sin(pk * PI)
+	_kick = _kick.lerp(Vector3.ZERO, 1.0 - exp(-delta * 14.0))
 	var p := deg_to_rad(pitch_deg + (_dist_k - 1.0) * 10.0)
 	var off := Vector3(0, sin(p) * dist, cos(p) * dist).rotated(Vector3.UP, yaw)
 	var sh := Vector3.ZERO
 	if _shake > 0.0:
 		_shake = maxf(0.0, _shake - delta * 1.8)
 		sh = Vector3(randf_range(-1, 1), randf_range(-1, 1), randf_range(-1, 1)) * _shake * 0.45
-	global_position = _focus + off + sh + cine_offset
+	global_position = _focus + off + sh + cine_offset + _kick
 	look_at(_focus + sh * 0.5, Vector3.UP)

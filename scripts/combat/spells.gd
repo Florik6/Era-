@@ -5,6 +5,10 @@ class_name Spells
 ## nothing visual feeds back into the rules here.
 
 const BIG_SPELLS := ["meteor", "storm", "blizzard", "nova", "summon", "freeze", "timeslow", "thunderclap", "firewall"]
+## Top spell of each school: cast by the hero with a full "ultimate" show —
+## longer pre-cast with a giant rune and camera focus, slow-mo + flash on
+## release and an extra finishing effect.
+const ULTIMATES := ["meteor", "blizzard", "storm", "nova", "riftdash"]
 
 static func cast(c: Actor, id: String, aim: Vector3) -> bool:
 	var sp := DBSkills.spell(id)
@@ -29,9 +33,21 @@ static func cast(c: Actor, id: String, aim: Vector3) -> bool:
 	c.face_dir(aim)
 	var power: float = sp.dmg * (1.0 + 0.12 * (c.level - 1))
 	var info := {"amount": power, "dtype": DBSkills.SCHOOLS[sp.school].dtype, "school": sp.school, "melee": false, "knock": 1.0, "status": {}}
-	var cb := func(): _effect(c, id, sp, aim, info)
-	c.start_action("spell", 0.45, 0.55, {"anim": "cast", "cb": cb})
-	MagicFX.charge(c, sp.school, 0.45 * 0.55, id in BIG_SPELLS)
+	var ult: bool = c.is_player and id in ULTIMATES
+	var cb := func():
+		_effect(c, id, sp, aim, info)
+		if ult and is_instance_valid(c):
+			_ultimate_finish(c, id, sp.school, aim, info)
+	if ult:
+		var col0 := Combat.element_color(info.dtype)
+		c.start_action("spell", 0.9, 0.78, {"anim": "cast", "cb": cb})
+		MagicFX.charge(c, sp.school, 0.7, true)
+		MagicFX.ground_rune(c.global_position + Vector3(0, 0.05, 0), MagicFX.rune_style_for(sp.school), col0, 3.0, 1.1, 1.4, 1.1)
+		CombatFeel.punch(0.1, 0.8)
+		Audio.play_sfx("portal_open", c.global_position, -2.0)
+	else:
+		c.start_action("spell", 0.45, 0.55, {"anim": "cast", "cb": cb})
+		MagicFX.charge(c, sp.school, 0.45 * 0.55, id in BIG_SPELLS)
 	c.data.add_school_xp(sp.school, 4.0)
 	if c.is_player:
 		var n := Profile.add_stat("spells")
@@ -134,6 +150,7 @@ static func _effect(c: Actor, id: String, sp: Dictionary, aim: Vector3, info: Di
 			if Game.world and Game.world.has_method("freeze_water"):
 				Game.world.freeze_water(c.global_position, 7.0)
 			Audio.play_sfx("ice_shatter", c.global_position)
+			Audio.play_sfx("ice_crack", c.global_position, -4.0)
 		"icewall":
 			if Game.world and Game.world.has_method("spawn_ice_wall"):
 				Game.world.spawn_ice_wall(c.global_position + aim * 3.5, aim, 9.0)
@@ -155,6 +172,7 @@ static func _effect(c: Actor, id: String, sp: Dictionary, aim: Vector3, info: Di
 			else:
 				VFX.lightning(muzzle, muzzle + aim * 12.0, col, 0.14, 0.06, 2)
 			Audio.play_sfx("lightning", c.global_position, -2.0)
+			Audio.play_sfx("elec_crackle", c.global_position, -8.0)
 		"chain":
 			var t3 := _target(c, aim, 18.0, 60.0)
 			if t3:
@@ -200,6 +218,7 @@ static func _effect(c: Actor, id: String, sp: Dictionary, aim: Vector3, info: Di
 			MagicFX.dark_nova(c.global_position, 7.0)
 			Combat.aoe(c, c.global_position, 7.0, info)
 			Audio.play_sfx("dark_cast", c.global_position)
+			Audio.play_sfx("dark_hum", c.global_position, -3.0)
 		# ---------------- space & time
 		"blink":
 			var dest := c.global_position + aim * 9.0
@@ -216,6 +235,7 @@ static func _effect(c: Actor, id: String, sp: Dictionary, aim: Vector3, info: Di
 			MagicFX.release(muzzle, aim, "time")
 			Zone.create("timeslow", c, p5, 5.0, 6.0, info)
 			Audio.play_sfx("time_slow", p5)
+			Audio.play_sfx("time_warp", p5, -4.0)
 		"timetrap":
 			var p6 := c.global_position + aim * 4.0
 			Zone.create("timetrap", c, p6, 1.6, 20.0, info, {"stasis": 4.0})
@@ -300,3 +320,58 @@ static func shadow_clone_burst(c: Actor, pos: Vector3) -> void:
 			return
 		VFX.explosion(pos, 2.5, Color(0.5, 0.2, 0.8))
 		Combat.aoe(c, pos, 2.5, {"amount": 12.0 + c.level * 3.0, "dtype": "dark", "proc": true, "status": {"slow": 0.5}}))
+
+
+## Extra finishing layer of an ultimate (visual + a little extra punch).
+static func _ultimate_finish(c: Actor, id: String, school: String, aim: Vector3, info: Dictionary) -> void:
+	var col := Combat.element_color(info.dtype)
+	var tree := c.get_tree()
+	match id:
+		"meteor":
+			var p := _aim_point(c, aim, 18.0)
+			tree.create_timer(1.0, false).timeout.connect(func():
+				CombatFeel.ultimate_release(p, col)
+				VFX.decal(p, "scorch", 6.0, 25.0, randf() * TAU)
+				VFX.decal(p, "crack", 5.0, 25.0, randf() * TAU)
+				VFX.shock(p, 7.0, Color(1.0, 0.55, 0.2), 0.5)
+				MagicFX.ground_rune(p + Vector3(0, 0.05, 0), MagicFX.rune_style_for("fire"), Color(1.0, 0.45, 0.15), 4.5, 1.0, 2.0, 1.1)
+				# a burning crater keeps the area dangerous for a moment
+				var burn := info.duplicate()
+				burn.amount = info.amount * 0.12
+				burn.status = {"burn": info.amount * 0.1}
+				Zone.create("fire", c if is_instance_valid(c) else null, p, 3.0, 4.0, burn)
+				for a in Game.actors_near(p, 7.0):
+					if is_instance_valid(c) and a != c and not a.is_dead and Game.can_damage(c, a) and a.kind != "boss":
+						var away: Vector3 = a.global_position - p
+						away.y = 0
+						a.knockback = away.normalized() * 9.0)
+		"blizzard":
+			var p2 := _aim_point(c, aim, 18.0)
+			CombatFeel.ultimate_release(p2, col)
+			MagicFX.ice_spikes(p2, 4.5, 10)
+			MagicFX.freeze_nova(p2, 4.5)
+			VFX.decal(p2, "frost", 6.0, 20.0, 0.0)
+			Audio.play_sfx("ice_shatter", p2)
+		"storm":
+			var tgt := _target(c, aim, 16.0, 120.0)
+			var p3: Vector3 = tgt.global_position if tgt else c.global_position + aim * 8.0
+			CombatFeel.ultimate_release(p3, Color(0.75, 0.85, 1.0))
+			MagicFX.sky_strike(p3, Color(0.85, 0.9, 1.0), 3.5)
+			VFX.shock(p3, 6.0, Color(0.7, 0.8, 1.0), 0.4)
+			VFX.decal(p3, "scorch", 3.5, 15.0, randf() * TAU)
+			Audio.play_sfx("thunder", p3, 2.0)
+		"nova":
+			CombatFeel.ultimate_release(c.global_position, Color(0.7, 0.4, 1.0))
+			# the void pulls enemies in before the wave
+			for a in Game.actors_near(c.global_position, 9.0):
+				if a != c and not a.is_dead and Game.can_damage(c, a) and a.kind != "boss":
+					var to: Vector3 = c.global_position - a.global_position
+					to.y = 0
+					a.knockback = to.normalized() * 6.0
+			MagicFX.ground_rune(c.global_position + Vector3(0, 0.05, 0), MagicFX.rune_style_for("dark"), Color(0.6, 0.25, 1.0), 5.0, 1.2, -1.2, 1.1)
+			VFX.shock(c.global_position, 8.0, Color(0.55, 0.25, 0.95), 0.5)
+		"riftdash":
+			CombatFeel.ultimate_release(c.global_position, Color(0.5, 1.0, 0.9))
+			CombatFeel.speed_lines(0.35, 1.0)
+			MagicFX.time_snap(c.global_position, 4.0)
+			VFX.shock(c.global_position, 5.0, Color(0.5, 1.0, 0.9), 0.35)

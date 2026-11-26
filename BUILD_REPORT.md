@@ -1,11 +1,11 @@
-# BUILD REPORT — ERA: Восхождение 0.10.0
+# BUILD REPORT — ERA: Восхождение 0.10.1
 
-## 0.10.0 — две сборки и новый загрузчик
+## 0.10.1 — две сборки и новый загрузчик (обновлено вместе с боёвкой)
 
 | Файл | Рендер | Размер | Подпись |
 |---|---|---|---|
-| `dist/ERA_Ascension.apk` | Mobile (Vulkan), откат на OpenGL, если Vulkan не инициализируется | 62 140 306 байт | v2 + v3, тот же ключ, что у 0.9.2 (SHA-256 сертификата `c782a0b8…a0d4`) |
-| `dist/ERA_Ascension_GL.apk` | Compatibility (OpenGL ES 3): в `assets/_cl_` записаны аргументы `--rendering-method gl_compatibility --rendering-driver opengl3` | 62 140 306 байт | тот же ключ |
+| `dist/ERA_Ascension.apk` | Mobile (Vulkan), откат на OpenGL, если Vulkan не инициализируется | 62 261 580 байт | v2 + v3, тот же ключ, что у 0.9.2 (SHA-256 сертификата `c782a0b8…a0d4`) |
+| `dist/ERA_Ascension_GL.apk` | Compatibility (OpenGL ES 3): в `assets/_cl_` записаны аргументы `--rendering-method gl_compatibility --rendering-driver opengl3` | 62 261 580 байт | тот же ключ |
 
 - Пресет экспорта «Android GL» отличается только `command_line/extra_args`. Пакет и ключ общие, поэтому сборки ставятся
   друг поверх друга с сохранением прогресса, и обе ставятся поверх 0.9.2.
@@ -35,7 +35,7 @@ debug-ключа в editor settings, импортирует ресурсы и э
 ## Пресет экспорта (`export_presets.cfg`)
 
 - Платформа Android, архитектуры **arm64-v8a + armeabi-v7a** в одном APK: все ARM-телефоны, 64 и 32 бит. x86 и x86_64 нужны только эмуляторам на ПК, они выключены ради размера.
-- `package/unique_name = com.eraascension.game`, имя «ERA: Восхождение», версия 0.10.0 (code 12).
+- `package/unique_name = com.eraascension.game`, имя «ERA: Восхождение», версия 0.10.1 (code 13).
 - Иконки: 192 px и адаптивная 432 px (foreground и background).
 - Immersive mode. Разрешение — только VIBRATE, интернет не требуется.
 - Ориентация горизонтальная (sensor landscape в project.godot).

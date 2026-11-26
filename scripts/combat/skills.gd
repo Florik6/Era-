@@ -34,7 +34,13 @@ static func use(a: Actor, id: String, aim: Vector3) -> bool:
 				var info := Combat.weapon_info(a, 2.6)
 				info.knock = 7.0
 				Combat.melee(a, r + 0.4, 100.0, info)
-				VFX.ground_impact(a.global_position + a.facing * 1.5, 1.8)
+				var gp: Vector3 = a.global_position + a.facing * 1.5
+				VFX.ground_impact(gp, 1.8)
+				VFX.decal(gp, "crack", 2.2, 12.0, randf() * TAU)
+				VFX.slash(a.global_position + Vector3(0, 1.0, 0), a.facing, r + 1.0, 70.0, "overhead", Color(1.0, 0.85, 0.55))
+				if a.is_player:
+					CombatFeel.shake(0.22)
+					CombatFeel.punch(0.08, 0.25)
 				Audio.play_sfx("swing_heavy", a.global_position))
 		"sw_whirl", "hv_quake":
 			if id == "sw_whirl":
@@ -64,6 +70,9 @@ static func use(a: Actor, id: String, aim: Vector3) -> bool:
 					tree.create_timer(0.08 * i, false).timeout.connect(func():
 						if is_instance_valid(a) and not a.is_dead:
 							a.rig.trigger("stab" if i % 2 == 0 else "slash")
+							VFX.slash(a.global_position + Vector3(0, 0.9 + 0.1 * i, 0), a.facing.rotated(Vector3.UP, randf_range(-0.4, 0.4)), r + 0.6, 70.0, "slash", Color(0.8, 0.6, 1.0))
+							if a.is_player and i == 0:
+								CombatFeel.speed_lines(0.4, 0.7)
 							Combat.melee(a, r + 0.2, 70.0, Combat.weapon_info(a, 0.6 + (0.09 * i if a.data.has_node("dg_combo") else 0.0)), 1)))
 		"dg_stealth":
 			a.apply_status("stealth", 6.0)
@@ -84,8 +93,14 @@ static func use(a: Actor, id: String, aim: Vector3) -> bool:
 			a.reset_physics_interpolation()
 			_smoke(a.chest(), 0.6)
 			a.face_dir(t.global_position - a.global_position)
+			if a.is_player:
+				CombatFeel.speed_lines(0.3, 1.0)
 			_act(a, "stab", 0.35, 0.3, func():
-				Combat.melee(a, r + 0.4, 80.0, Combat.weapon_info(a, 2.0), 1))
+				Combat.melee(a, r + 0.4, 80.0, Combat.weapon_info(a, 2.0), 1)
+				Audio.play_sfx("slash_air", a.global_position, -2.0)
+				VFX.slash(a.global_position + Vector3(0, 1.0, 0), a.facing, r + 1.2, 120.0, "slash", Color(0.7, 0.4, 1.0))
+				if a.is_player:
+					CombatFeel.hitstop(0.06))
 		"sp_lunge":
 			a.dodge_dir = aim
 			a.knockback = aim * 14.0
@@ -112,12 +127,28 @@ static func use(a: Actor, id: String, aim: Vector3) -> bool:
 			_act(a, "slam", 0.7, 0.55, func():
 				var inf4 := Combat.weapon_info(a, 2.0)
 				inf4.status = {"stun": 0.6}
-				VFX.ground_impact(a.global_position + aim * 1.2, 4.0)
-				VFX.shake(0.3)
-				Combat.aoe(a, a.global_position + aim * 1.2, 4.0, inf4))
+				var sp2: Vector3 = a.global_position + aim * 1.2
+				VFX.ground_impact(sp2, 4.0)
+				VFX.shock(sp2, 4.5, Color(1.0, 0.7, 0.4), 0.4)
+				# the ground splits: radial cracks around the impact
+				for k in 5:
+					VFX.decal(sp2 + Vector3(cos(k * 1.256), 0, sin(k * 1.256)) * 1.6, "crack", 2.0, 14.0, k * 1.256)
+				Audio.play_sfx("ground_crack", sp2, -2.0)
+				Audio.play_sfx("impact_heavy", sp2, -2.0)
+				if a.is_player:
+					CombatFeel.shake(0.4)
+					CombatFeel.slowmo(0.5, 0.12)
+					CombatFeel.flash(Color(1.0, 0.85, 0.6), 0.12)
+				else:
+					VFX.shake(0.3)
+				Combat.aoe(a, sp2, 4.0, inf4))
 		"hv_unstoppable":
 			a.apply_status("unstoppable", 8.0)
 			VFX.ring(a.global_position, 2.0, Color(1.0, 0.6, 0.2), 0.5)
+			VFX.shock(a.global_position, 6.0, Color(1.0, 0.5, 0.2), 0.45)
+			if a.is_player:
+				CombatFeel.punch(0.1, 0.4)
+				CombatFeel.shake(0.18)
 			_aura(a, Color(1.0, 0.55, 0.2))
 			Audio.play_sfx("boss_roar", a.global_position, -6.0)
 		"bw_aimed":
@@ -127,6 +158,10 @@ static func use(a: Actor, id: String, aim: Vector3) -> bool:
 				inf5.melee = false
 				Projectile.spawn(a, a.chest() + aim * 0.7, aim * 62.0, inf5, "arrow", {"pierce": 2, "range": r * 1.4})
 				VFX.shock(a.chest() + aim * 0.9, 0.6, Color(1.0, 0.95, 0.8, 0.8), 0.2)
+				# piercing shot leaves a light trail through the air
+				VFX.beam(a.chest() + aim * 0.8, a.chest() + aim * minf(r * 1.4, 24.0), Color(1.0, 0.92, 0.7), 0.25, 0.05)
+				if a.is_player:
+					CombatFeel.kick(-aim, 0.12)
 				Audio.play_sfx("bow_release", a.global_position))
 		"bw_rapid":
 			_act(a, "shoot", 0.5, 0.2, func():

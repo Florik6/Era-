@@ -536,7 +536,7 @@ func _process(delta: float) -> void:
 	var low: float = 1.0 - pl.hp / maxf(1.0, pl.max_hp)
 	vignette.color.a = clampf((low - 0.6) * 0.8, 0.0, 0.35) * (0.8 + 0.2 * sin(Time.get_ticks_msec() * 0.008))
 	if _banner_t > 0.0:
-		_banner_t -= delta
+		_banner_t -= delta / maxf(0.05, Engine.time_scale)
 		if _banner_t <= 0.0:
 			var cine2 = Game.world.sys("cinematic") if Game.world and Game.world.has_method("sys") else null
 			if _banner_queue.size() > 0 and cine2 and cine2.is_playing():
