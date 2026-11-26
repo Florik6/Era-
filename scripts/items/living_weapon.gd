@@ -35,6 +35,9 @@ static func add_xp(owner_a: Actor, item: Dictionary, amount: int, victim = null)
 	VFX.ring(owner_a.global_position, 3.0, Color(0.3, 1.0, 0.8), 0.8)
 	Audio.play_sfx("mastery_up", owner_a.global_position)
 	if owner_a.is_player:
+		var cine = Game.world.sys("cinematic") if Game.world and Game.world.has_method("sys") else null
+		if cine:
+			cine.play("artifact", "Пробуждение артефакта", ItemDB.display_name(item), "cine_artifact")
 		Events.banner.emit("Живое оружие эволюционировало!", ItemDB.display_name(item), Color(0.4, 1.0, 0.8))
 		Profile.unlock("living_evolved")
 	Chronicle.record("living_evolved", [owner_a], {"pos_v3": owner_a.global_position, "extra": {"item": ItemDB.display_name(item)}})

@@ -1007,8 +1007,8 @@ func _start_ritual(e: Dictionary) -> void:
 		if m:
 			m.team = "bandit"
 			freeze(m)
-			m.casting_ritual = true if m.get("casting_ritual") != null else false
-			if m.rig:
+			m.set_meta("casting_ritual", true)
+			if m.rig and "casting" in m.rig:
 				m.rig.casting = true
 	e.data.timer = 40.0
 	e.data.interrupted = false
@@ -1023,7 +1023,7 @@ func _ritual_interrupt(e: Dictionary) -> void:
 	e.data.interrupted = true
 	for a in e.actors:
 		if is_instance_valid(a) and not a.is_dead:
-			if a.rig:
+			if a.rig and "casting" in a.rig:
 				a.rig.casting = false
 			unfreeze(a)
 			a.add_aggro(player(), 60.0)
@@ -1434,7 +1434,9 @@ func _start_lost_relic(e: Dictionary) -> void:
 	it.history.append("Фамильная реликвия рода %s" % owner_name)
 	e.data.uid = it.uid
 	e.data.owner = owner_name
-	world.loot.spawn_drop(it, e.pos)
+	var d = world.loot.spawn_drop(it, e.pos)
+	if d:
+		e.nodes.append(d)
 	e.data.timer = -1.0
 
 func _tick_lost_relic(e: Dictionary) -> void:

@@ -1687,10 +1687,92 @@ def song_era_unlock():
     return mx.render(2.8, 0.9, max_sec=7.8)
 
 
+def song_tension():
+    """Exploration under threat: low pulse, string tremolo, sparse toms."""
+    r = np.random.default_rng(909)
+    bpm, bpb, bars = 84.0, 4, 12
+    beat = 60.0 / bpm
+    total = bars * bpb * beat
+    mx = Mix(total)
+    cyc = [("D", "min"), ("D", "min"), ("Bb", "maj"), ("A", "maj")]
+    for i in range(bars):
+        ch = cyc[i % 4]
+        base = i * bpb * beat
+        cn = chord_notes(ch, 3)
+        for j, m in enumerate(cn[:3]):
+            mx.add(i_strings(mtof(m - 12), bpb * beat * 0.98, 0.6, 0.6, 0.5), base, 0.11, -0.4 + 0.4 * j, 0.45)
+        root = 12 * 2 + NOTE[ch[0]]
+        if root > 40:
+            root -= 12
+        for s in range(8):
+            mx.add(i_bass(mtof(root), 0.3, 8.0), base + s * 0.5 * beat, 0.22 if s % 2 == 0 else 0.12, 0.0, 0.15)
+        if i % 2 == 1:
+            mx.add(d_tom(95), base + 3.0 * beat, 0.3, -0.3, 0.35)
+            mx.add(d_tom(80), base + 3.5 * beat, 0.25, 0.3, 0.35)
+    for k in range(10):
+        mx.add(i_bell(mtof(74 + int(r.integers(0, 6))), 1.0, 3.5, 1.0, 1.4), r.uniform(0, total), 0.06, r.uniform(-0.8, 0.8), 0.7)
+    return mx.render(2.8, 1.0)
+
+
+def song_combat():
+    """Field combat: driving drums, staccato low strings, brass hits."""
+    r = np.random.default_rng(1001)
+    bpm, bpb, bars = 132.0, 4, 16
+    beat = 60.0 / bpm
+    mx = Mix(bars * bpb * beat)
+    cyc = [("E", "min"), ("C", "maj"), ("D", "maj"), ("B", "maj")]
+    kick, snare, hat, crash = d_kick(115, 45, 0.14), d_snare(), d_hat(), d_crash()
+    for i in range(bars):
+        ch = cyc[i % 4]
+        base = i * bpb * beat
+        for s in range(8):
+            if s in (0, 3, 4, 6):
+                mx.add(kick, base + s * 0.5 * beat, 0.5)
+            mx.add(hat, base + s * 0.5 * beat + human(r, 0.003), 0.12, 0.3, 0.1)
+        mx.add(snare, base + 1 * beat, 0.42, 0.05, 0.25)
+        mx.add(snare, base + 3 * beat, 0.42, 0.05, 0.25)
+        if i % 4 == 0:
+            mx.add(crash, base, 0.2, 0.3, 0.3)
+        root = 12 * 2 + NOTE[ch[0]]
+        if root > 40:
+            root -= 12
+        for s in range(16):
+            m = root + (12 if s % 4 == 2 else 0)
+            mx.add(i_stacc(mtof(m), 0.1), base + s * 0.25 * beat, 0.18, -0.2, 0.2)
+        cn = chord_notes(ch, 4)
+        for j, m in enumerate(cn[:3]):
+            mx.add(i_brass(mtof(m - 12), 0.4 * beat), base, 0.1, -0.4 + 0.4 * j, 0.35)
+            if i % 2 == 1:
+                mx.add(i_brass(mtof(m - 12), 0.3 * beat), base + 2.5 * beat, 0.08, -0.4 + 0.4 * j, 0.35)
+    return mx.render(2.0, 0.8, drive=1.4)
+
+
+def song_ritual():
+    """Cleansing ritual / sanctuary: choir pads, bells, soft drone."""
+    r = np.random.default_rng(1111)
+    bpm, bpb, bars = 60.0, 4, 8
+    beat = 60.0 / bpm
+    total = bars * bpb * beat
+    mx = Mix(total)
+    cyc = [("F", "maj"), ("D", "min"), ("Bb", "maj"), ("C", "maj")]
+    for i in range(bars):
+        ch = cyc[i % 4]
+        base = i * bpb * beat
+        for j, m in enumerate(chord_notes(ch, 3)[:3]):
+            mx.add(i_choir(mtof(m + 12), bpb * beat * 0.98, FORM_AH, 0.8), base, 0.1, -0.5 + 0.5 * j, 0.6)
+    arp = scale_notes("F", "major", 72, 91)
+    for k in range(24):
+        mx.add(i_bell(mtof(arp[int(r.integers(0, len(arp)))]), 1.4, 2.0, 1.2, 1.8), k * total / 24 + human(r, 0.05), 0.08, r.uniform(-0.7, 0.7), 0.8)
+    t = T(total + 1.0, MSR)
+    mx.add(np.sin(TAU * 43.65 * t) * 0.8, 0, 0.12, 0, 0.3)
+    return mx.render(4.0, 1.2)
+
+
 SONGS = {
     "menu": song_menu, "era0": song_era0, "era1": song_era1, "era2": song_era2, "era3": song_era3,
     "era4": song_era4, "boss": song_boss, "rift": song_rift,
     "legendary_sting": song_legendary, "mythic_sting": song_mythic, "era_unlock": song_era_unlock,
+    "tension": song_tension, "combat": song_combat, "ritual": song_ritual,
 }
 
 

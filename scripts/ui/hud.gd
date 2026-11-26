@@ -468,6 +468,9 @@ func toast(text: String, col: Color = Color(1, 0.9, 0.6), icon: String = "star")
 ## Major tier: centred banner. Banners queue (max 3) instead of overwriting
 ## each other; overflow and duplicates are demoted to toasts.
 func _on_banner(title: String, sub: String, col: Color) -> void:
+	var cine = Game.world.sys("cinematic") if Game.world and Game.world.has_method("sys") else null
+	if cine and cine.has_method("claims") and cine.claims(title):
+		return
 	var key := title + "|" + sub
 	if key == _banner_last and _banner_t > 0.0:
 		return

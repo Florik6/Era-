@@ -106,6 +106,8 @@ func describe(ev: Dictionary) -> String:
 			return "%s помог(ла) %s в бою%s." % [nm(ev, 0), nm(ev, 1), at]
 		"rift_cleared":
 			return "%s прошёл(ла) разлом «%s»." % [nm(ev, 0), x.get("rift", "")]
+		"discovery":
+			return "%s открыл(а) место «%s»." % [nm(ev, 0), x.get("place", "")]
 		"era_unlocked":
 			return "%s прошёл(ла) Суд Хроноса и открыл(а) эпоху «%s»." % [nm(ev, 0), x.get("era", "")]
 		"world_event":

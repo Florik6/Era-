@@ -267,6 +267,9 @@ func _end(ok: bool, why: String) -> void:
 				Chronicle.record("curse_broken", [pl], {"pos_v3": pl.global_position, "extra": {"item": ItemDB.display_name(item)}})
 				Profile.unlock("curse_broken")
 			"cleanse":
+				var cine = world.sys("cinematic") if world.has_method("sys") else null
+				if cine and int(item.get("rarity", 0)) >= 4:
+					cine.play("cleanse", "Проклятие снято", ItemDB.display_name(item), "cine_cleanse")
 				Events.banner.emit("Проклятие снято", ItemDB.display_name(item) + (" — снятие свободно" if was_bound else ""), Color(0.6, 1.0, 0.9))
 				Chronicle.record("curse_broken", [pl], {"pos_v3": pl.global_position, "extra": {"item": ItemDB.display_name(item)}})
 				Profile.unlock("curse_broken")

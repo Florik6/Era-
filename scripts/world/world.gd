@@ -8,7 +8,7 @@ extends Node3D
 const WORLD_HALF := 1280.0
 const DIM_OFFSET := Vector3(6000, 0, 6000)
 ## Subsystems still being finished are kept out of the running game.
-const DISABLED_SUBSYSTEMS := ["road_encounters"]
+const DISABLED_SUBSYSTEMS: Array = []
 
 var world_half := WORLD_HALF
 var mode := "world"
@@ -102,7 +102,8 @@ func _ready() -> void:
 	add_child(dialogs)
 	for spec in [["road_encounters", "res://scripts/sim/road_encounters.gd"], ["living_pois", "res://scripts/world/living_poi.gd"],
 			["tracking", "res://scripts/world/tracking.gd"], ["discovery", "res://scripts/world/discovery.gd"],
-			["traces", "res://scripts/world/event_traces.gd"], ["cinematic", "res://scripts/ui/cinematic.gd"]]:
+			["traces", "res://scripts/world/event_traces.gd"], ["cinematic", "res://scripts/ui/cinematic.gd"],
+			["music", "res://scripts/audio/music_director.gd"]]:
 		if not spec[0] in DISABLED_SUBSYSTEMS:
 			_attach_optional(spec[0], spec[1])
 	cam = GameCamera.new()
@@ -409,16 +410,21 @@ func map_markers(minimap: bool = false) -> Array:
 	var out: Array = []
 	if gen == null:
 		return out
+	var disc = sys("discovery")
+	var pp: Vector3 = player.global_position if player and is_instance_valid(player) else Vector3.ZERO
 	for s in gen.settlements:
+		if disc and not disc.is_discovered(s.id):
+			continue
 		var owner_fid: String = factions.settlement_owner(s.id) if factions else ""
 		out.append({"pos": s.pos, "kind": "settlement", "name": s.name + ((" [%s]" % DBEras.faction(owner_fid).name) if owner_fid != "" else ""), "color": DBEras.faction(owner_fid).get("color", Color(1, 1, 1)) if owner_fid != "" else Color(0.95, 0.95, 0.9)})
-	if minimap:
-		return out
 	var names := {"lair": "Логово", "trial": "Суд Хроноса", "rift": "Разлом", "cp": "Контрольная точка", "dungeon": "Подземелье", "altar": "Алтарь",
 		"mirror": "Зеркало времени", "fortress": "Крепость", "witness": "?", "tourney": "Турнир", "shrine": "Святилище", "camp": "Лагерь", "ruins": "Руины", "monument": "Памятник", "relic_site": "Музей"}
 	var cols := {"lair": Color(1, 0.15, 0.15), "trial": Color(1, 0.85, 0.3), "rift": Color(0.6, 0.3, 1.0), "cp": Color(0.3, 0.8, 1.0), "camp": Color(0.8, 0.4, 0.3),
-		"fortress": Color(0.9, 0.7, 0.4), "shrine": Color(0.5, 1.0, 0.6)}
+		"fortress": Color(0.9, 0.7, 0.4), "shrine": Color(0.5, 1.0, 0.6), "altar": Color(0.5, 1.0, 0.85), "dungeon": Color(0.75, 0.7, 0.6)}
 	for p in gen.pois:
+		var known: bool = disc == null or disc.is_discovered(p.id) or p.type == "trial"
+		if not known:
+			continue
 		var col: Color = cols.get(p.type, Color(0.85, 0.85, 0.85))
 		var nm: String = p.get("name", names.get(p.type, p.type))
 		if p.type == "cp" and factions:
@@ -432,6 +438,20 @@ func map_markers(minimap: bool = false) -> Array:
 		for ev in director.active_events():
 			if ev.has("pos"):
 				out.append({"pos": Vector2(ev.pos.x, ev.pos.z), "kind": "event", "name": ev.name, "color": Color(1.0, 0.5, 0.1)})
+	var re = sys("road_encounters")
+	if re and re.get("active") != null:
+		for e in re.active:
+			if e.state == "active":
+				out.append({"pos": Vector2(e.pos.x, e.pos.z), "kind": "encounter", "name": e.name, "color": Color(1.0, 0.8, 0.35)})
+	var lp = sys("living_pois")
+	if lp:
+		out.append_array(lp.markers())
+	var tr = sys("tracking")
+	if tr:
+		for t in tr.active_trails():
+			var tg: Vector3 = t.target
+			if minimap or Vector2(tg.x - pp.x, tg.z - pp.z).length() < 400.0:
+				out.append({"pos": Vector2(tg.x, tg.z), "kind": "trail", "name": t.label, "color": Color(0.95, 0.8, 0.5)})
 	return out
 
 func objective_text() -> String:
