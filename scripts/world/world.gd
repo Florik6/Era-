@@ -515,15 +515,56 @@ func _populate_settlement(s: Dictionary) -> void:
 	var c := Vector3(s.pos.x, 0, s.pos.y)
 	var owner_s := s.duplicate()
 	owner_s.owner = st.get("owner", s.get("owner", ""))
+	var jobs := activity_points(s.id)
+	var used := {}
 	for i in pop:
 		var p := c + Vector3(randf_range(-14, 14), 0, randf_range(-14, 14))
-		arr.append(spawner.spawn_villager(owner_s, p, "trader" if i == 0 else "villager"))
+		var v = spawner.spawn_villager(owner_s, p, "trader" if i == 0 else "villager")
+		arr.append(v)
+		# give the villager a workplace: trader → stall, first villager → forge
+		var want: Array = ["stall"] if i == 0 else (["forge"] if i == 1 else ["well", "bench", "field", "wood", "campfire", "stall"])
+		for j in jobs:
+			var key: String = str(j.pos)
+			if String(j.kind) in want and not used.has(key):
+				used[key] = true
+				v.set_meta("job", j)
+				break
 	for i in guards:
 		var p2 := c + Vector3(randf_range(-10, 10), 0, randf_range(-10, 10))
 		arr.append(spawner.spawn_villager(owner_s, p2, "guard"))
 	settlement_npcs[s.id] = arr
 	if quests:
 		quests.on_settlement_visited(s)
+
+## Workplaces of a settlement: {kind, pos: Vector3, face: Vector3}. Uses the
+## streamer's real props when available, otherwise spots around the square.
+var _activity_cache := {}
+func activity_points(sid: String) -> Array:
+	if terrain and terrain.has_method("activity_points"):
+		var pts: Array = terrain.activity_points(sid)
+		if not pts.is_empty():
+			var out: Array = []
+			for p in pts:
+				var pos: Vector3 = p.get("pos", Vector3.ZERO) if p.get("pos") is Vector3 else Vector3(p.pos[0], 0, p.pos[1]) if p.get("pos") is Array else Vector3.ZERO
+				pos.y = ground_height(pos)
+				out.append({"kind": String(p.get("kind", "bench")), "pos": pos, "face": p.get("face", Vector3.ZERO)})
+			return out
+	if _activity_cache.has(sid):
+		return _activity_cache[sid]
+	var s = _settlement(sid)
+	var out2: Array = []
+	if s != null:
+		var c := Vector3(s.pos.x, 0, s.pos.y)
+		var h := hash(sid)
+		var spots := [["stall", Vector3(5, 0, 3)], ["forge", Vector3(-6, 0, 4)], ["well", Vector3(0, 0, -6)], ["bench", Vector3(7, 0, -4)],
+			["field", Vector3(-11, 0, -9)], ["wood", Vector3(12, 0, 8)], ["campfire", Vector3(-4, 0, -11)], ["stall", Vector3(8, 0, 6)]]
+		for sp in spots:
+			var off: Vector3 = (sp[1] as Vector3).rotated(Vector3.UP, float(h % 628) / 100.0)
+			var pos2: Vector3 = c + off
+			pos2.y = ground_height(pos2)
+			out2.append({"kind": sp[0], "pos": pos2, "face": (c - pos2).normalized() if sp[0] in ["stall", "bench", "campfire"] else -off.normalized()})
+	_activity_cache[sid] = out2
+	return out2
 
 # ---------------------------------------------------------------- events
 func _on_actor_killed(victim, killer) -> void:

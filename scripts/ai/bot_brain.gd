@@ -26,6 +26,9 @@ var cover_pos = null
 var cover_t := 0.0
 var swap_cd := 0.0
 var idle_t := 0.0
+var _work_t := 0.0          # >0 working at the job spot, <0 short break
+var _work_anim_t := 0.0
+var _patrol_i := 0
 var rel := {}              # actor_id -> {fear, grudge, gratitude, respect, lost_vs:{cat:n}, wins:int}
 var lost_to_ranged := 0
 var _orb_cache := Vector3.INF
@@ -272,6 +275,12 @@ func _peaceful_goal(hp_f: float) -> Dictionary:
 		var bm_on: bool = w.get("director") != null and w.director != null and w.director.has_method("blood_moon_active") and w.director.blood_moon_active()
 		if (Game.is_night() and n.role == "villager") or bm_on:
 			return {"g": "home", "s": 1.2}
+		# daily work at a real spot (forge, stall, well, bench, field)
+		if n.has_meta("job"):
+			if _work_t <= 0.0 and _work_t > -0.01:
+				_work_t = randf_range(25.0, 45.0)
+			if _work_t > 0.0:
+				return {"g": "work", "s": 0.8}
 		return {"g": "wander_home", "s": 0.6}
 	if n.role == "guard":
 		return {"g": "patrol", "s": 0.7}
@@ -353,8 +362,14 @@ func _set_goal(g: String, t) -> void:
 				path = [n.home + Vector3(randf_range(-10, 10), 0, randf_range(-10, 10))]
 		"patrol":
 			if path.is_empty():
-				var a := randf() * TAU
-				path = [n.home + Vector3(cos(a), 0, sin(a)) * randf_range(6.0, 18.0)]
+				# walk the settlement perimeter post to post
+				_patrol_i = (_patrol_i + 1) % 6
+				var a := TAU * _patrol_i / 6.0 + float(n.get_instance_id() % 7)
+				path = [n.home + Vector3(cos(a), 0, sin(a)) * randf_range(12.0, 18.0)]
+		"work":
+			var job: Dictionary = n.get_meta("job", {})
+			if job.has("pos"):
+				path = [job.pos]
 		"duty":
 			var sp: Vector3 = n.squad.get("pos", n.home)
 			if path.is_empty() or path[-1].distance_to(sp) > 3.0:
@@ -465,8 +480,54 @@ func _act(delta: float) -> void:
 			idle_t += delta
 			if idle_t > 2.0:
 				think_t = 0.0
+		"work":
+			_work(delta)
 		_:
 			_follow_path(delta)
+
+## Working at the job spot: walk there, face the workplace, animate.
+func _work(delta: float) -> void:
+	var job: Dictionary = n.get_meta("job", {})
+	if not job.has("pos"):
+		goal = "idle"
+		return
+	_work_t -= delta
+	if _work_t <= 0.0:
+		_work_t = -randf_range(8.0, 15.0)     # short break, then back to work
+		goal = "idle"
+		think_t = 0.0
+		return
+	var jp: Vector3 = job.pos
+	var to: Vector3 = jp - n.global_position
+	to.y = 0
+	if to.length() > 1.0:
+		_move_to(jp, delta, 0.8)
+		return
+	n.move_input = Vector3.ZERO
+	var face: Vector3 = job.get("face", Vector3.ZERO)
+	if face.length() > 0.1:
+		n.facing = n.facing.slerp(face.normalized(), minf(1.0, delta * 6.0)).normalized()
+	_work_anim_t -= delta
+	if _work_anim_t > 0.0 or not n.act.is_empty():
+		return
+	match String(job.get("kind", "")):
+		"forge":
+			_work_anim_t = 1.3
+			n.start_action("work", 0.6, 0.35, {"anim": "overhead"})
+			var hit_p: Vector3 = n.global_position + n.facing * 0.9 + Vector3(0, 0.9, 0)
+			n.get_tree().create_timer(0.25, false).timeout.connect(func():
+				if is_instance_valid(n) and n.global_position.distance_to(Game.player.global_position if Game.player else n.global_position) < 40.0:
+					VFX.burst(hit_p, Color(1.0, 0.7, 0.3), 7, 0.18)
+					Audio.play_sfx("hit_metal", hit_p, -14.0, 0.15))
+		"stall":
+			_work_anim_t = randf_range(3.0, 6.0)
+			n.start_action("work", 0.5, 0.3, {"anim": "interact"})
+		"field", "wood":
+			_work_anim_t = 1.6
+			n.start_action("work", 0.7, 0.4, {"anim": "overhead"})
+		_:
+			_work_anim_t = randf_range(4.0, 8.0)
+			n.start_action("work", 0.5, 0.3, {"anim": "interact"})
 
 func _follow_path(delta: float) -> void:
 	if path.is_empty():

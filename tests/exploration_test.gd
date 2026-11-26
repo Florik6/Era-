@@ -64,6 +64,17 @@ class Harness:
 			await wait(1.0)
 			ck("walking into a settlement discovers it", disc.is_discovered(target.id))
 			ck("discovered place appears on the map", w.map_markers(true).size() > markers_before)
+		# villagers work at real spots during the day
+		if target:
+			var vill: Array = w.settlement_npcs.get(target.id, [])
+			var workers: Array = vill.filter(func(v): return is_instance_valid(v) and v.has_meta("job"))
+			ck("villagers get workplaces (forge, stall, …)", workers.size() >= 2, "workers=%d" % workers.size())
+			await wait(12.0)
+			var at_work := 0
+			for v in workers:
+				if is_instance_valid(v) and v.global_position.distance_to(v.get_meta("job").pos) < 2.0:
+					at_work += 1
+			ck("villagers walk to their workplaces", at_work >= 1, "at_work=%d of %d" % [at_work, workers.size()])
 		var hidden := 0
 		for p in w.gen.pois:
 			if not disc.is_discovered(p.id) and p.type != "trial":
