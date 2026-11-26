@@ -1,0 +1,307 @@
+# iOS build of ERA: Восхождение on a GitHub-hosted macOS runner.
+#
+#  1. Official Godot 4.7.1 export of the Xcode project (same preset as local).
+#  2. xcodebuild archive -> IPA.
+#     * With signing secrets: a signed IPA (Development / Ad Hoc / App Store),
+#       optionally uploaded to TestFlight.
+#     * Without them: an UNSIGNED IPA (ERA_Ascension_iOS_unsigned.ipa). It can
+#       NOT be installed on an arbitrary iPhone as is.
+#  3. IPA verification report (tools/verify_ipa.sh).
+#  4. Smoke test in the iOS Simulator: the game is launched with --smoke-test
+#     (menu -> world -> spells -> save -> reload) and a screenshot is taken.
+#     This is a simulator check, not an install on a physical iPhone.
+#
+# Signing secrets (Settings -> Secrets and variables -> Actions). Never paste
+# them anywhere else:
+#   IOS_TEAM_ID              Apple Developer Team ID (10 characters)
+#   IOS_CERT_P12_BASE64      base64 of the signing certificate + key (.p12)
+#   IOS_CERT_PASSWORD        password of that .p12
+#   IOS_PROFILE_BASE64       base64 of the .mobileprovision for the bundle id
+#   IOS_BUNDLE_ID            optional: bundle id registered in your account
+#                            (default com.eraascension.game)
+#   APPSTORE_KEY_ID, APPSTORE_ISSUER_ID, APPSTORE_KEY_P8_BASE64
+#                            optional: App Store Connect API key for TestFlight
+name: iOS build
+
+on:
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: "Commit the IPA and reports back to the branch"
+        type: boolean
+        default: true
+      testflight:
+        description: "Upload to TestFlight (needs an App Store profile and API key)"
+        type: boolean
+        default: false
+  push:
+    paths:
+      - ".github/workflows/ios.yml"
+      - "exports/ios_build_request.txt"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GODOT_VERSION: "4.7.1"
+
+jobs:
+  ios:
+    runs-on: macos-15
+    timeout-minutes: 90
+    env:
+      BUNDLE_ID: ${{ secrets.IOS_BUNDLE_ID || 'com.eraascension.game' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Xcode and runner info
+        run: |
+          xcodebuild -version
+          sw_vers
+          uname -m
+          df -h . | tail -1
+
+      - name: Cache Godot iOS template
+        id: tpl
+        uses: actions/cache@v4
+        with:
+          path: ~/godot-ios-template
+          key: godot-ios-template-${{ env.GODOT_VERSION }}
+
+      - name: Install Godot ${{ env.GODOT_VERSION }} and the official iOS export template
+        run: |
+          set -e
+          cd ~
+          curl -sSL -o godot.zip "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable/Godot_v${GODOT_VERSION}-stable_macos.universal.zip"
+          unzip -q godot.zip && rm godot.zip
+          if [ ! -f ~/godot-ios-template/ios.zip ]; then
+            curl -sSL -o tpl.tpz "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable/Godot_v${GODOT_VERSION}-stable_export_templates.tpz"
+            unzip -q -j tpl.tpz templates/ios.zip -d ~/godot-ios-template && rm tpl.tpz
+          fi
+          T="$HOME/Library/Application Support/Godot/export_templates/${GODOT_VERSION}.stable"
+          mkdir -p "$T"
+          cp ~/godot-ios-template/ios.zip "$T/"
+          echo "${GODOT_VERSION}.stable" > "$T/version.txt"
+          echo "GODOT=$HOME/Godot.app/Contents/MacOS/Godot" >> "$GITHUB_ENV"
+          "$HOME/Godot.app/Contents/MacOS/Godot" --version
+
+      - name: Signing setup (only when secrets are present)
+        id: sign
+        env:
+          IOS_TEAM_ID: ${{ secrets.IOS_TEAM_ID }}
+          IOS_CERT_P12_BASE64: ${{ secrets.IOS_CERT_P12_BASE64 }}
+          IOS_CERT_PASSWORD: ${{ secrets.IOS_CERT_PASSWORD }}
+          IOS_PROFILE_BASE64: ${{ secrets.IOS_PROFILE_BASE64 }}
+        run: |
+          set -e
+          if [ -z "$IOS_TEAM_ID" ] || [ -z "$IOS_CERT_P12_BASE64" ] || [ -z "$IOS_PROFILE_BASE64" ]; then
+            echo "signed=false" >> "$GITHUB_OUTPUT"
+            echo "No signing secrets: building an UNSIGNED IPA."
+            exit 0
+          fi
+          KC="$RUNNER_TEMP/era-signing.keychain-db"
+          KP="$(uuidgen)"
+          security create-keychain -p "$KP" "$KC"
+          security set-keychain-settings -lut 21600 "$KC"
+          security unlock-keychain -p "$KP" "$KC"
+          echo "$IOS_CERT_P12_BASE64" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -P "$IOS_CERT_PASSWORD" -A -t cert -f pkcs12 -k "$KC"
+          rm -f "$RUNNER_TEMP/cert.p12"
+          security set-key-partition-list -S apple-tool:,apple: -k "$KP" "$KC" >/dev/null
+          security list-keychains -d user -s "$KC" $(security list-keychains -d user | tr -d '"')
+          echo "$IOS_PROFILE_BASE64" | base64 --decode > "$RUNNER_TEMP/profile.mobileprovision"
+          security cms -D -i "$RUNNER_TEMP/profile.mobileprovision" > "$RUNNER_TEMP/profile.plist"
+          PB=/usr/libexec/PlistBuddy
+          UUID="$($PB -c 'Print UUID' "$RUNNER_TEMP/profile.plist")"
+          NAME="$($PB -c 'Print Name' "$RUNNER_TEMP/profile.plist")"
+          NDEV="$($PB -c 'Print ProvisionedDevices' "$RUNNER_TEMP/profile.plist" 2>/dev/null | grep -c '^ ' || true)"
+          ALL="$($PB -c 'Print ProvisionsAllDevices' "$RUNNER_TEMP/profile.plist" 2>/dev/null || true)"
+          GTA="$($PB -c 'Print Entitlements:get-task-allow' "$RUNNER_TEMP/profile.plist" 2>/dev/null || true)"
+          METHOD=app-store; IDENT="Apple Distribution"
+          if [ "$ALL" = "true" ]; then METHOD=enterprise
+          elif [ "$NDEV" -gt 0 ] && [ "$GTA" = "true" ]; then METHOD=development; IDENT="Apple Development"
+          elif [ "$NDEV" -gt 0 ]; then METHOD=ad-hoc; fi
+          for D in "$HOME/Library/MobileDevice/Provisioning Profiles" "$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles"; do
+            mkdir -p "$D"; cp "$RUNNER_TEMP/profile.mobileprovision" "$D/$UUID.mobileprovision"
+          done
+          {
+            echo "signed=true"
+            echo "keychain=$KC"
+            echo "uuid=$UUID"
+            echo "name=$NAME"
+            echo "method=$METHOD"
+            echo "identity=$IDENT"
+          } >> "$GITHUB_OUTPUT"
+          echo "Signing: method=$METHOD, profile=$NAME"
+
+      - name: Export the Xcode project (official Godot iOS exporter)
+        env:
+          IOS_TEAM_ID: ${{ secrets.IOS_TEAM_ID }}
+          IOS_BUNDLE_ID: ${{ env.BUNDLE_ID }}
+          IOS_PROFILE_UUID: ${{ steps.sign.outputs.uuid }}
+          IOS_PROFILE_NAME: ${{ steps.sign.outputs.name }}
+          IOS_EXPORT_METHOD: ${{ steps.sign.outputs.method }}
+          IOS_SIGN_IDENTITY: ${{ steps.sign.outputs.identity }}
+        run: tools/export_ios.sh release
+
+      - name: Archive (signed)
+        if: steps.sign.outputs.signed == 'true'
+        env:
+          IOS_TEAM_ID: ${{ secrets.IOS_TEAM_ID }}
+        run: |
+          set -e
+          cd exports/ios_xcode
+          xcodebuild -project ERA_Ascension.xcodeproj -scheme ERA_Ascension -configuration Release \
+            -sdk iphoneos -destination 'generic/platform=iOS' -archivePath build/ERA_Ascension.xcarchive \
+            CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM="$IOS_TEAM_ID" \
+            PROVISIONING_PROFILE_SPECIFIER="${{ steps.sign.outputs.name }}" \
+            CODE_SIGN_IDENTITY="${{ steps.sign.outputs.identity }}" \
+            OTHER_CODE_SIGN_FLAGS="--keychain ${{ steps.sign.outputs.keychain }}" \
+            archive | tail -40
+          cat > build/ExportOptions.plist <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+            <key>method</key><string>${{ steps.sign.outputs.method }}</string>
+            <key>teamID</key><string>${IOS_TEAM_ID}</string>
+            <key>signingStyle</key><string>manual</string>
+            <key>signingCertificate</key><string>${{ steps.sign.outputs.identity }}</string>
+            <key>provisioningProfiles</key><dict><key>${BUNDLE_ID}</key><string>${{ steps.sign.outputs.name }}</string></dict>
+            <key>compileBitcode</key><false/>
+            <key>stripSwiftSymbols</key><true/>
+          </dict></plist>
+          EOF
+          xcodebuild -exportArchive -archivePath build/ERA_Ascension.xcarchive \
+            -exportOptionsPlist build/ExportOptions.plist -exportPath build/ipa | tail -20
+          mkdir -p ../../builds/ios
+          cp build/ipa/*.ipa ../../builds/ios/ERA_Ascension_iOS.ipa
+          echo "IPA=builds/ios/ERA_Ascension_iOS.ipa" >> "$GITHUB_ENV"
+
+      - name: Archive (unsigned)
+        if: steps.sign.outputs.signed != 'true'
+        run: |
+          set -e
+          cd exports/ios_xcode
+          xcodebuild -project ERA_Ascension.xcodeproj -scheme ERA_Ascension -configuration Release \
+            -sdk iphoneos -destination 'generic/platform=iOS' -archivePath build/ERA_Ascension.xcarchive \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" DEVELOPMENT_TEAM="" \
+            archive | tail -40
+          rm -rf build/Payload && mkdir -p build/Payload
+          cp -R build/ERA_Ascension.xcarchive/Products/Applications/*.app build/Payload/
+          (cd build && zip -qry ERA_Ascension_iOS_unsigned.ipa Payload)
+          mkdir -p ../../builds/ios
+          cp build/ERA_Ascension_iOS_unsigned.ipa ../../builds/ios/
+          echo "IPA=builds/ios/ERA_Ascension_iOS_unsigned.ipa" >> "$GITHUB_ENV"
+
+      - name: Verify the IPA
+        run: |
+          mkdir -p reports/ios_ci
+          bash tools/verify_ipa.sh "$IPA" "$BUNDLE_ID" | tee reports/ios_ci/IPA_VERIFICATION.md
+          cat reports/ios_ci/IPA_VERIFICATION.md >> "$GITHUB_STEP_SUMMARY"
+          (cd builds/ios && shasum -a 256 *.ipa > SHA256SUMS.txt)
+
+      - name: Upload to TestFlight
+        if: steps.sign.outputs.signed == 'true' && steps.sign.outputs.method == 'app-store' && github.event.inputs.testflight == 'true'
+        env:
+          KEY_ID: ${{ secrets.APPSTORE_KEY_ID }}
+          ISSUER: ${{ secrets.APPSTORE_ISSUER_ID }}
+          KEY_P8: ${{ secrets.APPSTORE_KEY_P8_BASE64 }}
+        run: |
+          set -e
+          if [ -z "$KEY_ID" ] || [ -z "$ISSUER" ] || [ -z "$KEY_P8" ]; then echo "No App Store Connect API key: skipped"; exit 0; fi
+          mkdir -p ~/private_keys
+          echo "$KEY_P8" | base64 --decode > ~/private_keys/AuthKey_$KEY_ID.p8
+          xcrun altool --upload-app --type ios --file "$IPA" --apiKey "$KEY_ID" --apiIssuer "$ISSUER"
+          rm -f ~/private_keys/AuthKey_$KEY_ID.p8
+
+      - name: Build for the iOS Simulator
+        run: |
+          set -e
+          cd exports/ios_xcode
+          xcodebuild -project ERA_Ascension.xcodeproj -scheme ERA_Ascension -configuration Release \
+            -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -derivedDataPath build/sim \
+            CODE_SIGNING_ALLOWED=NO ARCHS=arm64 ONLY_ACTIVE_ARCH=NO build | tail -20
+          ls build/sim/Build/Products/Release-iphonesimulator/
+
+      - name: Smoke test in the iOS Simulator
+        run: |
+          set +e
+          APP="$(ls -d exports/ios_xcode/build/sim/Build/Products/Release-iphonesimulator/*.app | head -1)"
+          OUT=reports/ios_ci
+          mkdir -p "$OUT"
+          UDID="$(xcrun simctl list devices available -j | python3 -c '
+          import json,sys
+          d=json.load(sys.stdin)["devices"]
+          best=None
+          for rt,devs in d.items():
+              if "iOS" not in rt: continue
+              for x in devs:
+                  n=x["name"]
+                  score=(3 if "Pro" in n and "Max" not in n else 1 if n.startswith("iPhone") else 0, rt)
+                  if n.startswith("iPhone") and (best is None or score>best[0]): best=(score,x["udid"],n,rt)
+          print(best[1]); print(best[2]+" / "+best[3].split(".")[-1], file=sys.stderr)
+          ' 2>"$OUT/simulator_device.txt")"
+          echo "Simulator: $(cat $OUT/simulator_device.txt) ($UDID)"
+          xcrun simctl boot "$UDID"
+          xcrun simctl bootstatus "$UDID" -b
+          xcrun simctl install "$UDID" "$APP"
+          xcrun simctl launch --stdout="$PWD/$OUT/sim_stdout.log" --stderr="$PWD/$OUT/sim_stderr.log" "$UDID" "$BUNDLE_ID" --smoke-test
+          RES=""
+          for i in $(seq 1 120); do
+            sleep 3
+            DATA="$(xcrun simctl get_app_container "$UDID" "$BUNDLE_ID" data 2>/dev/null)"
+            RES="$(find "$DATA" -name smoke_result.json 2>/dev/null | head -1)"
+            [ -n "$RES" ] && break
+            if [ $((i % 10)) -eq 0 ]; then xcrun simctl io "$UDID" screenshot "$OUT/sim_progress.png" >/dev/null 2>&1; fi
+          done
+          sleep 2
+          xcrun simctl io "$UDID" screenshot "$OUT/sim_screenshot.png"
+          if [ -n "$RES" ]; then cp "$RES" "$OUT/smoke_result.json"; fi
+          LOG="$(find "$DATA" -name boot.log 2>/dev/null | head -1)"
+          [ -n "$LOG" ] && cp "$LOG" "$OUT/boot.log"
+          {
+            echo "## Смоук-тест в iOS Simulator"
+            echo
+            echo "Устройство: $(cat $OUT/simulator_device.txt)"
+            echo
+            if [ -n "$RES" ]; then echo '```json'; cat "$OUT/smoke_result.json"; echo '```'; else echo "**Результат не получен за 6 минут.**"; echo '```'; tail -40 "$OUT/sim_stdout.log" "$OUT/sim_stderr.log"; echo '```'; fi
+            echo
+            echo "Это проверка в симуляторе, а не установка на физический iPhone."
+          } | tee "$OUT/SIMULATOR_SMOKE.md" >> "$GITHUB_STEP_SUMMARY"
+          xcrun simctl shutdown "$UDID"
+          exit 0
+
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ERA_Ascension_iOS
+          path: |
+            builds/ios/
+            reports/ios_ci/
+          if-no-files-found: warn
+
+      - name: Commit the IPA and reports back to the branch
+        if: github.event_name == 'push' || github.event.inputs.publish == 'true'
+        run: |
+          set -e
+          SIZE=$(stat -f%z "$IPA")
+          git config user.name "github-actions[bot]"
+          git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
+          git add -f reports/ios_ci
+          if [ "$SIZE" -lt 95000000 ]; then git add -f builds/ios; else echo "IPA is $SIZE bytes: too big for git, kept as an artifact only"; fi
+          git commit -m "iOS CI: $(basename "$IPA") + verification and simulator smoke reports [skip ci]" || exit 0
+          for i in 1 2 3 4; do
+            git pull --rebase origin "${GITHUB_REF_NAME}" && git push origin "HEAD:${GITHUB_REF_NAME}" && break
+            sleep $((i * 5))
+          done
+
+      - name: Remove the signing keychain
+        if: always() && steps.sign.outputs.signed == 'true'
+        run: |
+          security delete-keychain "${{ steps.sign.outputs.keychain }}" || true
+          rm -rf "$HOME/Library/MobileDevice/Provisioning Profiles" "$RUNNER_TEMP/profile."* || true

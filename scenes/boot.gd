@@ -25,6 +25,8 @@ func _ready() -> void:
 		_safe_note = "Прошлый запуск не завершился — включены безопасные настройки графики. Их можно изменить в настройках."
 		BootGuard.log_line("previous boot failed (%d) → safe graphics" % BootGuard.fail_count())
 	BootGuard.mark("booting")
+	if SmokeTest.requested():
+		get_tree().root.add_child.call_deferred(SmokeTest.new())
 	get_tree().root.theme = UITheme.make()
 	_build_ui()
 	# give the loading screen one frame to appear before any heavy work
