@@ -112,6 +112,13 @@ func describe(ev: Dictionary) -> String:
 			return "%s прошёл(ла) Суд Хроноса и открыл(а) эпоху «%s»." % [nm(ev, 0), x.get("era", "")]
 		"world_event":
 			return "Событие: %s%s." % [x.get("name", ""), at]
+		"resonance_catastrophe":
+			var who := nm(ev, 0) if ev.actors.size() > 0 else "Столкновение чар"
+			return "%s вызвал(а) резонансную катастрофу «%s»%s." % [who, x.get("kind", ""), at]
+		"resonance_rift":
+			return "На месте катастрофы «%s» открылся разлом%s." % [x.get("kind", ""), at]
+		"black_storm":
+			return "Над Чёрным городом разразилась магическая буря%s: %s." % [at, x.get("result", "город выстоял")]
 		"world_event_end":
 			return "Завершилось: %s. %s" % [x.get("name", ""), x.get("outcome", "")]
 		"invasion":

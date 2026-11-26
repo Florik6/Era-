@@ -81,10 +81,23 @@ static func kick(dir: Vector3, amount: float) -> void:
 static func overlay():
 	return Game.world.sys("combat_overlay") if Game.world and Game.world.has_method("sys") else null
 
+static var _last_flash_ms := -100000
+
+## Screen flash. Scaled by the flash-strength setting; with "no flicker" on,
+## flashes closer than 0.6 s to the previous one are dropped and the rest
+## are softened, so nothing strobes.
 static func flash(c: Color, strength: float = 0.25) -> void:
 	var o = overlay()
-	if o and k("flash") > 0.0:
-		o.flash(c, strength * k("flash"))
+	if o == null or k("flash") <= 0.0 or Settings.flash_k() <= 0.0:
+		return
+	var s := strength * k("flash") * Settings.flash_k()
+	if Settings.no_flicker:
+		var now := Time.get_ticks_msec()
+		if now - _last_flash_ms < 600:
+			return
+		_last_flash_ms = now
+		s *= 0.6
+	o.flash(c, s)
 
 static func speed_lines(dur: float = 0.3, strength: float = 1.0) -> void:
 	var o = overlay()

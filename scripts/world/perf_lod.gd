@@ -27,7 +27,7 @@ var _detail_applied := 1.0
 
 func setup(w) -> void:
 	world = w
-	if Settings.effective_quality != Settings.Quality.HIGH:
+	if not Settings.effective_quality in [Settings.Quality.HIGH, Settings.Quality.MAX]:
 		# turbulence is the most expensive part of the ambient particles on phones
 		for k in AmbientLife._mats:
 			var pm = AmbientLife._mats[k].get("pm")

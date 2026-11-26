@@ -4,7 +4,8 @@ extends Node
 
 const PATH := "user://settings.cfg"
 
-enum Quality { LOW, MEDIUM, HIGH, AUTO }
+## MAX is appended after AUTO so old settings files keep their meaning.
+enum Quality { LOW, MEDIUM, HIGH, AUTO, MAX }
 
 var quality: int = Quality.AUTO
 var effective_quality: int = Quality.MEDIUM
@@ -31,6 +32,19 @@ var ui_opacity := 0.85          # touch controls opacity
 var joy_sensitivity := 1.0      # stick deflection multiplier
 var joy_deadzone := 0.12        # fraction of the stick radius ignored
 var ui_layout := {}             # element -> {"x": frac, "y": frac, "s": scale} (layout editor)
+# Separate visual settings (Visual Ascension). -1 = follow the quality profile.
+var magic_quality := -1         # 0 low, 1 medium, 2 high, 3 max
+var particles_q := -1           # 0 low, 1 medium, 2 high, 3 max
+var shadows_q := -1             # 0 off, 1 low, 2 high
+var lighting_q := -1            # 0 low, 1 medium, 2 high, 3 max (dynamic light pool size)
+var camera_mode := 1            # 0 minimal, 1 standard, 2 cinematic
+var camera_shake := true        # screen shake on/off
+var flash_strength := 0.8       # 0..1 brightness of flashes
+var no_flicker := false         # no rapid flashing (lightning, strobes): soft single flashes
+var weather_density := 1.0      # 0..1 rain/snow particle density
+var echoes := true              # Historical Echoes on/off
+const VIS_KEYS := ["magic_quality", "particles_q", "shadows_q", "lighting_q", "camera_mode", "camera_shake",
+	"flash_strength", "no_flicker", "weather_density", "echoes"]
 
 # Auto-quality runtime measurement
 var _fps_samples: Array = []
@@ -70,6 +84,8 @@ func load_settings() -> void:
 	var lay = cf.get_value("ctrl", "ui_layout", {})
 	ui_layout = lay if lay is Dictionary else {}
 	dev_unlock_all = cf.get_value("dev", "unlock_all", dev_unlock_all)
+	for k in VIS_KEYS:
+		set(k, cf.get_value("vis", k, get(k)))
 
 func save_settings() -> void:
 	var cf := ConfigFile.new()
@@ -97,6 +113,8 @@ func save_settings() -> void:
 	cf.set_value("ctrl", "joy_deadzone", joy_deadzone)
 	cf.set_value("ctrl", "ui_layout", ui_layout)
 	cf.set_value("dev", "unlock_all", dev_unlock_all)
+	for k in VIS_KEYS:
+		cf.set_value("vis", k, get(k))
 	var tmp := PATH + ".tmp"
 	if cf.save(tmp) == OK:
 		DirAccess.rename_absolute(tmp, PATH)
@@ -116,13 +134,31 @@ func set_quality(q: int) -> void:
 	_pick_auto_quality()
 	apply()
 
-## Profile parameters consumed by world/render code.
+## Profile parameters consumed by world/render code, with the separate
+## visual settings applied on top.
 func profile() -> Dictionary:
+	var p := _base_profile()
+	if particles_q >= 0:
+		p.particles = [0.35, 0.7, 1.0, 1.3][clampi(particles_q, 0, 3)]
+	if magic_quality >= 0:
+		p.fx = clampi(magic_quality, 0, 3)
+	if shadows_q >= 0:
+		p.shadows = shadows_q > 0
+		p.shadow_size = 2048 if shadows_q >= 2 else 1024
+	if lighting_q >= 0:
+		p.lights = [3, 6, 10, 14][clampi(lighting_q, 0, 3)]
+	return p
+
+func _base_profile() -> Dictionary:
 	match effective_quality:
 		Quality.LOW:
 			return {"scale": 0.7, "shadows": false, "shadow_size": 1024, "chunk_radius": 2, "max_npcs": 12,
 				"particles": 0.4, "props": 0.55, "lod_bias": 0.6, "glow": false,
 				"grass": 0.35, "detail_dist": 28.0, "fx": 0, "lights": 4, "decals": false, "ambient_life": false}
+		Quality.MAX:
+			return {"scale": 1.0, "shadows": true, "shadow_size": 4096, "chunk_radius": 3, "max_npcs": 30,
+				"particles": 1.3, "props": 1.0, "lod_bias": 1.5, "glow": true,
+				"grass": 1.0, "detail_dist": 70.0, "fx": 3, "lights": 14, "decals": true, "ambient_life": true}
 		Quality.HIGH:
 			return {"scale": 1.0, "shadows": true, "shadow_size": 2048, "chunk_radius": 3, "max_npcs": 26,
 				"particles": 1.0, "props": 1.0, "lod_bias": 1.2, "glow": true,
@@ -141,6 +177,10 @@ func apply() -> void:
 	Events.settings_changed.emit()
 	if has_node("/root/Audio"):
 		get_node("/root/Audio").apply_volumes()
+
+## Multiplier for flash brightness (0 = no flashes at all).
+func flash_k() -> float:
+	return clampf(flash_strength, 0.0, 1.0)
 
 ## Fog density actually used by the environment. Capped so the screen never
 ## becomes an opaque grey mass (see design requirement on fog).

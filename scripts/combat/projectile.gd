@@ -5,6 +5,9 @@ extends Node3D
 ## piercing, splash, homing, gravity and time-slow zones.
 
 static var _meshes := {}
+## live magical projectiles (for mid-air meetings, see Resonance)
+static var magic_live: Array = []
+const MAGIC_KINDS := ["fireball", "magic", "spark", "pulse", "plasma"]
 
 var src = null
 var vel := Vector3.ZERO
@@ -21,6 +24,9 @@ var radius := 0.3
 var color := Color.WHITE
 var on_end: Callable = Callable()
 var dead := false
+var dead_by_clash := false
+var element := ""
+var _prev_pos := Vector3.INF
 
 static func spawn(source, pos: Vector3, velocity: Vector3, inf: Dictionary, k: String, opts: Dictionary = {}) -> Projectile:
 	if Game.world == null:
@@ -42,7 +48,37 @@ static func spawn(source, pos: Vector3, velocity: Vector3, inf: Dictionary, k: S
 	Game.world.fx_root.add_child(p)
 	p.global_position = pos
 	p._build()
+	if k in MAGIC_KINDS:
+		p.element = Resonance.element_for_dtype(str(inf.get("dtype", "")))
+		if p.element != "":
+			magic_live.append(p)
 	return p
+
+func _exit_tree() -> void:
+	magic_live.erase(self)
+
+## Opposing magic projectiles that meet in the air annihilate each other
+## (and react if their elements form a resonance pair).
+func _check_meet() -> bool:
+	var prev := _prev_pos
+	_prev_pos = global_position
+	if magic_live.size() < 2 or Resonance.inst == null or prev == Vector3.INF:
+		return false
+	for o in magic_live:
+		if o == self or not is_instance_valid(o) or o.dead or o._prev_pos == Vector3.INF:
+			continue
+		if o.src == src:
+			continue
+		if src != null and o.src != null and is_instance_valid(src) and is_instance_valid(o.src) and not Game.is_enemy(src, o.src):
+			continue
+		if o.global_position.distance_squared_to(global_position) > 900.0:
+			continue
+		# swept test: closest approach of the two path segments this tick
+		var cp := Geometry3D.get_closest_points_between_segments(prev, global_position, o._prev_pos, o.global_position)
+		if cp[0].distance_to(cp[1]) < radius + o.radius + 0.4:
+			Resonance.inst.projectile_meet(self, o)
+			return true
+	return false
 
 func _build() -> void:
 	var sch := MagicFX.proj_school(kind, info)
@@ -78,6 +114,8 @@ func _build() -> void:
 
 func _physics_process(delta: float) -> void:
 	if dead:
+		return
+	if element != "" and _check_meet():
 		return
 	var dt := delta
 	if Game.world and Game.world.has_method("timeslow_at") and Game.world.timeslow_at(global_position, src):
@@ -152,8 +190,11 @@ func _end(pos: Vector3, explode: bool = true) -> void:
 	if dead:
 		return
 	dead = true
+	magic_live.erase(self)
 	var sch: String = get_meta("school", "")
 	MagicFX.detach_trails(self)
+	if element != "" and not dead_by_clash:
+		Resonance.imprint(element, pos, float(info.get("amount", 0.0)), Resonance.tier_of(info), src, splash * 0.5)
 	if splash > 0.0 and explode:
 		var inf := info.duplicate()
 		inf.amount *= 0.75

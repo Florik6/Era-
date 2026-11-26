@@ -929,10 +929,39 @@ def S_dash_whoosh():
     return x
 
 
+def S_steam_burst():
+    t = T(1.4)
+    hiss = ffilt(N(len(t)), lo=1800, hi=9000) * eadsr(t, 1.4, 0.005, 0.15, 0.55, 0.8)
+    x = 0.9 * hiss * (1 + 0.25 * np.sin(TAU * 13 * t))
+    x += 0.8 * thump(t, 110, 40, 0.12)
+    x += 0.35 * ffilt(N(len(t)), lo=200, hi=900) * eperc(t, 0.002, 0.3)
+    return np.tanh(1.2 * x)
+
+
+def S_resonance_hum():
+    t = T(1.8)
+    f = expsweep(t, 70, 220, 1.8)
+    x = 0.6 * tone(t, f) * eadsr(t, 1.8, 0.2, 0.3, 0.8, 0.4)
+    x += 0.35 * tone(t, f * 1.5) * eadsr(t, 1.8, 0.4, 0.3, 0.6, 0.4) * (1 + 0.6 * np.sin(TAU * 6 * t))
+    x += 0.25 * tone(t, f * 2.01) * eadsr(t, 1.8, 0.6, 0.2, 0.5, 0.4)
+    x += 0.15 * ffilt(N(len(t)), lo=3000, hi=8000) * eadsr(t, 1.8, 0.8, 0.2, 0.5, 0.3)
+    return x
+
+
+def S_catastrophe_boom():
+    t = T(3.2)
+    x = 1.5 * tone(t, expsweep(t, 55, 18, 2.0)) * eperc(t, 0.006, 1.4)
+    x += 1.1 * svf(N(len(t)), expsweep(t, 4000, 80), 0.7, "lp") * eperc(t, 0.002, 1.5)
+    x += 0.4 * (tone(t, 146.8) + 0.7 * tone(t, 155.6) + 0.5 * tone(t, 207.7)) * eperc(t, 0.2, 2.0)
+    x += 0.3 * ffilt(N(len(t)), lo=2500, hi=10000) * eperc(t, 0.001, 0.12)
+    return np.tanh(1.3 * x)
+
+
 SFX = {
     "parry_ring": S_parry_ring, "impact_heavy": S_impact_heavy, "slash_air": S_slash_air, "ground_crack": S_ground_crack,
     "ultimate_boom": S_ultimate_boom, "elec_crackle": S_elec_crackle, "ice_crack": S_ice_crack, "dark_hum": S_dark_hum,
     "time_warp": S_time_warp, "dash_whoosh": S_dash_whoosh,
+    "steam_burst": S_steam_burst, "resonance_hum": S_resonance_hum, "catastrophe_boom": S_catastrophe_boom,
     "step": S_step, "step_metal": S_step_metal, "swing": S_swing, "swing_heavy": S_swing_heavy,
     "hit_flesh": S_hit_flesh, "hit_metal": S_hit_metal, "block": S_block, "parry": S_parry,
     "dodge": S_dodge, "bow_draw": S_bow_draw, "bow_release": S_bow_release, "crossbow": S_crossbow,

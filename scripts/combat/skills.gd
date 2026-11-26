@@ -228,8 +228,18 @@ static func use(a: Actor, id: String, aim: Vector3) -> bool:
 			return false
 	return true
 
+## Heavy weapon skills can collide with other strong strikes (Combat Clash).
+const CLASH_ANIMS := ["overhead", "slam"]
+
 static func _act(a: Actor, anim: String, dur: float, impact: float, cb: Callable) -> void:
-	a.start_action("skill", dur, impact, {"anim": anim, "cb": cb})
+	var clash := anim in CLASH_ANIMS
+	var guarded := cb
+	if clash:
+		guarded = func():
+			if Clash.try_clash(a, a.weapon_range() if a.data else 2.5):
+				return
+			cb.call()
+	a.start_action("skill", dur, impact, {"anim": anim, "cb": guarded, "clash": clash})
 
 # ---------------------------------------------------------------- visuals only
 static func _smoke(p: Vector3, s: float) -> void:

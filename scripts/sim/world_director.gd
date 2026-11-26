@@ -19,7 +19,8 @@ var intensity := 0.0
 const EVENT_NAMES := {"bandit_raid": "Нашествие разбойников", "blood_moon": "Кровавая луна", "magic_storm": "Магическая буря", "cursed_fog": "Проклятый туман",
 	"caravan_attack": "Нападение на караван", "siege": "Осада", "meteor": "Падение метеорита", "world_boss": "Мировой босс", "rift_open": "Открытие разлома",
 	"chrono_catastrophe": "Хронокатастрофа", "uprising": "Восстание", "rare_find": "Редкая находка", "hunters": "Охотники за головами", "battle": "Битва фракций",
-	"caravan": "Караван", "raid": "Нападение на поселение", "boss_return": "Возвращение босса", "invasion": "Историческое вторжение"}
+	"caravan": "Караван", "raid": "Нападение на поселение", "boss_return": "Возвращение босса", "invasion": "Историческое вторжение",
+	"resonance": "Резонансная катастрофа", "black_storm": "Буря над Чёрным городом"}
 
 func _init(w) -> void:
 	world = w
@@ -36,7 +37,7 @@ func active_events() -> Array:
 
 func event_near(p: Vector3, r: float):
 	for e in events:
-		if e.has("pos") and e.pos.distance_to(p) < r and e.type in ["meteor", "rare_find", "world_boss", "rift_open", "battle", "invasion", "chrono_catastrophe"]:
+		if e.has("pos") and e.pos.distance_to(p) < r and e.type in ["meteor", "rare_find", "world_boss", "rift_open", "battle", "invasion", "chrono_catastrophe", "resonance", "black_storm"]:
 			return e
 	return null
 
@@ -409,6 +410,10 @@ func _tick_event(e: Dictionary, _delta: float) -> void:
 					if is_instance_valid(a):
 						a.queue_free()
 				_end(e, "Угроза ушла сама.")
+		"resonance":
+			_tick_resonance(e)
+		"black_storm":
+			_tick_black_storm(e)
 		"rift_open", "invasion":
 			var done = e.t >= e.dur or (e.t > 5.0 and e.actors.size() > 0 and _alive(e.actors) == 0 and e.type == "invasion")
 			if done:
@@ -442,6 +447,264 @@ func _tick_event(e: Dictionary, _delta: float) -> void:
 					if is_instance_valid(a):
 						a.queue_free()
 				_end(e, "Охотники потеряли след.")
+
+# ---------------------------------------------------------------- resonance
+## Chance that a catastrophe tears a real rift (tests may force it with 1.0).
+var resonance_rift_chance := -1.0
+
+## Called by Resonance when a reaction runs out of control. The director
+## turns it into a world event: sphere and runes, a neutral blast, panic
+## among townsfolk, guards converging, a chronicle entry, a lingering
+## anomaly and — often — a real temporary rift one can enter.
+func resonance_catastrophe(pos: Vector3, kind: String, power: float, owners: Array, trigger: String) -> Dictionary:
+	pos.y = world.ground_height(pos)
+	var era := Profile.current_era
+	var e := _ev("resonance", pos, 120.0, {"kind": kind, "power": power, "trigger": trigger})
+	var nm: String = Resonance.NAMES.get(kind, kind)
+	ResonanceFX.catastrophe(pos, 10.0, kind)
+	Audio.play_sfx("catastrophe_boom", pos)
+	CombatFeel.flash(ResonanceFX.color(kind), 0.35)
+	var dt: String = {"steam": "fire", "node": "lightning", "vortex": "dark", "instability": "time"}.get(kind, "time")
+	Combat.aoe(null, pos + Vector3(0, 0.5, 0), 8.0, {"amount": 22.0 * (era + 1), "dtype": dt, "knock": 4.0, "melee": false}, false)
+	var z := Zone.create("anomaly", null, pos, 7.0, 115.0, {"amount": 3.0 * (era + 1), "dtype": "time"}, {"no_res": true, "everyone": true})
+	if z:
+		z.tick = 1.0
+		e.data.anomaly = z
+	var fled := 0
+	var guards := 0
+	for a in Game.actors_near(pos, 75.0):
+		if a.is_dead or a.is_player or a.get("brain") == null:
+			continue
+		var role: String = str(a.get("role")) if a.get("role") != null else ""
+		var d: float = a.global_position.distance_to(pos)
+		if role in ["guard", "soldier"]:
+			if a.brain.has_method("investigate"):
+				a.brain.investigate(pos)
+				guards += 1
+		elif d < 45.0 and role in ["villager", "trader", "bot", "hunter", "companion"] and a.brain.has_method("flee_from"):
+			if role == "companion":
+				continue
+			a.brain.flee_from(pos, 9.0)
+			fled += 1
+	e.data.fled = fled
+	e.data.guards = guards
+	Chronicle.record("resonance_catastrophe", owners, {"pos_v3": pos, "extra": {"kind": nm, "trigger": trigger, "power": snappedf(power, 1.0)}})
+	Events.banner.emit("Резонансная катастрофа", "%s вышел из-под контроля. Жители бегут, стража спешит к месту." % nm, ResonanceFX.color(kind))
+	var chance := resonance_rift_chance if resonance_rift_chance >= 0.0 else clampf(0.55 + (power - Resonance.CATA_SUM) / 250.0, 0.55, 0.95)
+	e.data.rift_planned = randf() < chance
+	if e.data.rift_planned:
+		get_tree().create_timer(8.0, false).timeout.connect(func(): _resonance_rift(e))
+	return e
+
+func _resonance_rift(e: Dictionary) -> void:
+	if not e in events or world.dimension != "":
+		return
+	var p: Vector3 = e.pos
+	var portal := Poi.create({"id": e.id, "type": "rift", "pos": Vector2(p.x, p.z), "name": "Резонансный разлом", "data": {"temporary": true, "resonance": true}}, world)
+	world.poi_root.add_child(portal)
+	portal.global_position = p
+	e.data.portal = portal
+	ResonanceFX.reaction_burst("instability", p, 5.0)
+	Audio.play_sfx("portal_open", p)
+	Chronicle.record("resonance_rift", [], {"pos_v3": p, "extra": {"kind": Resonance.NAMES.get(e.data.kind, "")}})
+	Events.banner.emit("Аномалия прорвалась", "На месте катастрофы открылся разлом. В него можно войти.", Color(0.75, 0.45, 1.0))
+
+func _tick_resonance(e: Dictionary) -> void:
+	if e.t < e.dur:
+		return
+	var portal = e.data.get("portal")
+	if portal != null and is_instance_valid(portal) and world.dimension == "":
+		portal.queue_free()
+	var z = e.data.get("anomaly")
+	if z != null and is_instance_valid(z):
+		z.life = minf(z.life, 0.6)
+	_end(e, "Аномалия рассеялась.")
+
+# ---------------------------------------------------------------- black storm
+## «Буря над Чёрным городом». A magic storm blackens the sky over a city (the
+## era capital by default, or any spot for the test arena). Two rival covens
+## arrive and fight each other with ordinary spells cast by the ordinary NPC
+## AI; storm lightning strikes the streets. Their magics meet (Magical
+## Resonance), townsfolk panic, guards respond, and a cascade of reactions
+## can tear the city into a catastrophe with a rift. Nothing is pre-animated:
+## AI, spells, resonance, director and chronicle do all of it.
+const STORM_COVENS := {
+	"ember": {"name": "Ковен Пепла", "color": Color(1.0, 0.5, 0.25), "casters": [
+		{"title": "Пиромант", "schools": {"fire": 7}},
+		{"title": "Пиромант", "schools": {"fire": 7}},
+		{"title": "Тёмный адепт", "schools": {"dark": 7, "fire": 4}}]},
+	"frost": {"name": "Ковен Инея", "color": Color(0.55, 0.85, 1.0), "casters": [
+		{"title": "Криомант", "schools": {"ice": 7}},
+		{"title": "Криомант", "schools": {"ice": 6, "lightning": 3}},
+		{"title": "Буревестник", "schools": {"lightning": 7, "spacetime": 5}},
+		{"title": "Хрономант", "schools": {"spacetime": 7}}]},
+}
+
+func capital() -> Dictionary:
+	var best := {}
+	var bd := INF
+	var pp: Vector3 = world.player.global_position if world.player else Vector3.ZERO
+	for st in world.gen.settlements:
+		if st.type != "city":
+			continue
+		var d := Vector2(st.pos.x - pp.x, st.pos.y - pp.z).length()
+		if d < bd:
+			bd = d
+			best = st
+	return best
+
+func start_black_storm(center: Vector3 = Vector3.INF, opts: Dictionary = {}) -> Dictionary:
+	var city := ""
+	if center == Vector3.INF:
+		var cap := capital()
+		if cap.is_empty():
+			return {}
+		center = Vector3(cap.pos.x, 0, cap.pos.y)
+		city = cap.get("name", "")
+	center.y = world.ground_height(center)
+	var e := _ev("black_storm", center, float(opts.get("dur", 240.0)), {"arena": opts.get("arena", false), "city": city,
+		"phase": 0, "mages": {"ember": [], "frost": []}, "strikes": 0, "strike_t": 3.0, "res0": 0, "cata0": 0})
+	mods.spell = 1.25
+	mods.mana_regen = 2.0
+	if world.weather and world.weather.has_method("set_weather"):
+		e.data.prev_weather = world.weather.current
+		world.weather.set_weather("storm", e.dur + 20.0)
+	Audio.set_ambient("magic_storm_loop", true)
+	var res = world.sys("resonance")
+	if res:
+		e.data.res0 = res.stats.reactions
+		e.data.cata0 = res.stats.catastrophes
+	var lvl := maxi(8, world.spawner.level_near_player(3))
+	var axis := Vector3.RIGHT.rotated(Vector3.UP, randf() * TAU)
+	for side in ["ember", "frost"]:
+		var base_p: Vector3 = center + axis * (8.0 if side == "ember" else -8.0)
+		var i := 0
+		for c in STORM_COVENS[side].casters:
+			var off := axis.cross(Vector3.UP) * (i - 1.5) * 2.6 + Vector3(randf_range(-0.8, 0.8), 0, randf_range(-0.8, 0.8))
+			var n = _storm_mage(side, c, base_p + off, lvl)
+			if n:
+				e.data.mages[side].append(n)
+				e.actors.append(n)
+			i += 1
+	for a in e.data.mages.ember:
+		for b in e.data.mages.frost:
+			a.add_aggro(b, 900.0)
+			b.add_aggro(a, 900.0)
+	var where := ("над городом «%s»" % city) if city != "" else "над полем"
+	Events.banner.emit("Буря над Чёрным городом", "Небо почернело %s. Ковен Пепла и Ковен Инея сошлись в магической дуэли — их чары сталкиваются." % where, Color(0.6, 0.5, 1.0))
+	Audio.play_sfx("thunder", center, -2.0)
+	return e
+
+func _storm_mage(side: String, c: Dictionary, p: Vector3, lvl: int):
+	p.y = world.ground_height(p)
+	var rec: Dictionary = world.legends.new_record(c.title, {"level": lvl, "class_id": "mage", "archetype": "aggressive", "pos": [p.x, p.z]})
+	rec.storm_mage = true
+	var n = world.spawner.spawn_bot(rec, p)
+	if n == null:
+		return null
+	if world.sim and world.sim.get("active") is Dictionary:
+		world.sim.active[rec.id] = n         # the living-world sim owns it like any other bot
+	n.data.schools.clear()
+	for sc in c.schools:
+		n.data.schools[sc] = {"lvl": int(c.schools[sc]), "xp": 0}
+	n.data.slots = {}
+	# storm wards: coven mages are far tougher than street folk, so the duel
+	# lasts long enough for their magics to meet
+	n.max_hp *= 5.0
+	n.hp = n.max_hp
+	n.mana = n.max_mana
+	n.title = STORM_COVENS[side].name
+	n.home = p
+	n.set_meta("storm_side", side)
+	world.spawner.name_tag(n, STORM_COVENS[side].color)
+	if n.brain and n.brain.p is Dictionary:
+		n.brain.p = n.brain.p.duplicate()      # archetype tables are shared constants
+		n.brain.p.aggr = maxf(0.85, float(n.brain.p.get("aggr", 0.5)))
+		n.brain.p.caution = minf(0.25, float(n.brain.p.get("caution", 0.5)))
+	MagicFX.summon_circle(p, 1.4, STORM_COVENS[side].color)
+	return n
+
+## A coven mage leaves the world (unless it has become a living legend,
+## in which case the sim keeps its record and it may be met again).
+func _storm_leave(a) -> void:
+	var rec: Dictionary = a.get("record") if a.get("record") is Dictionary else {}
+	if not rec.is_empty() and world.sim and world.sim.get("active") is Dictionary:
+		world.sim.active.erase(rec.get("id", ""))
+		if not rec.get("legend", false):
+			world.legends.recs.erase(rec.get("id", ""))
+	a.queue_free()
+
+func _storm_alive(arr: Array) -> Array:
+	var out: Array = []
+	for a in arr:
+		if is_instance_valid(a) and not a.is_dead:
+			out.append(a)
+	return out
+
+func _tick_black_storm(e: Dictionary) -> void:
+	var c: Vector3 = e.pos
+	var ember := _storm_alive(e.data.mages.ember)
+	var frost := _storm_alive(e.data.mages.frost)
+	# keep the duel on the square: casters who drift away are re-aggroed
+	if Engine.get_process_frames() % 20 == 0:
+		for a in ember:
+			for b in frost:
+				a.add_aggro(b, 900.0)
+				b.add_aggro(a, 900.0)
+		for a in ember + frost:
+			if a.mana < a.max_mana * 0.3:
+				a.mana = minf(a.max_mana, a.mana + a.max_mana * 0.08)    # the storm feeds its mages
+	# storm lightning on the streets (also feeds resonance)
+	e.data.strike_t -= get_process_delta_time()
+	if e.data.strike_t <= 0.0 and e.t < e.dur - 5.0:
+		e.data.strike_t = randf_range(2.2, 4.2)
+		var sp := c + Vector3(randf_range(-22, 22), 0, randf_range(-22, 22))
+		sp.y = world.ground_height(sp)
+		VFX.telegraph(sp, 2.2, 0.8, Color(0.7, 0.6, 1.0))
+		get_tree().create_timer(0.8, false).timeout.connect(func():
+			VFX.beam(sp + Vector3(0, 30, 0), sp, Color(0.75, 0.7, 1.0), 0.25, 0.2, true)
+			VFX.flash(sp + Vector3(0, 3, 0), Color(0.75, 0.7, 1.0), 0.12, 4.0)
+			Combat.aoe(null, sp, 2.2, {"amount": 10.0 * (Profile.current_era + 1), "dtype": "lightning", "status": {"stun": 0.3}, "melee": false}, false)
+			Resonance.imprint("lightning", sp, 26.0, "empowered", null, 2.2)
+			Audio.play_sfx("thunder", sp, -6.0))
+		e.data.strikes += 1
+	# phases (for the HUD status and the chronicle)
+	var res = world.sys("resonance")
+	var reactions: int = (res.stats.reactions - int(e.data.res0)) if res else 0
+	var catas: int = (res.stats.catastrophes - int(e.data.cata0)) if res else 0
+	e.data.reactions = reactions
+	e.data.catastrophes = catas
+	var ph := 0
+	if reactions > 0:
+		ph = 1
+	if catas > 0:
+		ph = 2
+	if ph != int(e.data.phase):
+		e.data.phase = ph
+		if ph == 1:
+			Events.notify.emit("Чары ковенов столкнулись — резонанс!", Color(0.8, 0.7, 1.0))
+	var done := ""
+	if ember.is_empty() and frost.is_empty():
+		done = "оба ковена пали"
+	elif ember.is_empty():
+		done = "Ковен Инея победил"
+	elif frost.is_empty():
+		done = "Ковен Пепла победил"
+	elif e.t >= e.dur:
+		done = "ковены рассеялись"
+		for a in ember + frost:
+			MagicFX.blink_out(a, "time")
+			_storm_leave(a)
+	if done == "":
+		return
+	mods.spell = 1.0
+	mods.mana_regen = 1.0
+	Audio.set_ambient("magic_storm_loop", false)
+	if world.weather and world.weather.has_method("set_weather"):
+		world.weather.set_weather(str(e.data.get("prev_weather", "cloudy")) if str(e.data.get("prev_weather", "")) != "storm" else "cloudy", 120.0)
+	var winners: Array = ember if not ember.is_empty() else frost
+	Chronicle.record("black_storm", winners, {"pos_v3": c, "extra": {"result": "%s; резонансов: %d, катастроф: %d" % [done, reactions, catas], "city": e.data.city}})
+	_end(e, "Буря утихла: %s." % done)
 
 # ---------------------------------------------------------------- raids
 func start_raid_on(sid: String, qid: String) -> void:

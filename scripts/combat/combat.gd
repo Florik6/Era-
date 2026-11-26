@@ -120,6 +120,8 @@ static func deal(att, tgt, info: Dictionary) -> float:
 			amt *= mods.get("spell", 1.0)
 	if tgt.statuses.has("curse"):
 		amt *= 1.25
+	if tgt.statuses.has("vulnerable"):
+		amt *= 1.4      # opened up by a perfect parry
 	if dtype == "lightning" and tgt.statuses.has("wet"):
 		amt *= 1.6
 	if dtype in PHYSICAL:
@@ -136,6 +138,8 @@ static func deal(att, tgt, info: Dictionary) -> float:
 		amt *= 1.6
 	info.amount = amt
 	info.crit = crit
+	if att != null and is_instance_valid(att) and info.get("src") == null:
+		info.src = att      # spells and zones: the target learns who hurt it (aggro, kill credit)
 	var dealt: float = tgt.take_damage(info)
 	if dealt > 0.0 and att != null and is_instance_valid(att):
 		_on_hit(att, tgt, dealt, info)

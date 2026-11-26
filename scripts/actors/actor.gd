@@ -658,6 +658,8 @@ func _on_impact(a: Dictionary) -> void:
 				arc = maxf(arc, 140.0)
 			if p.get("counter", false):
 				info.crit_force = true
+			if Clash.try_clash(self, r):
+				return
 			var hits := Combat.melee(self, r, arc, info)
 			if hits.size() > 0:
 				Audio.play_sfx("hit_metal" if hits[0].get("metal_hit", false) else "hit_flesh", global_position, -2.0)
@@ -854,7 +856,7 @@ func take_damage(info: Dictionary) -> float:
 	# block / parry
 	if blocking and from_dir.length() > 0.1 and facing.dot(from_dir) > 0.25:
 		if info.get("melee", false) and block_t <= parry_window():
-			_parry(src)
+			_parry(src, info)
 			return 0.0
 		var bv := block_value()
 		amount *= 1.0 - bv
@@ -906,7 +908,11 @@ func take_damage(info: Dictionary) -> float:
 				act = {}
 	return dealt
 
-func _parry(src) -> void:
+func _parry(src, info: Dictionary = {}) -> void:
+	if info.get("heavy", false) and src and is_instance_valid(src) and src is Actor and src.kind == "boss":
+		Clash.boss_perfect_parry(self, src)
+		block_t = 999.0
+		return
 	Audio.play_sfx("parry", global_position, 0.0)
 	VFX.parry_fx(chest() + facing * 0.6, facing)
 	VFX.text(chest() + Vector3(0, 0.5, 0), "Парирование!", Color(1.0, 0.95, 0.5))

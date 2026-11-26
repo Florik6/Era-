@@ -50,7 +50,52 @@ env:
   GODOT_VERSION: "4.7.1"
 
 jobs:
+  # 1) Official Godot export of the Xcode project (Linux runner, same as the
+  #    local tools/export_ios.sh). Uploaded as an artifact for the macOS job.
+  xcode-project:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    env:
+      BUNDLE_ID: ${{ secrets.IOS_BUNDLE_ID || 'com.eraascension.game' }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Cache Godot iOS template
+        uses: actions/cache@v4
+        with:
+          path: ~/godot-ios-template
+          key: godot-ios-template-${{ env.GODOT_VERSION }}
+      - name: Install Godot ${{ env.GODOT_VERSION }} (Linux) and the official iOS export template
+        run: |
+          set -e
+          cd ~
+          curl -sSL -o godot.zip "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable/Godot_v${GODOT_VERSION}-stable_linux.x86_64.zip"
+          unzip -q godot.zip && rm godot.zip
+          if [ ! -f ~/godot-ios-template/ios.zip ]; then
+            curl -sSL -o tpl.tpz "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable/Godot_v${GODOT_VERSION}-stable_export_templates.tpz"
+            unzip -q -j tpl.tpz templates/ios.zip -d ~/godot-ios-template && rm tpl.tpz
+          fi
+          T="$HOME/.local/share/godot/export_templates/${GODOT_VERSION}.stable"
+          mkdir -p "$T"
+          cp ~/godot-ios-template/ios.zip "$T/"
+          echo "${GODOT_VERSION}.stable" > "$T/version.txt"
+          echo "GODOT=$HOME/Godot_v${GODOT_VERSION}-stable_linux.x86_64" >> "$GITHUB_ENV"
+      - name: Export the Xcode project (official Godot iOS exporter)
+        env:
+          IOS_TEAM_ID: ${{ secrets.IOS_TEAM_ID }}
+          IOS_BUNDLE_ID: ${{ env.BUNDLE_ID }}
+        run: |
+          tools/export_ios.sh release
+          tar -C exports -cf ios_xcode.tar ios_xcode
+          ls -la ios_xcode.tar
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ios_xcode_project
+          path: ios_xcode.tar
+          retention-days: 14
+
+  # 2) IPA, verification and simulator smoke test (macOS runner).
   ios:
+    needs: xcode-project
     runs-on: macos-15
     timeout-minutes: 90
     env:
@@ -65,29 +110,15 @@ jobs:
           uname -m
           df -h . | tail -1
 
-      - name: Cache Godot iOS template
-        id: tpl
-        uses: actions/cache@v4
+      - uses: actions/download-artifact@v4
         with:
-          path: ~/godot-ios-template
-          key: godot-ios-template-${{ env.GODOT_VERSION }}
-
-      - name: Install Godot ${{ env.GODOT_VERSION }} and the official iOS export template
+          name: ios_xcode_project
+      - name: Unpack the exported Xcode project
         run: |
-          set -e
-          cd ~
-          curl -sSL -o godot.zip "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable/Godot_v${GODOT_VERSION}-stable_macos.universal.zip"
-          unzip -q godot.zip && rm godot.zip
-          if [ ! -f ~/godot-ios-template/ios.zip ]; then
-            curl -sSL -o tpl.tpz "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable/Godot_v${GODOT_VERSION}-stable_export_templates.tpz"
-            unzip -q -j tpl.tpz templates/ios.zip -d ~/godot-ios-template && rm tpl.tpz
-          fi
-          T="$HOME/Library/Application Support/Godot/export_templates/${GODOT_VERSION}.stable"
-          mkdir -p "$T"
-          cp ~/godot-ios-template/ios.zip "$T/"
-          echo "${GODOT_VERSION}.stable" > "$T/version.txt"
-          echo "GODOT=$HOME/Godot.app/Contents/MacOS/Godot" >> "$GITHUB_ENV"
-          "$HOME/Godot.app/Contents/MacOS/Godot" --version
+          rm -rf exports/ios_xcode
+          tar -C exports -xf ios_xcode.tar
+          rm ios_xcode.tar
+          ls exports/ios_xcode
 
       - name: Signing setup (only when secrets are present)
         id: sign
@@ -138,15 +169,11 @@ jobs:
           } >> "$GITHUB_OUTPUT"
           echo "Signing: method=$METHOD, profile=$NAME"
 
-      - name: Export the Xcode project (official Godot iOS exporter)
-        env:
-          IOS_TEAM_ID: ${{ secrets.IOS_TEAM_ID }}
-          IOS_BUNDLE_ID: ${{ env.BUNDLE_ID }}
-          IOS_PROFILE_UUID: ${{ steps.sign.outputs.uuid }}
-          IOS_PROFILE_NAME: ${{ steps.sign.outputs.name }}
-          IOS_EXPORT_METHOD: ${{ steps.sign.outputs.method }}
-          IOS_SIGN_IDENTITY: ${{ steps.sign.outputs.identity }}
-        run: tools/export_ios.sh release
+      - name: Apply the signing profile to the Xcode project
+        if: steps.sign.outputs.signed == 'true'
+        run: |
+          # export_options.plist written by Godot names the profile; keep it in sync
+          /usr/libexec/PlistBuddy -c "Set :method ${{ steps.sign.outputs.method }}" exports/ios_xcode/ERA_Ascension/export_options.plist || true
 
       - name: Archive (signed)
         if: steps.sign.outputs.signed == 'true'

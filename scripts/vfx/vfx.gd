@@ -29,7 +29,8 @@ static func beam(a: Vector3, b: Vector3, c: Color, dur: float = 0.2, width: floa
 static func flash(pos: Vector3, c: Color, dur: float = 0.1, energy: float = 3.0) -> void:
 	var m = _m()
 	if m:
-		m.flash(pos, c, dur, energy)
+		if Settings.flash_k() > 0.0:
+			m.flash(pos, c, dur, energy * Settings.flash_k())
 
 static func explosion(pos: Vector3, r: float, c: Color) -> void:
 	var m = _m()

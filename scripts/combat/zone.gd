@@ -27,6 +27,7 @@ static func create(k: String, source, pos: Vector3, r: float, duration: float, i
 	z.global_position = pos
 	z._build()
 	Game.world.zones.append(z)
+	Resonance.zone_created(z)
 	return z
 
 func _exit_tree() -> void:
@@ -42,13 +43,14 @@ func color() -> Color:
 		"electric": return Color(0.6, 0.75, 1.0)
 		"heal": return Color(0.4, 1.0, 0.5)
 		"dark": return Color(0.6, 0.2, 0.85)
+		"steam", "node", "vortex", "instability", "anomaly": return ResonanceFX.color(kind)
 	return Color(1, 1, 1)
 
 func _build() -> void:
 	var c := color()
 	_vis = Node3D.new()
 	add_child(_vis)
-	if MagicFX.build_zone(self):
+	if ResonanceFX.build_zone(self) or MagicFX.build_zone(self):
 		return
 	var disc := MeshInstance3D.new()
 	disc.mesh = MeshLib.cyl(1.0, 1.0, 0.03, 24)
@@ -112,7 +114,9 @@ func _physics_process(delta: float) -> void:
 			if src == null or not Game.is_enemy(src, a):
 				a.heal(params.get("hps", 8.0) * tick)
 			continue
-		if params.get("hostile_all", false):
+		if params.get("everyone", false):
+			pass
+		elif params.get("hostile_all", false):
 			if a.team in ["monster", "boss"]:
 				continue
 		elif src != null and is_instance_valid(src):
@@ -138,6 +142,63 @@ func _physics_process(delta: float) -> void:
 		"timeslow":
 			for a in victims:
 				a.apply_status("timeslow", 0.7)
+		"steam":
+			for a in victims:
+				a.apply_status("slow", 0.8, {"f": 0.65})
+				a.statuses.erase("burn")
+		"node":
+			# the node arcs to the nearest foes in reach
+			var reach: float = params.get("reach", 7.0)
+			var arcs: int = params.get("arcs", 2)
+			var top := global_position + Vector3(0, 1.7, 0)
+			var cands: Array = []
+			for a in Game.actors_near(global_position, reach):
+				if a.is_dead or (s != null and not Game.can_damage(s, a)) or (s == null and a.team in ["monster", "boss"]):
+					continue
+				cands.append([a.global_position.distance_squared_to(global_position), a])
+			cands.sort_custom(func(x, y): return x[0] < y[0])
+			for i in mini(arcs, cands.size()):
+				var t = cands[i][1]
+				VFX.lightning(top, t.chest(), color(), 0.16, 0.06, 1)
+				var inf3 := info.duplicate()
+				inf3.proc = true
+				Combat.deal(s, t, inf3)
+			if cands.is_empty() and VFX.mgr() != null:
+				var an2 := randf() * TAU
+				VFX.lightning(top, global_position + Vector3(cos(an2) * radius, 0.1, sin(an2) * radius), color(), 0.12, 0.05, 1)
+		"vortex":
+			var pull: float = params.get("pull", 3.5)
+			for a in victims:
+				var to_c: Vector3 = global_position - a.global_position
+				to_c.y = 0
+				if to_c.length() > 0.6:
+					a.knockback = to_c.normalized() * pull
+				var inf4 := info.duplicate()
+				inf4.proc = true
+				Combat.deal(s, a, inf4)
+		"instability":
+			# time flickers: some are slowed, some hurried, everyone is shaken
+			for a in victims:
+				if randf() < 0.5:
+					a.apply_status("timeslow", 0.6)
+				else:
+					a.apply_status("haste", 0.6)
+				var inf5 := info.duplicate()
+				inf5.proc = true
+				Combat.deal(s, a, inf5)
+			if randf() < 0.35:
+				MagicFX.time_snap(global_position, radius * 0.8)
+		"anomaly":
+			for a in victims:
+				if randf() < 0.4:
+					a.apply_status("timeslow", 1.0)
+				var inf6 := info.duplicate()
+				inf6.proc = true
+				Combat.deal(null, a, inf6)
+			if randf() < 0.3 and VFX.mgr() != null:
+				var an3 := randf() * TAU
+				var p3 := global_position + Vector3(cos(an3), 0, sin(an3)) * randf() * radius
+				VFX.lightning(p3 + Vector3(0, 4.0, 0), p3, color(), 0.15, 0.05, 1)
 		"timetrap", "mine":
 			if victims.size() > 0:
 				if kind == "timetrap":

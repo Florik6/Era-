@@ -689,10 +689,19 @@ func decal(pos: Vector3, kind: String, size: float, life: float, rot: float) -> 
 			old.kill()
 	mat.albedo_texture = MagicFX.tex(kind)
 	var tint := Color(1, 1, 1, 1)
-	mat.emission_enabled = kind == "frost"
-	if kind == "frost":
-		mat.emission = Color(0.3, 0.5, 0.7)
-		mat.emission_energy_multiplier = 0.5
+	mat.emission_enabled = kind in ["frost", "rune", "electric"]
+	mat.metallic_specular = 0.9 if kind == "wet" else 0.5
+	mat.roughness = 0.08 if kind == "wet" else 1.0
+	match kind:
+		"frost":
+			mat.emission = Color(0.3, 0.5, 0.7)
+			mat.emission_energy_multiplier = 0.5
+		"rune":
+			mat.emission = Color(0.7, 0.4, 1.0)
+			mat.emission_energy_multiplier = 1.4
+		"electric":
+			mat.emission = Color(0.4, 0.6, 1.0)
+			mat.emission_energy_multiplier = 1.0
 	mat.albedo_color = Color(tint.r, tint.g, tint.b, 0.0)
 	var p := pos
 	var nrm := Vector3.UP

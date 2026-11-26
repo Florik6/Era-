@@ -37,6 +37,7 @@ var _patrol_i := 0
 var rel := {}              # actor_id -> {fear, grudge, gratitude, respect, lost_vs:{cat:n}, wins:int}
 var lost_to_ranged := 0
 var _orb_cache := Vector3.INF
+var flee_pos := Vector3.INF      # flee from a place (catastrophe) instead of an actor
 
 func _init(npc) -> void:
 	n = npc
@@ -94,6 +95,27 @@ func on_spared(by) -> void:
 	goal = "flee"
 	threat = by
 	think_t = 4.0
+
+## Panic: run away from a place (a magical catastrophe) for a while.
+func flee_from(pos: Vector3, secs: float = 8.0) -> void:
+	flee_pos = pos
+	goal = "flee"
+	threat = null
+	think_t = secs
+	n.set_meta("panic_until", Time.get_ticks_msec() + int(secs * 1000.0))
+	if randf() < 0.5:
+		VFX.text(n.global_position + Vector3(0, 2.4, 0), ["Бегите!", "Магия взбесилась!", "Спасайтесь!"][randi() % 3], Color(1.0, 0.85, 0.6), 0.8)
+
+## Guards and soldiers go to check a disturbance.
+func investigate(pos: Vector3, secs: float = 9.0) -> void:
+	var off := Vector3(randf_range(-1, 1), 0, randf_range(-1, 1)).normalized() * randf_range(7.0, 10.0)
+	dest = pos + off
+	path = [dest]
+	goal = "travel"
+	flee_pos = Vector3.INF
+	think_t = secs
+	n.set_meta("investigating", pos)
+	VFX.text(n.global_position + Vector3(0, 2.4, 0), ["Тревога!", "Все туда!", "Что там творится?"][randi() % 3], Color(1.0, 0.7, 0.4), 0.8)
 
 func on_lost_to(winner) -> void:
 	if winner == null or not is_instance_valid(winner):
@@ -447,6 +469,16 @@ func _act(delta: float) -> void:
 		"fight":
 			_combat(delta)
 		"flee":
+			if flee_pos != Vector3.INF:
+				var away_p: Vector3 = n.global_position - flee_pos
+				away_p.y = 0
+				if away_p.length() > 34.0:
+					flee_pos = Vector3.INF
+					goal = "idle"
+					n.move_input = Vector3.ZERO
+					return
+				_steer(away_p.normalized() if away_p.length() > 0.1 else Vector3.FORWARD, delta, 1.0)
+				return
 			if threat == null or not is_instance_valid(threat) or threat.is_dead:
 				goal = "idle"
 				return

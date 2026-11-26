@@ -549,7 +549,7 @@ static func _dot(img: Image, p: Vector2, r: float, c: Color) -> void:
 ## Procedural textures: particles (smoke, star, flame) and decals (scorch,
 ## frost, crack, blood, oil, footprint, hole).
 static func _img(kind: String) -> Image:
-	var sz := 128 if kind in ["crack", "frost"] else 64
+	var sz := 128 if kind in ["crack", "frost", "electric", "rune"] else 64
 	var img := Image.create(sz, sz, false, Image.FORMAT_RGBA8)
 	img.fill(Color(0, 0, 0, 0))
 	var nz := FastNoiseLite.new()
@@ -559,7 +559,8 @@ static func _img(kind: String) -> Image:
 	rng.seed = absi(kind.hash())
 	var h := sz * 0.5
 	match kind:
-		"crack":
+		"crack", "electric":
+			var cc := Color(0.05, 0.04, 0.035) if kind == "crack" else Color(0.55, 0.75, 1.0)
 			for b in 9:
 				var ang := TAU * b / 9.0 + rng.randf_range(-0.3, 0.3)
 				var p := Vector2(h, h)
@@ -568,20 +569,34 @@ static func _img(kind: String) -> Image:
 					ang += rng.randf_range(-0.4, 0.4)
 					p += Vector2(cos(ang), sin(ang)) * 2.1
 					var k := float(s) / steps
-					_dot(img, p, 2.0 * (1.0 - k) + 0.7, Color(0.05, 0.04, 0.035, 0.95 - 0.45 * k))
+					_dot(img, p, 2.0 * (1.0 - k) + 0.7, Color(cc.r, cc.g, cc.b, 0.95 - 0.45 * k))
 					if rng.randf() < 0.09:
 						var p2 := p
 						var a2 := ang + (1.0 if rng.randf() < 0.5 else -1.0) * rng.randf_range(0.5, 1.1)
 						for s2 in 9:
 							a2 += rng.randf_range(-0.3, 0.3)
 							p2 += Vector2(cos(a2), sin(a2)) * 2.0
-							_dot(img, p2, 0.8, Color(0.06, 0.05, 0.04, 0.6))
+							_dot(img, p2, 0.8, Color(cc.r, cc.g, cc.b, 0.6))
+			var cb := Color(0.07, 0.06, 0.05) if kind == "crack" else Color(0.06, 0.06, 0.1)
 			for y in sz:
 				for x in sz:
 					var d := Vector2(x - h, y - h).length() / h
 					var a := (1.0 - smoothstep(0.05, 0.28, d + nz.get_noise_2d(x, y) * 0.08)) * 0.85
 					if a > img.get_pixel(x, y).a:
-						img.set_pixel(x, y, Color(0.07, 0.06, 0.05, a))
+						img.set_pixel(x, y, Color(cb.r, cb.g, cb.b, a))
+		"rune":
+			for y in sz:
+				for x in sz:
+					var u := (x - h + 0.5) / h
+					var v := (y - h + 0.5) / h
+					var d := sqrt(u * u + v * v)
+					var ang := atan2(v, u)
+					var ring1 := 1.0 - smoothstep(0.0, 0.035, absf(d - 0.9))
+					var ring2 := 1.0 - smoothstep(0.0, 0.025, absf(d - 0.62))
+					var ticks := (1.0 - smoothstep(0.0, 0.05, absf(fposmod(ang * 12.0 / TAU, 1.0) - 0.5) * 0.3)) * smoothstep(0.64, 0.66, d) * (1.0 - smoothstep(0.86, 0.88, d))
+					var star := (1.0 - smoothstep(0.0, 0.03, absf(sin(ang * 2.5) * d - 0.0) * 0.4)) * (1.0 - smoothstep(0.55, 0.6, d))
+					var a := clampf(ring1 + ring2 * 0.8 + ticks * 0.7 + star * 0.5, 0.0, 1.0) * 0.9
+					img.set_pixel(x, y, Color(0.85, 0.6, 1.0, a))
 		_:
 			for y in sz:
 				for x in sz:
@@ -615,6 +630,8 @@ static func _img(kind: String) -> Image:
 							c = Color(0.85, 0.95, 1.0, clampf(base + arms * 0.85 + twig * 0.5 + speck, 0.0, 0.95))
 						"blood":
 							c = Color(0.3, 0.02, 0.02, 0.0)
+						"wet":
+							c = Color(0.05, 0.06, 0.08, (1.0 - smoothstep(0.4, 1.0, d + (n - 0.5) * 0.5)) * 0.55)
 						"oil":
 							c = Color(0.04, 0.04, 0.05, (1.0 - smoothstep(0.45, 0.95, d + (n - 0.5) * 0.4)) * 0.85)
 						"footprint":

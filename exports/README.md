@@ -1,4 +1,4 @@
-# Xcode-проект iOS (официальный экспорт Godot 4.7.1)
+# exports/ios_xcode — Xcode-проект iOS (официальный экспорт Godot 4.7.1)
 
 Создан командой `tools/export_ios.sh release` (пресет «iOS» в `export_presets.cfg`).
 

@@ -34,6 +34,7 @@ static func cast(c: Actor, id: String, aim: Vector3) -> bool:
 	var power: float = sp.dmg * (1.0 + 0.12 * (c.level - 1))
 	var info := {"amount": power, "dtype": DBSkills.SCHOOLS[sp.school].dtype, "school": sp.school, "melee": false, "knock": 1.0, "status": {}}
 	var ult: bool = c.is_player and id in ULTIMATES
+	info.tier = tier_for(c, id, sp.school, ult)
 	var cb := func():
 		_effect(c, id, sp, aim, info)
 		if ult and is_instance_valid(c):
@@ -69,9 +70,25 @@ static func cast_free(c: Actor, id: String, aim: Vector3, power: float) -> bool:
 	aim = aim.normalized()
 	c.face_dir(aim)
 	var info := {"amount": power, "dtype": DBSkills.SCHOOLS[sp.school].dtype, "school": "", "melee": false, "knock": 1.0, "status": {}}
+	info.tier = tier_for(c, id, sp.school, false)
 	c.start_action("spell", 0.6, 0.6, {"anim": "cast", "cb": func(): _effect(c, id, sp, aim, info)})
 	MagicFX.charge(c, sp.school, 0.36, id in BIG_SPELLS)
 	return true
+
+## Magic tier: "ultimate" for the hero's ultimates and a boss's top spells,
+## "empowered" for school masters (level 6+), elites, bosses and anyone
+## casting during a magic storm, otherwise "normal". Read by the visuals
+## (extra layers) and by Magical Resonance (power weighting).
+static func tier_for(c: Actor, id: String, school: String, ult: bool) -> String:
+	if ult or (c.kind == "boss" and id in ULTIMATES):
+		return "ultimate"
+	if c.kind == "boss" or c.get("elite") == true:
+		return "empowered"
+	if c.data != null and school != "" and c.data.knows_school(school) and c.data.school_level(school) >= 6:
+		return "empowered"
+	if Game.world and Game.world.get("director") and float(Game.world.director.mods.get("spell", 1.0)) > 1.0:
+		return "empowered"
+	return "normal"
 
 static func _target(c: Actor, aim: Vector3, rng: float, cone: float = 50.0) -> Actor:
 	var best: Actor = null
@@ -113,12 +130,14 @@ static func _effect(c: Actor, id: String, sp: Dictionary, aim: Vector3, info: Di
 				info.status = {"burn": info.amount * 0.8}
 				Combat.deal(c, t, info)
 				MagicFX.impact(t.chest(), "fire", 0.9)
+				Resonance.from_spell(c, id, t.global_position, info)
 			else:
 				var p := c.global_position + aim * 4.0
 				for d in Game.grid.query(p, 4.0, "destructible"):
 					if d.has_method("ignite"):
 						d.ignite()
 				MagicFX.impact(p + Vector3(0, 0.5, 0), "fire", 1.2)
+				Resonance.from_spell(c, id, p, info)
 			Audio.play_sfx("fire_cast", c.global_position)
 		"firewall":
 			var center := c.global_position + aim * 4.0
@@ -136,7 +155,8 @@ static func _effect(c: Actor, id: String, sp: Dictionary, aim: Vector3, info: Di
 			c.get_tree().create_timer(1.0, false).timeout.connect(func():
 				VFX.explosion(p2, 4.5, col)
 				Audio.play_sfx("explosion", p2)
-				Combat.aoe(c if is_instance_valid(c) else null, p2, 4.5, info))
+				Combat.aoe(c if is_instance_valid(c) else null, p2, 4.5, info)
+				Resonance.from_spell(c if is_instance_valid(c) else null, id, p2, info, 4.5))
 		# ---------------- ice
 		"frostbolt":
 			info.status = {"slow": 0.5}
@@ -147,6 +167,7 @@ static func _effect(c: Actor, id: String, sp: Dictionary, aim: Vector3, info: Di
 			info.status = {"freeze": 2.0}
 			MagicFX.freeze_nova(c.global_position, 6.0)
 			Combat.aoe(c, c.global_position, 6.0, info)
+			Resonance.from_spell(c, id, c.global_position, info, 6.0, 20.0)
 			if Game.world and Game.world.has_method("freeze_water"):
 				Game.world.freeze_water(c.global_position, 7.0)
 			Audio.play_sfx("ice_shatter", c.global_position)
@@ -155,6 +176,7 @@ static func _effect(c: Actor, id: String, sp: Dictionary, aim: Vector3, info: Di
 			if Game.world and Game.world.has_method("spawn_ice_wall"):
 				Game.world.spawn_ice_wall(c.global_position + aim * 3.5, aim, 9.0)
 			MagicFX.ice_wall(c.global_position + aim * 3.5, aim, 9.0)
+			Resonance.from_spell(c, id, c.global_position + aim * 3.5, info, 2.0, 18.0)
 			Audio.play_sfx("ice_cast", c.global_position)
 		"blizzard":
 			var p3 := _aim_point(c, aim, 18.0)
@@ -169,6 +191,7 @@ static func _effect(c: Actor, id: String, sp: Dictionary, aim: Vector3, info: Di
 				VFX.lightning(muzzle, t2.chest(), col, 0.18, 0.07, 2)
 				info.status = {"stun": 0.2}
 				Combat.deal(c, t2, info)
+				Resonance.from_spell(c, id, t2.global_position, info)
 			else:
 				VFX.lightning(muzzle, muzzle + aim * 12.0, col, 0.14, 0.06, 2)
 			Audio.play_sfx("lightning", c.global_position, -2.0)
@@ -177,11 +200,13 @@ static func _effect(c: Actor, id: String, sp: Dictionary, aim: Vector3, info: Di
 			var t3 := _target(c, aim, 18.0, 60.0)
 			if t3:
 				chain_lightning(c, t3, info.amount, 5, false, muzzle)
+				Resonance.from_spell(c, id, t3.global_position, info)
 			Audio.play_sfx("lightning", c.global_position)
 		"thunderclap":
 			info.status = {"stun": 1.5}
 			MagicFX.thunderclap(c.global_position, 5.5)
 			Combat.aoe(c, c.global_position, 5.5, info)
+			Resonance.from_spell(c, id, c.global_position, info, 5.5)
 			Audio.play_sfx("thunder", c.global_position)
 			VFX.shake(0.3)
 		"storm":
@@ -193,6 +218,7 @@ static func _effect(c: Actor, id: String, sp: Dictionary, aim: Vector3, info: Di
 					var p4: Vector3 = tt.global_position if tt else c.global_position + Vector3(randf_range(-8, 8), 0, randf_range(-8, 8))
 					MagicFX.sky_strike(p4, col, 2.0)
 					Combat.aoe(c, p4, 2.0, info)
+					Resonance.from_spell(c, id, p4, info, 2.0)
 					Audio.play_sfx("thunder", p4, -4.0))
 		# ---------------- dark
 		"curse":
@@ -200,12 +226,14 @@ static func _effect(c: Actor, id: String, sp: Dictionary, aim: Vector3, info: Di
 			if t4:
 				t4.apply_status("curse", 8.0)
 				Combat.deal(c, t4, info)
+				Resonance.from_spell(c, id, t4.global_position, info, 0.0, 12.0)
 				MagicFX.curse_seal(muzzle, t4)
 			Audio.play_sfx("dark_cast", c.global_position)
 		"drain":
 			var t5 := _target(c, aim, 14.0)
 			if t5:
 				var dealt := Combat.deal(c, t5, info)
+				Resonance.from_spell(c, id, t5.global_position, info)
 				c.heal(dealt * 0.8)
 				MagicFX.drain(t5, c)
 			Audio.play_sfx("dark_cast", c.global_position)
@@ -217,6 +245,7 @@ static func _effect(c: Actor, id: String, sp: Dictionary, aim: Vector3, info: Di
 			info.status = {"fear": 2.0}
 			MagicFX.dark_nova(c.global_position, 7.0)
 			Combat.aoe(c, c.global_position, 7.0, info)
+			Resonance.from_spell(c, id, c.global_position, info, 7.0)
 			Audio.play_sfx("dark_cast", c.global_position)
 			Audio.play_sfx("dark_hum", c.global_position, -3.0)
 		# ---------------- space & time
@@ -230,6 +259,7 @@ static func _effect(c: Actor, id: String, sp: Dictionary, aim: Vector3, info: Di
 				c.reset_physics_interpolation()
 			MagicFX.blink_in(c, from, "time")
 			Audio.play_sfx("teleport", dest)
+			Resonance.from_spell(c, id, dest, info, 1.5, 18.0)
 		"timeslow":
 			var p5 := _aim_point(c, aim, 12.0)
 			MagicFX.release(muzzle, aim, "time")
@@ -254,6 +284,7 @@ static func _effect(c: Actor, id: String, sp: Dictionary, aim: Vector3, info: Di
 			if c.has_method("reset_physics_interpolation"):
 				c.reset_physics_interpolation()
 			Audio.play_sfx("teleport", end)
+			Resonance.from_spell(c, id, end, info, 2.0)
 
 static func _safe_dest(c: Actor, dest: Vector3) -> Vector3:
 	var from := c.chest()

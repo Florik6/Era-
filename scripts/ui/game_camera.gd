@@ -33,12 +33,18 @@ func _ready() -> void:
 func snap() -> void:
 	_snap = true
 
+## Camera director mode multiplier: Minimal 0 · Standard 1 · Cinematic 2.
+static func mode_k() -> float:
+	return [0.35, 1.0, 1.3][clampi(Settings.camera_mode, 0, 2)]
+
 func shake(a: float) -> void:
-	_shake = maxf(_shake, a * clampf(Settings.effects_intensity * 1.2, 0.3, 1.2))
+	if not Settings.camera_shake:
+		return
+	_shake = maxf(_shake, a * mode_k() * clampf(Settings.effects_intensity * 1.2, 0.3, 1.2))
 
 ## Brief zoom accent: amount > 0 moves in, < 0 pulls out (fraction of distance).
 func punch(amount: float, dur: float = 0.25) -> void:
-	_punch = clampf(amount, -0.3, 0.3)
+	_punch = clampf(amount * mode_k(), -0.3, 0.3)
 	_punch_dur = maxf(0.05, dur)
 	_punch_t = _punch_dur
 
@@ -46,7 +52,7 @@ func punch(amount: float, dur: float = 0.25) -> void:
 func kick(dir: Vector3, amount: float) -> void:
 	dir.y = 0
 	if dir.length() > 0.01:
-		_kick += dir.normalized() * clampf(amount, 0.0, 0.5)
+		_kick += dir.normalized() * clampf(amount * mode_k(), 0.0, 0.5)
 
 func _process(delta: float) -> void:
 	if target == null or not is_instance_valid(target):
@@ -94,5 +100,5 @@ func _process(delta: float) -> void:
 	if _shake > 0.0:
 		_shake = maxf(0.0, _shake - delta * 1.8)
 		sh = Vector3(randf_range(-1, 1), randf_range(-1, 1), randf_range(-1, 1)) * _shake * 0.45
-	global_position = _focus + off + sh + cine_offset + _kick
+	global_position = _focus + off + sh + cine_offset * mode_k() + _kick
 	look_at(_focus + sh * 0.5, Vector3.UP)

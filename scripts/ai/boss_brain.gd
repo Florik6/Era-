@@ -193,17 +193,23 @@ func _do(typ: String, spec: Dictionary, dir: Vector3) -> void:
 			var r: float = spec.get("radius", 4.5)
 			var arc: float = spec.get("arc", 120.0)
 			VFX.telegraph(b.global_position, r, 0.7, Color(1, 0.2, 0.1), "cone", dir, arc)
-			b.start_action("skill", 1.0, 0.75, {"anim": "slash"})
+			b.start_action("skill", 1.0, 0.75, {"anim": "slash", "heavy": true})
 			_cast(0.9)
 			var f: Vector3 = dir
 			_later(0.7, func():
+				# stopped by a clash or a perfect parry in the meantime
+				if float(b.get_meta("clash_cancel_until", 0.0)) > Time.get_ticks_msec() / 1000.0 or b.statuses.has("stun"):
+					return
 				for a in Game.actors_near(b.global_position, r + 1.0):
 					if a.is_dead or not Game.is_enemy(b, a):
 						continue
 					var to: Vector3 = a.global_position - b.global_position
 					to.y = 0
 					if to.length() - a.radius() <= r and (to.length() < 1.0 or f.angle_to(to.normalized()) <= deg_to_rad(arc * 0.5)):
-						Combat.deal(b, a, _dmg(spec))
+						var hv := _dmg(spec)
+						hv.melee = true        # a weapon swing: can be blocked and parried
+						hv.heavy = true        # a perfect parry of it staggers the boss
+						Combat.deal(b, a, hv)
 				Audio.play_sfx("swing_heavy", b.global_position)
 				VFX.slash(b.global_position + Vector3(0, 1.0, 0), f, r, arc, "slash", Color(1.0, 0.7, 0.5))
 				VFX.ground_impact(b.global_position + f * r * 0.6, 1.6)
