@@ -104,6 +104,7 @@ func _enter_phase(i: int) -> void:
 	b.start_action("skill", 1.4, 0.95, {"anim": "roar"})
 	b.apply_status("invuln", 1.4)
 	VFX.ring(b.global_position, 8.0, Color(1.0, 0.3, 0.2), 0.8)
+	MagicFX.phase_burst(b.global_position, Combat.element_color(b.natural_dtype) if b.natural_dtype in ["fire", "ice", "lightning", "dark", "time", "energy"] else Color(1.0, 0.35, 0.2), clampf(float(b.def.get("scale", 1.5)), 1.0, 2.5))
 	VFX.shake(0.5)
 	if ph.has("msg"):
 		Events.banner.emit("%s — фаза %d" % [b.display_name, i + 1], ph.msg, Color(1.0, 0.45, 0.3))
@@ -188,6 +189,8 @@ func _do(typ: String, spec: Dictionary, dir: Vector3) -> void:
 					if to.length() - a.radius() <= r and (to.length() < 1.0 or f.angle_to(to.normalized()) <= deg_to_rad(arc * 0.5)):
 						Combat.deal(b, a, _dmg(spec))
 				Audio.play_sfx("swing_heavy", b.global_position)
+				VFX.slash(b.global_position + Vector3(0, 1.0, 0), f, r, arc, "slash", Color(1.0, 0.7, 0.5))
+				VFX.ground_impact(b.global_position + f * r * 0.6, 1.6)
 				VFX.shake(0.25))
 		"slam", "nova":
 			var r2: float = spec.get("radius", 5.0)
@@ -211,6 +214,7 @@ func _do(typ: String, spec: Dictionary, dir: Vector3) -> void:
 				b.start_action("skill", 0.5, 0.1, {"anim": "thrust"})
 				_later(0.35, func():
 					b.knockback = Vector3.ZERO
+					_dust_trail(start, b.global_position)
 					for a in Game.actors_near((start + b.global_position) * 0.5, len):
 						if a.is_dead or not Game.is_enemy(b, a):
 							continue
@@ -239,7 +243,7 @@ func _do(typ: String, spec: Dictionary, dir: Vector3) -> void:
 				VFX.telegraph(pt, 2.4, delay, col)
 				_later(delay, func():
 					if typ == "strikes":
-						VFX.beam(pt + Vector3(0, 14, 0), pt, col, 0.2, 0.15, true)
+						MagicFX.sky_strike(pt, col, 2.4)
 						Audio.play_sfx("thunder", pt, -6.0)
 					else:
 						VFX.explosion(pt, 2.4, col)
@@ -251,6 +255,7 @@ func _do(typ: String, spec: Dictionary, dir: Vector3) -> void:
 			b.start_action("skill", 1.0, 0.6, {"anim": "roar" if typ == "summon" else "cast"})
 			_cast(0.9)
 			var adds: Array = []
+			MagicFX.summon_circle(b.global_position, 3.0, col)
 			if Game.world and Game.world.get("spawner"):
 				for i in cnt:
 					var p2: Vector3 = b.global_position + Vector3(randf_range(-5, 5), 0, randf_range(-5, 5))
@@ -258,7 +263,7 @@ func _do(typ: String, spec: Dictionary, dir: Vector3) -> void:
 					if m:
 						m.team = "boss"
 						adds.append(m)
-						VFX.burst(p2 + Vector3(0, 1, 0), col, 14, 0.4)
+						MagicFX.summon_puff(p2 + Vector3(0, 1, 0), col)
 			if typ == "shield" and not adds.is_empty():
 				b.shielded = true
 				b.shield_adds = adds
@@ -272,7 +277,7 @@ func _do(typ: String, spec: Dictionary, dir: Vector3) -> void:
 			_later(0.8, func():
 				var s: Vector3 = b.chest()
 				var e: Vector3 = s + f3 * 22.0
-				VFX.beam(s, e, col, 0.35, 0.35, false)
+				_boss_beam(s, e, col)
 				Audio.play_sfx("laser", b.global_position)
 				for a in Game.actors_near(b.global_position + f3 * 11.0, 13.0):
 					if a.is_dead or not Game.is_enemy(b, a):
@@ -284,10 +289,14 @@ func _do(typ: String, spec: Dictionary, dir: Vector3) -> void:
 			var dest: Vector3 = tpos + Vector3(randf_range(-5, 5), 0, randf_range(-5, 5))
 			if Game.world:
 				dest.y = Game.world.ground_height(dest) + 0.1
-			VFX.burst(b.chest(), col, 20, 0.4)
+			var bsch := MagicFX.school_from_color(col)
+			if not (bsch in ["fire", "ice", "lightning", "dark", "time", "energy"]):
+				bsch = "dark"
+			var from: Vector3 = b.global_position
+			MagicFX.blink_out(b, bsch)
 			b.global_position = dest
 			b.reset_physics_interpolation()
-			VFX.burst(b.chest(), col, 20, 0.4)
+			MagicFX.blink_in(b, from, bsch)
 			Audio.play_sfx("teleport", dest)
 		"slowzone":
 			Zone.create("timeslow", b, tpos, 5.0, 6.0, {})
@@ -297,6 +306,7 @@ func _do(typ: String, spec: Dictionary, dir: Vector3) -> void:
 				_cast(1.5)
 				b.apply_status("invuln", 2.0)
 				VFX.ring(b.global_position, 6.0, Color(0.6, 0.2, 1.0), 1.0)
+				MagicFX.ground_rune(b.global_position, "rift", Color(0.6, 0.3, 1.0), 3.5, 1.6, 2.5, 1.0)
 				Audio.play_sfx("portal_open", b.global_position)
 				_later(1.2, func(): Game.world.enter_dimension(spec.get("dimension", "distorted"), {"boss": b}))
 		"hook":
@@ -307,7 +317,7 @@ func _do(typ: String, spec: Dictionary, dir: Vector3) -> void:
 				if target and is_instance_valid(target) and not target.is_dead:
 					var cp3 := Geometry3D.get_closest_point_to_segment(target.global_position, b.global_position, b.global_position + f4 * 14.0)
 					if cp3.distance_to(target.global_position) < 1.6 and not target.invulnerable():
-						VFX.beam(b.chest(), target.chest(), Color(0.5, 0.5, 0.5), 0.3, 0.06, false)
+						VFX.beam(b.chest(), target.chest(), Color(0.7, 0.7, 0.75), 0.3, 0.06, false)
 						target.knockback = (b.global_position - target.global_position).normalized() * 16.0
 						Combat.deal(b, target, _dmg(spec))
 						target.apply_status("slow", 1.5, {"f": 0.5})
@@ -317,7 +327,8 @@ func _do(typ: String, spec: Dictionary, dir: Vector3) -> void:
 			b.start_action("skill", 2.0, 0.05, {"anim": "spin"})
 			for i in 5:
 				_later(0.4 * i, func():
-					VFX.ring(b.global_position, r3, Color(1, 0.6, 0.4), 0.25)
+					VFX.slash(b.global_position + Vector3(0, 1.0, 0), b.facing.rotated(Vector3.UP, 1.3 * i), r3, 360.0, "spin", Color(1, 0.7, 0.5))
+					VFX.shock(b.global_position, r3, Color(1, 0.6, 0.4, 0.6), 0.25)
 					Combat.aoe(b, b.global_position, r3, _dmg(spec), false)
 					Audio.play_sfx("swing_heavy", b.global_position, -4.0))
 		"quake":
@@ -364,8 +375,34 @@ func _watch_shield() -> void:
 func _escape() -> void:
 	b.times_escaped += 1
 	Events.banner.emit("%s отступает!" % b.display_name, "Он запомнит эту встречу и вернётся сильнее.", Color(1.0, 0.6, 0.3))
-	VFX.burst(b.chest(), Color(0.3, 0.3, 0.3), 30, 0.6)
+	MagicFX.blink_out(b, "dark")
+	var mg = VFX.mgr()
+	if mg:
+		mg.emit(b.chest(), {"n": 30, "life": 1.6, "mat": "mix", "col": Color(0.15, 0.14, 0.16, 0.85), "ramp": "smoke", "size": 2.0, "shape": "sphere", "rad": 1.2, "v0": 1.0, "v1": 3.0, "damp": 2.0, "grav": Vector3(0, 0.5, 0), "curve": "puff", "critical": true})
 	Audio.play_sfx("teleport", b.global_position)
 	if Game.world and Game.world.has_method("on_boss_escaped"):
 		Game.world.on_boss_escaped(b, target)
 	b.queue_free()
+
+# ---------------------------------------------------------------- visuals only
+func _dust_trail(a: Vector3, e: Vector3) -> void:
+	var mg = VFX.mgr()
+	if mg == null or a.distance_to(e) < 0.5:
+		return
+	var d := e - a
+	d.y = 0
+	var bs := Basis.looking_at(d.normalized() if d.length() > 0.01 else Vector3.FORWARD, Vector3.UP)
+	mg.emit((a + e) * 0.5 + Vector3(0, 0.3, 0), {"n": int(6 + d.length() * 2.0), "life": 1.0, "mat": "mix", "col": Color(0.7, 0.62, 0.5, 0.7), "ramp": "smoke", "size": 1.4, "shape": "box", "box": Vector3(0.8, 0.2, d.length() * 0.5), "basis": bs, "v0": 0.5, "v1": 1.5, "dir": Vector3.UP, "spread": 50.0, "damp": 2.0, "grav": Vector3(0, 0.2, 0), "curve": "puff", "critical": true})
+	VFX.ground_impact(e, 2.0)
+
+func _boss_beam(s: Vector3, e: Vector3, col: Color) -> void:
+	VFX.beam(s, e, col, 0.4, 0.5, false)
+	VFX.beam(s, e, Color(1, 1, 1), 0.3, 0.15, false)
+	var mg = VFX.mgr()
+	if mg == null:
+		return
+	var d := e - s
+	mg.emit((s + e) * 0.5, {"n": 30, "life": 0.5, "mat": "add", "col": col, "size": 0.3, "shape": "box", "box": Vector3(0.3, 0.3, d.length() * 0.5), "basis": Basis.looking_at(d.normalized() if d.length() > 0.01 else Vector3.FORWARD, Vector3.UP), "v0": 0.5, "v1": 2.0, "grav": Vector3.ZERO, "curve": "shrink", "critical": true})
+	mg.glow(s, col, 2.0, 0.4)
+	mg.light((s + e) * 0.5, col, 4.0, 10.0, 0.35)
+	mg.decal(MagicFX.ground_point(e), "scorch", 2.0, 12.0, randf() * TAU)

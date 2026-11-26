@@ -471,6 +471,13 @@ func _on_banner(title: String, sub: String, col: Color) -> void:
 	var cine = Game.world.sys("cinematic") if Game.world and Game.world.has_method("sys") else null
 	if cine and cine.has_method("claims") and cine.claims(title):
 		return
+	if cine and cine.has_method("is_playing") and cine.is_playing():
+		# a title card is on screen: show this right after it
+		if _banner_queue.size() < 3:
+			_banner_queue.append([title, sub, col])
+		if _banner_t <= 0.0:
+			_banner_t = 0.25
+		return
 	var key := title + "|" + sub
 	if key == _banner_last and _banner_t > 0.0:
 		return
@@ -531,7 +538,10 @@ func _process(delta: float) -> void:
 	if _banner_t > 0.0:
 		_banner_t -= delta
 		if _banner_t <= 0.0:
-			if _banner_queue.size() > 0:
+			var cine2 = Game.world.sys("cinematic") if Game.world and Game.world.has_method("sys") else null
+			if _banner_queue.size() > 0 and cine2 and cine2.is_playing():
+				_banner_t = 0.25
+			elif _banner_queue.size() > 0:
 				var nx: Array = _banner_queue.pop_front()
 				_show_banner(nx[0], nx[1], nx[2])
 			else:

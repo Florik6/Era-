@@ -4,7 +4,7 @@ extends Node3D
 
 const HAIR_NAMES := ["Лысый", "Короткая", "Длинная", "Хвост", "Ирокез"]
 const BEARD_NAMES := ["Нет", "Щетина", "Борода"]
-const VERSION_TEXT := "ERA: Восхождение · версия 0.9 · одиночная игра"
+const VERSION_TEXT := "ERA: Восхождение · версия 0.10 · одиночная игра"
 
 var bg: MenuBackground
 var ui: UIManager
@@ -26,6 +26,10 @@ var _form_labels := {}
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	get_tree().paused = false
+	# the menu is up and rendering: this launch succeeded
+	get_tree().create_timer(2.0, true).timeout.connect(func():
+		BootGuard.mark("ok")
+		BootGuard.log_line("main menu ok, fps=%d" % Engine.get_frames_per_second()))
 	if SaveSys.has_save() and not Profile.has_character:
 		SaveSys.load_profile()
 	bg = MenuBackground.new()

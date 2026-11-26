@@ -86,7 +86,9 @@ class Harness:
 		# ---------------------------------------------------------- A1: button + entry
 		var r0: Dictionary = rifts[0]
 		var rp := Vector3(r0.pos.x, 0, r0.pos.y)
-		await wait(1.5)   # portals ignore the hero for a few seconds after loading
+		await wait(1.5)
+		ck("portals ignore the hero right after loading (anti re-entry)", w.portal_block_until > 0)
+		w.portal_block_until = 0
 		await _go_near(rp, Vector3(3.0, 0, 0))
 		var rn = _poi_node(r0.id)
 		ck("rift POI node streamed in", rn != null)

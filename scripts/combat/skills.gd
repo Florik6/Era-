@@ -34,7 +34,7 @@ static func use(a: Actor, id: String, aim: Vector3) -> bool:
 				var info := Combat.weapon_info(a, 2.6)
 				info.knock = 7.0
 				Combat.melee(a, r + 0.4, 100.0, info)
-				VFX.ring(a.global_position + a.facing * 1.5, 1.8, Color(1, 0.9, 0.7), 0.25)
+				VFX.ground_impact(a.global_position + a.facing * 1.5, 1.8)
 				Audio.play_sfx("swing_heavy", a.global_position))
 		"sw_whirl", "hv_quake":
 			if id == "sw_whirl":
@@ -43,7 +43,8 @@ static func use(a: Actor, id: String, aim: Vector3) -> bool:
 						tree.create_timer(0.22 * i, false).timeout.connect(func():
 							if is_instance_valid(a) and not a.is_dead:
 								Combat.melee(a, r + 0.5, 360.0, Combat.weapon_info(a, 0.9))
-								VFX.ring(a.global_position, r + 0.5, Color(0.9, 0.9, 1.0), 0.2)
+								VFX.slash(a.global_position + Vector3(0, 0.9 + 0.25 * i, 0), a.facing.rotated(Vector3.UP, 2.1 * i), r + 0.5, 360.0, "spin", Color(0.85, 0.92, 1.0))
+								VFX.shock(a.global_position, r + 0.5, Color(0.85, 0.9, 1.0, 0.5), 0.25)
 								Audio.play_sfx("swing", a.global_position)))
 			else:
 				_act(a, "slam", 0.7, 0.5, func():
@@ -52,7 +53,8 @@ static func use(a: Actor, id: String, aim: Vector3) -> bool:
 							if not is_instance_valid(a):
 								return
 							var p: Vector3 = a.global_position + aim * (3.0 + 3.0 * i)
-							VFX.explosion(p, 2.4, Color(0.7, 0.6, 0.45))
+							VFX.ground_impact(p, 2.4)
+							VFX.shake(0.12)
 							var inf := Combat.weapon_info(a, 1.4)
 							inf.status = {"stun": 0.5}
 							Combat.aoe(a, p, 2.4, inf)))
@@ -67,7 +69,7 @@ static func use(a: Actor, id: String, aim: Vector3) -> bool:
 			a.apply_status("stealth", 6.0)
 			if a.rig:
 				a.rig.crouch = true
-			VFX.burst(a.chest(), Color(0.3, 0.3, 0.4), 16, 0.4)
+			_smoke(a.chest(), 1.0)
 			Audio.play_sfx("dark_cast", a.global_position, -6.0)
 		"dg_shadowstep":
 			var t := Spells._target(a, aim, 11.0, 70.0)
@@ -76,15 +78,18 @@ static func use(a: Actor, id: String, aim: Vector3) -> bool:
 				a.stamina += st
 				return false
 			var behind: Vector3 = t.global_position + t.facing * -1.3
-			VFX.burst(a.chest(), Color(0.2, 0.1, 0.3), 14, 0.35)
+			_smoke(a.chest(), 0.8)
+			MagicFX.ghost(a, Color(0.35, 0.15, 0.5, 0.5), 0.4)
 			a.global_position = Spells._safe_dest(a, behind)
 			a.reset_physics_interpolation()
+			_smoke(a.chest(), 0.6)
 			a.face_dir(t.global_position - a.global_position)
 			_act(a, "stab", 0.35, 0.3, func():
 				Combat.melee(a, r + 0.4, 80.0, Combat.weapon_info(a, 2.0), 1))
 		"sp_lunge":
 			a.dodge_dir = aim
 			a.knockback = aim * 14.0
+			_dash_lines(a, aim)
 			_act(a, "thrust", 0.45, 0.4, func():
 				var info := Combat.weapon_info(a, 1.8)
 				Combat.melee(a, r + 0.5, 50.0, info, 2))
@@ -107,17 +112,21 @@ static func use(a: Actor, id: String, aim: Vector3) -> bool:
 			_act(a, "slam", 0.7, 0.55, func():
 				var inf4 := Combat.weapon_info(a, 2.0)
 				inf4.status = {"stun": 0.6}
-				VFX.explosion(a.global_position + aim * 1.2, 4.0, Color(0.75, 0.65, 0.5))
+				VFX.ground_impact(a.global_position + aim * 1.2, 4.0)
+				VFX.shake(0.3)
 				Combat.aoe(a, a.global_position + aim * 1.2, 4.0, inf4))
 		"hv_unstoppable":
 			a.apply_status("unstoppable", 8.0)
 			VFX.ring(a.global_position, 2.0, Color(1.0, 0.6, 0.2), 0.5)
+			_aura(a, Color(1.0, 0.55, 0.2))
 			Audio.play_sfx("boss_roar", a.global_position, -6.0)
 		"bw_aimed":
+			_glint(a, 0.5)
 			_act(a, "shoot", 0.7, 0.75, func():
 				var inf5 := Combat.weapon_info(a, 3.0)
 				inf5.melee = false
 				Projectile.spawn(a, a.chest() + aim * 0.7, aim * 62.0, inf5, "arrow", {"pierce": 2, "range": r * 1.4})
+				VFX.shock(a.chest() + aim * 0.9, 0.6, Color(1.0, 0.95, 0.8, 0.8), 0.2)
 				Audio.play_sfx("bow_release", a.global_position))
 		"bw_rapid":
 			_act(a, "shoot", 0.5, 0.2, func():
@@ -146,6 +155,7 @@ static func use(a: Actor, id: String, aim: Vector3) -> bool:
 					var inf8 := Combat.weapon_info(a, 0.8)
 					inf8.melee = false
 					Projectile.spawn(a, a.chest() + aim * 0.8, aim.rotated(Vector3.UP, deg_to_rad(-16 + 8 * i)) * 80.0, inf8, "bullet", {"range": r})
+				VFX.muzzle(a.chest() + aim * 0.9, aim, "shotgun", "pellet")
 				Audio.play_sfx("gun_shotgun", a.global_position))
 		"fa_special":
 			_act(a, "shoot", 0.4, 0.2, func():
@@ -153,15 +163,19 @@ static func use(a: Actor, id: String, aim: Vector3) -> bool:
 				inf9.melee = false
 				inf9.dtype = "fire"
 				Projectile.spawn(a, a.chest() + aim * 0.8, aim * 55.0, inf9, "plasma", {"range": r, "splash": 3.5, "color": Color(1.0, 0.5, 0.2)})
+				VFX.muzzle(a.chest() + aim * 0.9, aim, "plasma_cannon", "plasma")
 				Audio.play_sfx("explosion", a.global_position, -6.0))
 		"st_shield":
 			a.shield_hp = 40.0 + 2.0 * a.data.mastery_level("staff") + a.level * 3.0
 			a.apply_status("magic_shield", 12.0)
 			VFX.ring(a.global_position, 1.5, Color(0.5, 0.7, 1.0), 0.5)
+			VFX.burst(a.chest(), Color(0.55, 0.75, 1.0), 10, 0.3)
 			Audio.play_sfx("heal", a.global_position)
 		"st_overload":
+			MagicFX.charge(a, a.data.best_school(), 0.25, true)
 			_act(a, "cast", 0.5, 0.5, func():
 				var school2 := a.data.best_school()
+				MagicFX.release(a.chest() + aim * 0.8, aim, school2 if school2 != "" else "energy")
 				for i in 6:
 					var info10 := Combat.weapon_info(a, 0.9)
 					info10.melee = false
@@ -173,10 +187,39 @@ static func use(a: Actor, id: String, aim: Vector3) -> bool:
 			_act(a, "kick", 0.45, 0.45, func():
 				var inf11 := Combat.weapon_info(a, 1.2)
 				inf11.knock = 9.0
-				Combat.melee(a, 2.0, 80.0, inf11, 1))
+				Combat.melee(a, 2.0, 80.0, inf11, 1)
+				VFX.shock(a.global_position + a.facing * 1.0, 0.8, Color(1.0, 0.95, 0.85, 0.6), 0.2))
 		_:
 			return false
 	return true
 
 static func _act(a: Actor, anim: String, dur: float, impact: float, cb: Callable) -> void:
 	a.start_action("skill", dur, impact, {"anim": anim, "cb": cb})
+
+# ---------------------------------------------------------------- visuals only
+static func _smoke(p: Vector3, s: float) -> void:
+	var mg = VFX.mgr()
+	if mg == null:
+		return
+	mg.emit(p, {"n": int(16 * s), "life": 1.0, "mat": "mix", "col": Color(0.12, 0.1, 0.16, 0.85), "ramp": "smoke", "size": 1.0 * s, "shape": "sphere", "rad": 0.4, "v0": 0.8, "v1": 2.0, "damp": 2.5, "grav": Vector3(0, 0.4, 0), "curve": "puff", "critical": true})
+
+static func _dash_lines(a: Actor, aim: Vector3) -> void:
+	var mg = VFX.mgr()
+	if mg == null:
+		return
+	mg.emit(a.chest(), {"n": 12, "life": 0.3, "mat": "streak", "col": Color(1, 1, 1, 0.7), "size": 0.8, "shape": "sphere", "rad": 0.5, "v0": 8.0, "v1": 12.0, "dir": -aim, "spread": 8.0, "grav": Vector3.ZERO})
+	mg.emit(a.global_position + Vector3(0, 0.2, 0), {"n": 8, "life": 0.6, "mat": "mix", "col": Color(0.7, 0.64, 0.55, 0.6), "ramp": "smoke", "size": 0.6, "v0": 0.5, "v1": 1.5, "dir": -aim, "spread": 40.0, "grav": Vector3(0, 0.3, 0), "curve": "puff"})
+
+static func _aura(a: Actor, c: Color) -> void:
+	var mg = VFX.mgr()
+	if mg == null:
+		return
+	mg.emit(a.global_position + Vector3(0, 0.1, 0), {"n": 24, "life": 0.8, "mat": "add", "col": c, "size": 0.3, "shape": "ring", "rad": 0.8, "v0": 2.5, "v1": 5.0, "dir": Vector3.UP, "spread": 8.0, "grav": Vector3.ZERO, "ramp": "late", "critical": true})
+	mg.glow(a.chest(), c, 2.0, 0.3)
+
+static func _glint(a: Actor, delay: float) -> void:
+	a.get_tree().create_timer(delay, false).timeout.connect(func():
+		if is_instance_valid(a) and not a.is_dead and VFX.mgr() != null:
+			var tip: Vector3 = MagicFX.hand_pos(a)
+			VFX.mgr().emit(tip, {"n": 1, "exact": true, "life": 0.3, "lrand": 0.0, "mat": "star", "col": Color(1, 1, 0.85), "size": 0.9, "svar": 0.0, "v0": 0.0, "v1": 0.0, "grav": Vector3.ZERO, "curve": "flash", "critical": true})
+			VFX.mgr().glow(tip, Color(1, 0.95, 0.8), 0.6, 0.25))

@@ -48,6 +48,8 @@ func _build() -> void:
 	var c := color()
 	_vis = Node3D.new()
 	add_child(_vis)
+	if MagicFX.build_zone(self):
+		return
 	var disc := MeshInstance3D.new()
 	disc.mesh = MeshLib.cyl(1.0, 1.0, 0.03, 24)
 	disc.material_override = MeshLib.mat(Color(c.r, c.g, c.b, 0.28 if kind != "mine" else 0.5), 0.0, 1.0, 1.5, true)
@@ -92,7 +94,10 @@ func _physics_process(delta: float) -> void:
 	if life <= 0.0:
 		queue_free()
 		return
-	_vis.rotation.y += delta * (2.0 if kind in ["timeslow", "rift"] else 0.0)
+	if life < 0.5:
+		MagicFX.zone_fade(self)
+	if not _vis.has_meta("fx"):
+		_vis.rotation.y += delta * (2.0 if kind in ["timeslow", "rift"] else 0.0)
 	_acc += delta
 	if _acc < tick:
 		return
@@ -119,6 +124,9 @@ func _physics_process(delta: float) -> void:
 	var s = src if (src != null and is_instance_valid(src)) else null
 	match kind:
 		"fire", "blizzard", "dark", "electric":
+			if kind == "electric" and VFX.mgr() != null:
+				var an := randf() * TAU
+				VFX.lightning(global_position + Vector3(0, 0.2, 0), global_position + Vector3(cos(an) * radius, 0.15, sin(an) * radius), color(), 0.12, 0.04, 1)
 			for a in victims:
 				var inf := info.duplicate()
 				inf.proc = true
@@ -134,7 +142,7 @@ func _physics_process(delta: float) -> void:
 			if victims.size() > 0:
 				if kind == "timetrap":
 					victims[0].apply_status("stasis", params.get("stasis", 4.0))
-					VFX.ring(global_position, radius * 1.5, color(), 0.5)
+					MagicFX.time_snap(global_position, radius * 1.5)
 					Audio.play_sfx("time_slow", global_position)
 					Combat.deal(s, victims[0], info.duplicate())
 				else:

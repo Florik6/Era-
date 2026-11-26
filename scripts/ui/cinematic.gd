@@ -82,7 +82,10 @@ func is_playing() -> bool:
 
 ## True if this title was just shown as a cinematic (HUD skips the banner).
 func claims(title: String) -> bool:
-	return _recent.has(title) and _clock - float(_recent[title]) < 5.0
+	for t in _recent:
+		if _clock - float(_recent[t]) < 5.0 and (t == title or title.find(t) >= 0 or t.find(title) >= 0):
+			return true
+	return false
 
 func _danger() -> bool:
 	var pl = world.player if world else null

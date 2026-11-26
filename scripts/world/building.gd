@@ -25,8 +25,12 @@ var door_out := Vector3.ZERO
 var door_in := Vector3.ZERO
 var interior_points: Array = []
 var viewer: Node3D = null          # optional override for roof hiding (tests)
+var chimney_top := Vector3.INF     # local position of the chimney top (smoke), INF = none
 var _roof: MeshInstance3D
 var _upper: MeshInstance3D
+var _base: MeshInstance3D
+var _variant := 0
+var _split: Array = []             # [base, lows[4], ups[4]] MeshInstances when the player is inside
 var _check := 0.0
 var _inside := false
 var _rng := RandomNumberGenerator.new()
@@ -58,17 +62,11 @@ func _ready() -> void:
 
 ## Builds all geometry. Must be called after the node is in the tree and positioned.
 func build() -> void:
-	var variant := _rng.randi() % 3
-	var key := "%d|%s|%d|%d|%d|%s" % [era, kind, int(w * 10), int(d * 10), variant, has_secret]
-	var meshes: Array
-	if _mesh_cache.has(key):
-		meshes = _mesh_cache[key]
-	else:
-		meshes = _make_meshes(variant)
-		_mesh_cache[key] = meshes
-	var base := MeshInstance3D.new()
-	base.mesh = meshes[0]
-	add_child(base)
+	_variant = _rng.randi() % 6
+	var meshes: Array = _meshes(false)
+	_base = MeshInstance3D.new()
+	_base.mesh = meshes[0]
+	add_child(_base)
 	_upper = MeshInstance3D.new()
 	_upper.mesh = meshes[1]
 	add_child(_upper)
@@ -84,6 +82,17 @@ func build() -> void:
 	interior_points.clear()
 	for p in [Vector3(-w * 0.25, 0, -d * 0.2), Vector3(w * 0.25, 0, -d * 0.2), Vector3(0, 0, 0), Vector3(-w * 0.2, 0, d * 0.2), Vector3(w * 0.2, 0, d * 0.2)]:
 		interior_points.append(to_global(p))
+	chimney_top = _chimney_top(_palette(_variant % 3))
+	if chimney_top != Vector3.INF and bool(Settings.vq("ambient_life", true)) and (kind != "house" or _rng.randf() < 0.6):
+		AmbientLife.smoke(self, chimney_top + Vector3(0, 0.25, 0), float(Settings.vq("particles", 0.7)), 0.9)
+
+func _meshes(split: bool) -> Array:
+	var key := "%d|%s|%d|%d|%d|%s|%s" % [era, kind, int(w * 10), int(d * 10), _variant, has_secret, split]
+	if _mesh_cache.has(key):
+		return _mesh_cache[key]
+	var meshes := _make_meshes(_variant, split)
+	_mesh_cache[key] = meshes
+	return meshes
 
 # ---------------------------------------------------------------- style
 func _palette(variant: int) -> Dictionary:
@@ -91,10 +100,10 @@ func _palette(variant: int) -> Dictionary:
 		0:
 			var walls := [Color(0.86, 0.8, 0.66), Color(0.62, 0.6, 0.57), Color(0.8, 0.74, 0.6)]
 			var roofs := [Color(0.62, 0.5, 0.3), Color(0.36, 0.34, 0.4), Color(0.58, 0.28, 0.2)]
-			return {"wall": walls[variant], "trim": Color(0.34, 0.23, 0.13), "roof": roofs[variant], "floor": Color(0.45, 0.33, 0.2), "roof_type": "steep", "beams": variant != 1, "window": Color(0.25, 0.2, 0.15)}
+			return {"wall": walls[variant], "trim": Color(0.34, 0.23, 0.13), "roof": roofs[variant], "floor": Color(0.45, 0.33, 0.2), "roof_type": "steep", "beams": variant != 1, "window": Color(0.25, 0.2, 0.15), "shutter": Color(0.3, 0.42, 0.28)}
 		1:
 			var walls1 := [Color(0.9, 0.74, 0.5), Color(0.93, 0.87, 0.72), Color(0.82, 0.52, 0.36)]
-			return {"wall": walls1[variant], "trim": Color(0.95, 0.92, 0.85), "roof": Color(0.76, 0.38, 0.22), "floor": Color(0.62, 0.42, 0.3), "roof_type": "low", "beams": false, "window": Color(0.2, 0.42, 0.35)}
+			return {"wall": walls1[variant], "trim": Color(0.95, 0.92, 0.85), "roof": Color(0.76, 0.38, 0.22), "floor": Color(0.62, 0.42, 0.3), "roof_type": "low", "beams": false, "window": Color(0.2, 0.42, 0.35), "shutter": [Color(0.25, 0.5, 0.4), Color(0.2, 0.35, 0.6), Color(0.6, 0.3, 0.25)][variant]}
 		2:
 			var walls2 := [Color(0.56, 0.28, 0.2), Color(0.46, 0.25, 0.2), Color(0.42, 0.4, 0.38)]
 			return {"wall": walls2[variant], "trim": Color(0.3, 0.28, 0.26), "roof": Color(0.22, 0.21, 0.21), "floor": Color(0.35, 0.3, 0.26), "roof_type": "flat", "beams": false, "window": Color(0.18, 0.22, 0.25), "chimney": true}
@@ -106,10 +115,41 @@ func _palette(variant: int) -> Dictionary:
 			var neon := [Color(0.25, 0.9, 1.0), Color(1.0, 0.25, 0.8), Color(0.5, 1.0, 0.4)]
 			return {"wall": walls4[variant], "trim": Color(0.15, 0.15, 0.2), "roof": Color(0.18, 0.18, 0.22), "floor": Color(0.25, 0.26, 0.3), "roof_type": "flat", "beams": false, "window": Color(0.4, 0.8, 1.0), "glass": true, "neon": neon[variant]}
 
-func _make_meshes(variant: int) -> Array:
-	var pal := _palette(variant)
-	var base := Props.Merger.new()
-	var upper := Props.Merger.new()
+func _has_chimney(pal: Dictionary) -> bool:
+	if pal.roof_type == "flat":
+		return pal.get("chimney", false) or kind == "smithy"
+	return kind == "smithy" or (kind == "inn" and era == 0) or (_variant >= 3 and era <= 1 and kind in ["house", "inn", "hall"])
+
+func _chimney_top(pal: Dictionary) -> Vector3:
+	if not _has_chimney(pal):
+		return Vector3.INF
+	if pal.roof_type == "flat":
+		return Vector3(w * 0.3, wall_h + 2.9, -d * 0.25)
+	var rh := minf(w, d) * (0.62 if pal.roof_type == "steep" else 0.36)
+	return Vector3(w * 0.3, wall_h + rh * 0.6 + 0.8, -d * 0.2)
+
+## Wall part routed by side (0 front +Z, 1 back -Z, 2 right +X, 3 left -X).
+## Outside view: low parts merge into the base mesh, high parts into "upper".
+## Split view (player inside): one low + one high mesh per side.
+func _wp(M: Dictionary, side: int, low: bool, mesh: Mesh, mat: Material, pos: Vector3, rot: Vector3 = Vector3.ZERO) -> void:
+	var mg: Props.Merger
+	if M.split:
+		mg = M.lows[side] if low else M.ups[side]
+	else:
+		mg = M.base if low else M.upper
+	mg.part(mesh, mat, pos, rot)
+
+func _make_meshes(variant: int, split: bool = false) -> Array:
+	var pal := _palette(variant % 3)
+	var fancy := variant >= 3
+	if fancy and era == 0:
+		var roofs := [Color(0.62, 0.5, 0.3), Color(0.36, 0.34, 0.4), Color(0.58, 0.28, 0.2)]
+		pal.roof = roofs[(variant + 1) % 3]
+	var M := {"split": split, "base": Props.Merger.new(), "upper": Props.Merger.new(), "lows": [], "ups": []}
+	for i in 4:
+		M.lows.append(Props.Merger.new())
+		M.ups.append(Props.Merger.new())
+	var base: Props.Merger = M.base
 	var roof := Props.Merger.new()
 	var wall_m := MeshLib.mat(pal.wall, 0.4 if era == 4 else 0.0, 0.8)
 	var trim_m := MeshLib.mat(pal.trim)
@@ -123,21 +163,21 @@ func _make_meshes(variant: int) -> Array:
 	base.part(MeshLib.box(Vector3(w - 0.1, 0.06, d - 0.1)), floor_m, Vector3(0, 0.0, 0))
 	# walls: back (maybe split for secret), left, right, front split around the door
 	var gap := 1.7
-	var segs: Array = []   # [center_x, center_z, len_x, len_z]
+	var segs: Array = []   # [center_x, center_z, len_x, len_z, side]
 	if has_secret:
-		var side := (w - 1.8) * 0.5
-		segs.append([-(w * 0.5) + side * 0.5, -d * 0.5, side, t])
-		segs.append([(w * 0.5) - side * 0.5, -d * 0.5, side, t])
+		var sd0 := (w - 1.8) * 0.5
+		segs.append([-(w * 0.5) + sd0 * 0.5, -d * 0.5, sd0, t, 1])
+		segs.append([(w * 0.5) - sd0 * 0.5, -d * 0.5, sd0, t, 1])
 	else:
-		segs.append([0.0, -d * 0.5, w, t])
-	segs.append([-w * 0.5, 0.0, t, d])
-	segs.append([w * 0.5, 0.0, t, d])
+		segs.append([0.0, -d * 0.5, w, t, 1])
+	segs.append([-w * 0.5, 0.0, t, d, 3])
+	segs.append([w * 0.5, 0.0, t, d, 2])
 	var fl := (w - gap) * 0.5
-	segs.append([-(w * 0.5) + fl * 0.5, d * 0.5, fl, t])
-	segs.append([(w * 0.5) - fl * 0.5, d * 0.5, fl, t])
-	for s in segs:
-		base.part(MeshLib.box(Vector3(s[2], low, s[3])), wall_m, Vector3(s[0], low * 0.5, s[1]))
-		upper.part(MeshLib.box(Vector3(s[2], up_h, s[3])), wall_m, Vector3(s[0], low + up_h * 0.5, s[1]))
+	segs.append([-(w * 0.5) + fl * 0.5, d * 0.5, fl, t, 0])
+	segs.append([(w * 0.5) - fl * 0.5, d * 0.5, fl, t, 0])
+	for sg in segs:
+		_wp(M, sg[4], true, MeshLib.box(Vector3(sg[2], low, sg[3])), wall_m, Vector3(sg[0], low * 0.5, sg[1]))
+		_wp(M, sg[4], false, MeshLib.box(Vector3(sg[2], up_h, sg[3])), wall_m, Vector3(sg[0], low + up_h * 0.5, sg[1]))
 	if has_secret:
 		# the hidden room behind the back wall
 		var sd := 2.6
@@ -145,47 +185,64 @@ func _make_meshes(variant: int) -> Array:
 		base.part(MeshLib.box(Vector3(3.2, 0.06, sd)), floor_m, Vector3(0, 0.0, bz))
 		base.part(MeshLib.box(Vector3(3.4, 1.6, sd + 0.2)), stone_m, Vector3(0, -0.79, bz))
 		for s2 in [[-1.6, bz, t, sd], [1.6, bz, t, sd], [0.0, -d * 0.5 - sd, 3.4, t]]:
-			base.part(MeshLib.box(Vector3(s2[2], low, s2[3])), wall_m, Vector3(s2[0], low * 0.5, s2[1]))
-			upper.part(MeshLib.box(Vector3(s2[2], up_h, s2[3])), wall_m, Vector3(s2[0], low + up_h * 0.5, s2[1]))
+			_wp(M, 1, true, MeshLib.box(Vector3(s2[2], low, s2[3])), wall_m, Vector3(s2[0], low * 0.5, s2[1]))
+			_wp(M, 1, false, MeshLib.box(Vector3(s2[2], up_h, s2[3])), wall_m, Vector3(s2[0], low + up_h * 0.5, s2[1]))
 		roof.part(MeshLib.box(Vector3(3.6, 0.25, sd + 0.3)), MeshLib.mat(pal.roof), Vector3(0, wall_h + 0.12, bz))
-	# lintel over the door
-	upper.part(MeshLib.box(Vector3(gap, wall_h - 2.4, t)), wall_m, Vector3(door_x, 2.4 + (wall_h - 2.4) * 0.5, d * 0.5))
-	# door frame
-	base.part(MeshLib.box(Vector3(0.12, 2.45, t + 0.08)), trim_m, Vector3(door_x - gap * 0.5, 1.22, d * 0.5))
-	base.part(MeshLib.box(Vector3(0.12, 2.45, t + 0.08)), trim_m, Vector3(door_x + gap * 0.5, 1.22, d * 0.5))
-	upper.part(MeshLib.box(Vector3(gap + 0.2, 0.14, t + 0.08)), trim_m, Vector3(door_x, 2.45, d * 0.5))
+	# lintel over the door + door frame
+	_wp(M, 0, false, MeshLib.box(Vector3(gap, wall_h - 2.4, t)), wall_m, Vector3(door_x, 2.4 + (wall_h - 2.4) * 0.5, d * 0.5))
+	_wp(M, 0, true, MeshLib.box(Vector3(0.12, 2.45, t + 0.08)), trim_m, Vector3(door_x - gap * 0.5, 1.22, d * 0.5))
+	_wp(M, 0, true, MeshLib.box(Vector3(0.12, 2.45, t + 0.08)), trim_m, Vector3(door_x + gap * 0.5, 1.22, d * 0.5))
+	_wp(M, 0, false, MeshLib.box(Vector3(gap + 0.2, 0.14, t + 0.08)), trim_m, Vector3(door_x, 2.45, d * 0.5))
 	# corner posts / beams (timber framing)
 	if pal.get("beams", false):
 		for cx in [-w * 0.5, w * 0.5]:
 			for cz in [-d * 0.5, d * 0.5]:
-				base.part(MeshLib.box(Vector3(0.22, low, 0.22)), trim_m, Vector3(cx, low * 0.5, cz))
-				upper.part(MeshLib.box(Vector3(0.22, up_h, 0.22)), trim_m, Vector3(cx, low + up_h * 0.5, cz))
-		upper.part(MeshLib.box(Vector3(w + 0.05, 0.16, t + 0.06)), trim_m, Vector3(0, wall_h - 0.1, d * 0.5))
-		upper.part(MeshLib.box(Vector3(w + 0.05, 0.16, t + 0.06)), trim_m, Vector3(0, wall_h - 0.1, -d * 0.5))
-		upper.part(MeshLib.box(Vector3(w + 0.05, 0.12, t + 0.06)), trim_m, Vector3(0, 1.15, d * 0.5))
-	# windows on side walls and the front
+				var side := 0 if cz > 0.0 else 1
+				_wp(M, side, true, MeshLib.box(Vector3(0.22, low, 0.22)), trim_m, Vector3(cx, low * 0.5, cz))
+				_wp(M, side, false, MeshLib.box(Vector3(0.22, up_h, 0.22)), trim_m, Vector3(cx, low + up_h * 0.5, cz))
+		_wp(M, 0, false, MeshLib.box(Vector3(w + 0.05, 0.16, t + 0.06)), trim_m, Vector3(0, wall_h - 0.1, d * 0.5))
+		_wp(M, 1, false, MeshLib.box(Vector3(w + 0.05, 0.16, t + 0.06)), trim_m, Vector3(0, wall_h - 0.1, -d * 0.5))
+		_wp(M, 0, false, MeshLib.box(Vector3(w + 0.05, 0.12, t + 0.06)), trim_m, Vector3(0, 1.15, d * 0.5))
+		if fancy:
+			for sx0 in [-1.0, 1.0]:
+				_wp(M, 0, false, MeshLib.box(Vector3(0.14, up_h * 1.1, 0.06)), trim_m, Vector3(sx0 * w * 0.25, low + up_h * 0.5, d * 0.5 + 0.17), Vector3(0, 0, sx0 * 35.0))
+	# windows on side walls and the front (+ shutters / flower boxes on fancy facades)
 	var win_m := MeshLib.mat(pal.window, 0.3 if pal.get("glass", false) else 0.0, 0.3, 0.5 if era >= 3 else 0.0)
+	var shut_m := MeshLib.mat(pal.get("shutter", pal.trim))
 	var wy := low + minf(1.2, up_h * 0.5)
 	var nwin := maxi(1, int(d / 3.5))
+	var shutters := fancy and era <= 1
 	for i in nwin:
 		var z := -d * 0.5 + d * (i + 0.5) / nwin
 		for sx in [-1.0, 1.0]:
-			upper.part(MeshLib.box(Vector3(0.06, 0.9, 0.8)), win_m, Vector3(sx * (w * 0.5 + 0.16), wy, z))
+			var side2 := 2 if sx > 0.0 else 3
+			_wp(M, side2, false, MeshLib.box(Vector3(0.06, 0.9, 0.8)), win_m, Vector3(sx * (w * 0.5 + 0.16), wy, z))
+			if shutters:
+				for sz2 in [-1.0, 1.0]:
+					_wp(M, side2, false, MeshLib.box(Vector3(0.05, 0.95, 0.38)), shut_m, Vector3(sx * (w * 0.5 + 0.19), wy, z + sz2 * 0.62))
 	for sx2 in [-1.0, 1.0]:
 		if fl > 1.6:
-			upper.part(MeshLib.box(Vector3(0.8, 0.9, 0.06)), win_m, Vector3(sx2 * (gap * 0.5 + fl * 0.5), wy, d * 0.5 + 0.16))
+			var wx: float = sx2 * (gap * 0.5 + fl * 0.5)
+			_wp(M, 0, false, MeshLib.box(Vector3(0.8, 0.9, 0.06)), win_m, Vector3(wx, wy, d * 0.5 + 0.16))
+			if shutters:
+				for sz3 in [-1.0, 1.0]:
+					_wp(M, 0, false, MeshLib.box(Vector3(0.38, 0.95, 0.05)), shut_m, Vector3(wx + sz3 * 0.62, wy, d * 0.5 + 0.19))
+			if fancy and era == 1:
+				_wp(M, 0, false, MeshLib.box(Vector3(0.9, 0.2, 0.25)), MeshLib.mat(Color(0.55, 0.35, 0.22)), Vector3(wx, wy - 0.55, d * 0.5 + 0.28))
+				_wp(M, 0, false, MeshLib.box(Vector3(0.8, 0.14, 0.2)), MeshLib.mat(Color(0.85, 0.3, 0.35)), Vector3(wx, wy - 0.4, d * 0.5 + 0.28))
 	if kind == "tower":
 		for i in 2:
-			upper.part(MeshLib.box(Vector3(0.6, 0.8, 0.06)), win_m, Vector3(0, low + 2.8 + i * 1.6, d * 0.5 + 0.16))
+			_wp(M, 0, false, MeshLib.box(Vector3(0.6, 0.8, 0.06)), win_m, Vector3(0, low + 2.8 + i * 1.6, d * 0.5 + 0.16))
 	if pal.has("neon"):
 		var nm := MeshLib.mat(pal.neon, 0.0, 0.4, 3.0)
-		upper.part(MeshLib.box(Vector3(w + 0.1, 0.08, 0.08)), nm, Vector3(0, wall_h - 0.05, d * 0.5 + 0.18))
-		upper.part(MeshLib.box(Vector3(0.08, up_h, 0.08)), nm, Vector3(-w * 0.5 - 0.15, low + up_h * 0.5, d * 0.5 + 0.15))
-		upper.part(MeshLib.box(Vector3(0.08, up_h, 0.08)), nm, Vector3(w * 0.5 + 0.15, low + up_h * 0.5, d * 0.5 + 0.15))
+		_wp(M, 0, false, MeshLib.box(Vector3(w + 0.1, 0.08, 0.08)), nm, Vector3(0, wall_h - 0.05, d * 0.5 + 0.18))
+		_wp(M, 0, false, MeshLib.box(Vector3(0.08, up_h, 0.08)), nm, Vector3(-w * 0.5 - 0.15, low + up_h * 0.5, d * 0.5 + 0.15))
+		_wp(M, 0, false, MeshLib.box(Vector3(0.08, up_h, 0.08)), nm, Vector3(w * 0.5 + 0.15, low + up_h * 0.5, d * 0.5 + 0.15))
 	# shop signs
 	if kind in ["inn", "shop", "smithy"]:
 		var sc: Color = {"inn": Color(0.75, 0.55, 0.2), "shop": Color(0.25, 0.45, 0.7), "smithy": Color(0.35, 0.35, 0.38)}[kind]
-		upper.part(MeshLib.box(Vector3(1.0, 0.6, 0.06)), MeshLib.mat(sc, 0.0, 0.6, 0.6 if era >= 3 else 0.0), Vector3(door_x + gap * 0.5 + 0.7, 2.6, d * 0.5 + 0.35))
+		_wp(M, 0, false, MeshLib.box(Vector3(1.0, 0.6, 0.06)), MeshLib.mat(sc, 0.0, 0.6, 0.6 if era >= 3 else 0.0), Vector3(door_x + gap * 0.5 + 0.7, 2.6, d * 0.5 + 0.35))
+		_wp(M, 0, false, MeshLib.box(Vector3(0.06, 0.06, 0.5)), trim_m, Vector3(door_x + gap * 0.5 + 0.7, 2.95, d * 0.5 + 0.2))
 	# roof
 	var roof_m := MeshLib.mat(pal.roof, 0.3 if era == 4 else 0.0, 0.8)
 	match pal.roof_type:
@@ -201,21 +258,36 @@ func _make_meshes(variant: int) -> Array:
 				roof.part(MeshLib.prism(Vector3(w + 0.9, rh, d + 0.7)), roof_m, Vector3(0, wall_h + rh * 0.5, 0))
 				for sz in [-1.0, 1.0]:
 					roof.part(MeshLib.prism(Vector3(w - 0.2, rh * 0.9, 0.25)), wall_m, Vector3(0, wall_h + rh * 0.45, sz * (d * 0.5 - 0.05)))
-			if kind == "smithy" or (kind == "inn" and era == 0):
+			if _has_chimney(pal):
 				roof.part(MeshLib.box(Vector3(0.7, 1.6, 0.7)), stone_m, Vector3(w * 0.3, wall_h + rh * 0.6, -d * 0.2))
+				roof.part(MeshLib.box(Vector3(0.85, 0.12, 0.85)), MeshLib.mat(Color(0.3, 0.28, 0.27)), Vector3(w * 0.3, wall_h + rh * 0.6 + 0.8, -d * 0.2))
+			if fancy and kind != "tower":
+				# ridge beam
+				roof.part(MeshLib.box(Vector3(0.18, 0.18, maxf(w, d) + 0.8)), trim_m, Vector3(0, wall_h + rh + 0.02, 0), Vector3(0, 90 if w >= d else 0, 0))
 		_:
 			roof.part(MeshLib.box(Vector3(w + 0.3, 0.3, d + 0.3)), roof_m, Vector3(0, wall_h + 0.15, 0))
 			for s3 in [[0.0, d * 0.5 + 0.1, w + 0.4, 0.2], [0.0, -d * 0.5 - 0.1, w + 0.4, 0.2], [w * 0.5 + 0.1, 0.0, 0.2, d + 0.4], [-w * 0.5 - 0.1, 0.0, 0.2, d + 0.4]]:
 				roof.part(MeshLib.box(Vector3(s3[2], 0.45, s3[3])), MeshLib.mat(pal.wall.darkened(0.15)), Vector3(s3[0], wall_h + 0.4, s3[1]))
-			if pal.get("chimney", false) or kind == "smithy":
+			if _has_chimney(pal):
 				roof.part(MeshLib.cyl(0.35, 0.45, 2.8, 8), MeshLib.mat(Color(0.5, 0.26, 0.18)), Vector3(w * 0.3, wall_h + 1.5, -d * 0.25))
 			if era == 3:
 				roof.part(MeshLib.box(Vector3(1.2, 0.7, 1.0)), MeshLib.mat(Color(0.7, 0.72, 0.74), 0.5, 0.5), Vector3(-w * 0.2, wall_h + 0.65, d * 0.1))
+				if fancy:
+					roof.part(MeshLib.cyl(0.03, 0.03, 1.6, 4), MeshLib.mat(Color(0.6, 0.6, 0.62), 0.7, 0.3), Vector3(w * 0.3, wall_h + 1.1, -d * 0.3))
+					roof.part(MeshLib.sphere(0.35, 8, 4), MeshLib.mat(Color(0.85, 0.85, 0.88), 0.4, 0.4), Vector3(w * 0.3, wall_h + 1.8, -d * 0.3), Vector3(60, 0, 0), Vector3(1, 0.3, 1))
 			if era == 4:
 				roof.part(MeshLib.cyl(0.04, 0.05, 2.5, 4), MeshLib.mat(Color(0.5, 0.5, 0.55), 0.8, 0.3), Vector3(w * 0.3, wall_h + 1.5, 0))
 				roof.part(MeshLib.sphere(0.12, 6, 4), MeshLib.mat(pal.neon, 0.0, 0.4, 3.0), Vector3(w * 0.3, wall_h + 2.8, 0))
+			if era == 2 and fancy:
+				roof.part(MeshLib.box(Vector3(w * 0.5, 0.9, 0.9)), MeshLib.mat(Color(0.35, 0.33, 0.32), 0.3, 0.6), Vector3(-w * 0.15, wall_h + 0.6, 0), Vector3(0, 0, 0))
 	_static_furniture(base, pal)
-	return [base.commit(), upper.commit(), roof.commit()]
+	if split:
+		var out: Array = [base.commit(), [], [], roof.commit()]
+		for i in 4:
+			out[1].append(M.lows[i].commit())
+			out[2].append(M.ups[i].commit())
+		return out
+	return [base.commit(), M.upper.commit(), roof.commit()]
 
 func _static_furniture(m: Props.Merger, pal: Dictionary) -> void:
 	var wood := MeshLib.mat(Color(0.45, 0.3, 0.17) if era <= 2 else (Color(0.55, 0.56, 0.6) if era == 3 else Color(0.3, 0.32, 0.4)), 0.5 if era >= 3 else 0.0, 0.6)
@@ -502,6 +574,61 @@ func _process(delta: float) -> void:
 		_inside = inside
 		_roof.visible = not inside
 		_upper.visible = not inside
+		_base.visible = not inside
+		if inside:
+			_ensure_split()
+		for n in _split_nodes():
+			n.visible = inside
+	if _inside:
+		_update_cutaway()
+
+## Per-side wall meshes, created the first time the player walks in.
+func _ensure_split() -> void:
+	if not _split.is_empty():
+		return
+	var ms: Array = _meshes(true)
+	var b := MeshInstance3D.new()
+	b.mesh = ms[0]
+	add_child(b)
+	var lows: Array = []
+	var ups: Array = []
+	for i in 4:
+		var l := MeshInstance3D.new()
+		l.mesh = ms[1][i]
+		add_child(l)
+		lows.append(l)
+		var u := MeshInstance3D.new()
+		u.mesh = ms[2][i]
+		add_child(u)
+		ups.append(u)
+	_split = [b, lows, ups]
+
+func _split_nodes() -> Array:
+	if _split.is_empty():
+		return []
+	var out: Array = [_split[0]]
+	out.append_array(_split[1])
+	out.append_array(_split[2])
+	return out
+
+## Hides walls facing the camera (fully) and the high part of side walls,
+## keeping the far walls so the room stays readable.
+func _update_cutaway() -> void:
+	if _split.is_empty():
+		return
+	var back := Vector3(0, 0, 1)
+	var vp := get_viewport()
+	var cam: Camera3D = vp.get_camera_3d() if vp else null
+	if cam:
+		back = cam.global_transform.basis.z
+	back.y = 0.0
+	back = back.normalized() if back.length() > 0.01 else Vector3(0, 0, 1)
+	var normals := [Vector3(0, 0, 1), Vector3(0, 0, -1), Vector3(1, 0, 0), Vector3(-1, 0, 0)]
+	for i in 4:
+		var wn: Vector3 = global_transform.basis * normals[i]
+		var f := wn.normalized().dot(back)
+		_split[1][i].visible = f < 0.35
+		_split[2][i].visible = f < -0.35
 
 ## Interactable hatch between the house and its cellar (player only).
 class Trapdoor extends Node3D:

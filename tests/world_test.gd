@@ -28,7 +28,7 @@ func _ready() -> void:
 	sun = DirectionalLight3D.new()
 	add_child(sun)
 	cam = Camera3D.new()
-	cam.fov = 50.0
+	cam.fov = 45.0
 	cam.far = 260.0
 	add_child(cam)
 	cam.make_current()
@@ -71,11 +71,13 @@ func _setup_era(e: int) -> void:
 	print("ERA %d: gen %.1f ms, overview(192) %.1f ms, settlements %d, pois %d, roads %d" % [e, t_gen, t_ov, gen.settlements.size(), gen.pois.size(), gen.roads.size()])
 
 func _look(target: Vector3, dist: float = 1.0) -> void:
-	cam.global_position = target + Vector3(0, 14, 10) * dist
+	# gameplay camera: ~11 m away, pitch 50 deg, looking along -Z
+	var d := 11.0 * dist
+	cam.global_position = target + Vector3(0, sin(deg_to_rad(50.0)) * d, cos(deg_to_rad(50.0)) * d)
 	cam.look_at(target, Vector3.UP)
 	marker.global_position = target
 
-func _shot(nm: String, frames: int = 3) -> void:
+func _shot(nm: String, frames: int = 4) -> void:
 	var t0 := Time.get_ticks_msec()
 	for i in frames:
 		await get_tree().process_frame
@@ -83,76 +85,96 @@ func _shot(nm: String, frames: int = 3) -> void:
 	img.save_png(OUT + nm + ".png")
 	print("shot %s (%d ms for %d frames)" % [nm, Time.get_ticks_msec() - t0, frames])
 
+func _at(p: Vector2) -> Vector3:
+	return Vector3(p.x, gen.height(p.x, p.y), p.y)
+
+func _goto(t: Vector3) -> void:
+	streamer.force_load_around(t)
+
+## A point on a main road far from settlements (prefer near a crossroads).
+func _road_spot() -> Vector2:
+	for c in gen.crossroads:
+		var cp: Vector2 = c
+		var ok := true
+		for s in gen.settlements:
+			if cp.distance_to(s.pos) < float(s.radius) * 2.2:
+				ok = false
+		if ok and gen.road_type_at(cp) == "main":
+			return cp + Vector2(0, -3)
+	for r in gen.road_net:
+		if r.type == "main" and not r.bridge:
+			var m: Vector2 = (r.a + r.b) * 0.5
+			if gen.settlement_at(m.x, m.y, 2.5) == null:
+				return m
+	return gen.spawn_point()
+
+func _bridge_spot() -> Vector2:
+	for r in gen.road_net:
+		if r.bridge and r.type == "main":
+			return (r.a + r.b) * 0.5
+	for r in gen.road_net:
+		if r.bridge:
+			return (r.a + r.b) * 0.5
+	return Vector2.INF
+
+func _forest_spot() -> Vector2:
+	for r in gen.road_net:
+		if r.type == "trail" and not r.bridge:
+			var m: Vector2 = (r.a + r.b) * 0.5
+			if gen.biome(m.x, m.y) == "forest" and gen.settlement_at(m.x, m.y, 2.0) == null:
+				return m + Vector2(4, 0)
+	return gen.spawn_point() + Vector2(120, 40)
+
 func _run_era(e: int) -> void:
 	await _setup_era(e)
 	var sp := gen.spawn_point()
-	var target := Vector3(sp.x, gen.height(sp.x, sp.y), sp.y)
 	var t0 := Time.get_ticks_usec()
-	streamer.force_load_around(target)
-	var t_load := (Time.get_ticks_usec() - t0) / 1000.0
-	var bt: Array = streamer.build_times
-	var mx := 0.0
-	var sum := 0.0
-	for x in bt:
-		mx = maxf(mx, x)
-		sum += x
-	print("ERA %d: force_load %d chunks in %.0f ms (avg %.1f, max %.1f ms per chunk)" % [e, bt.size(), t_load, sum / maxf(1, bt.size()), mx])
-	_look(target)
-	await _shot("world_era%d" % e)
-	# wider overview of the village from higher up
-	_look(target, 1.9)
-	await _shot("world_era%d_wide" % e)
-	# wilderness: walk the camera to a forest/camp area and stream incrementally
-	var camp: Dictionary = gen.pois_of("camp")[0]
-	var cp: Vector2 = camp.pos
-	var ct := Vector3(cp.x, gen.height(cp.x, cp.y), cp.y)
-	streamer.build_times.clear()
-	for i in 25:
-		streamer.update_center(ct)
-		await get_tree().process_frame
-	var bt2: Array = streamer.build_times
-	var mx2 := 0.0
-	for x in bt2:
-		mx2 = maxf(mx2, x)
-	print("ERA %d: streamed %d chunks incrementally, max %.1f ms" % [e, bt2.size(), mx2])
-	_look(ct)
-	await _shot("world_era%d_camp" % e)
-	if e == 0 or e == 4:
-		# building interior with roof cut away
-		streamer.force_load_around(target)
-		var b: Building = null
-		for arr in streamer.buildings.values():
-			for bb in arr:
-				if bb.kind in ["inn", "house", "hall"]:
-					b = bb
-					break
-			if b:
+	var village := _at(sp)
+	_goto(village)
+	print("ERA %d: force_load %d chunks in %.0f ms" % [e, streamer.chunks.size(), (Time.get_ticks_usec() - t0) / 1000.0])
+	# village square with props (slightly zoomed out)
+	var s0: Dictionary = gen.settlement_at(sp.x, sp.y)
+	var vc := _at(s0.pos + Vector2(0, 4)) if s0 else village
+	_look(vc, 2.3)
+	await _shot("va_era%d_village" % e, 6)
+	# road between settlements / crossroads with signpost
+	var rs := _at(_road_spot())
+	_goto(rs)
+	_look(rs, 1.3)
+	await _shot("va_era%d_road" % e, 6)
+	var bs := _bridge_spot()
+	if bs != Vector2.INF:
+		var bt := _at(bs)
+		bt.y = maxf(bt.y, gen.water_level)
+		_goto(bt)
+		_look(bt, 1.6)
+		await _shot("va_era%d_bridge" % e, 6)
+	# forest / landscape along a trail
+	var fs := _at(_forest_spot())
+	_goto(fs)
+	_look(fs, 1.4)
+	await _shot("va_era%d_forest" % e, 6)
+	# interior with camera-side walls cut away
+	_goto(village)
+	var b: Building = null
+	for arr in streamer.buildings.values():
+		for bb in arr:
+			if bb.kind in ["inn", "house", "hall"]:
+				b = bb
 				break
 		if b:
-			var inside := b.to_global(Vector3(0, 0.1, 0))
-			b.viewer = marker
-			_look(inside, 0.8)
-			marker.global_position = inside
-			await _shot("world_era%d_interior" % e, 10)
-			b.viewer = null
-		# lair
-		var lair: Dictionary = gen.pois_of("lair")[0]
-		var lp: Vector2 = lair.pos
-		var lt := Vector3(lp.x, gen.height(lp.x, lp.y), lp.y)
-		streamer.force_load_around(lt)
-		_look(lt, 1.6)
-		await _shot("world_era%d_lair" % e)
-		# night + rain at the village
-		streamer.force_load_around(target)
-		dn.time_override = 23.0
-		weather.set_weather("rain", 999.0)
-		_look(target)
-		for i in 8:
-			await get_tree().process_frame
-		await _shot("world_era%d_night_rain" % e)
-		dn.time_override = 10.5
-		weather.set_weather("fog", 999.0)
-		for i in 10:
-			await get_tree().process_frame
-		await _shot("world_era%d_fog" % e)
-		weather.set_weather("clear", 999.0)
+			break
+	if b:
+		var inside := b.to_global(Vector3(0, 0.1, 0))
+		b.viewer = marker
+		_look(inside, 0.85)
+		marker.global_position = inside
+		await _shot("va_era%d_interior" % e, 10)
+		b.viewer = null
+	# night at the village
+	dn.time_override = 22.5
+	_look(vc, 1.3)
+	for i in 6:
+		await get_tree().process_frame
+	await _shot("va_era%d_night" % e, 4)
+	dn.time_override = 10.5

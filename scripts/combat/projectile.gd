@@ -45,6 +45,12 @@ static func spawn(source, pos: Vector3, velocity: Vector3, inf: Dictionary, k: S
 	return p
 
 func _build() -> void:
+	var sch := MagicFX.proj_school(kind, info)
+	if sch != "" and MagicFX.dress_projectile(self, sch, kind, color):
+		set_meta("school", sch)
+		if vel.length() > 0.01:
+			look_at(global_position + vel, Vector3.UP)
+		return
 	var mi := MeshInstance3D.new()
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	match kind:
@@ -64,13 +70,9 @@ func _build() -> void:
 			mi.mesh = MeshLib.sphere(0.22 if kind != "fireball" else 0.35, 8, 6)
 			mi.material_override = MeshLib.mat(color, 0.0, 1.0, 3.5, true)
 	add_child(mi)
-	if kind in ["fireball", "plasma"] or (kind == "magic" and Settings.effective_quality >= Settings.Quality.HIGH):
-		var l := OmniLight3D.new()
-		l.light_color = color
-		l.light_energy = 1.2
-		l.omni_range = 4.0
-		l.shadow_enabled = false
-		add_child(l)
+	if kind == "plasma" and VFX.mgr() != null:
+		VFX.mgr().attach_light(self, color, 1.2, 4.0, Vector3.ZERO)
+	MagicFX.dress_basic(self, kind, color, info)
 	if vel.length() > 0.01:
 		look_at(global_position + vel, Vector3.UP)
 
@@ -124,12 +126,15 @@ func _physics_process(delta: float) -> void:
 			hit_ids[a.actor_id] = true
 			var inf := info.duplicate()
 			Combat.deal(src if (src != null and is_instance_valid(src)) else null, a, inf)
-			VFX.burst(closest, color, 6, 0.25)
+			if kind in ["arrow", "bolt"] and VFX.mgr() != null and randf() < 0.6:
+				VFX.mgr().stuck_arrow(closest, vel, 0.7 if kind == "arrow" else 0.45, a)
 			if pierce <= 0:
 				_end(closest)
 				return
 			pierce -= 1
 	if hit_world:
+		if VFX.mgr() != null and not has_meta("school") and splash <= 0.0:
+			VFX.mgr().world_impact(to, -vel.normalized(), kind, vel)
 		if hit_collider and hit_collider.has_method("take_hit"):
 			hit_collider.take_hit(info.get("amount", 5.0), info.get("dtype", "pierce"), src)
 		elif hit_collider and hit_collider.get_parent() and hit_collider.get_parent().has_method("take_hit"):
@@ -147,13 +152,22 @@ func _end(pos: Vector3, explode: bool = true) -> void:
 	if dead:
 		return
 	dead = true
+	var sch: String = get_meta("school", "")
+	MagicFX.detach_trails(self)
 	if splash > 0.0 and explode:
 		var inf := info.duplicate()
 		inf.amount *= 0.75
 		inf.proc = true
-		VFX.explosion(pos, splash, color)
+		if sch != "":
+			MagicFX.impact(pos, sch, splash)
+			if splash >= 3.0:
+				VFX.shake(minf(0.5, splash * 0.08))
+		else:
+			VFX.explosion(pos, splash, color)
 		Combat.aoe(src if (src != null and is_instance_valid(src)) else null, pos, splash, inf)
 		Audio.play_sfx("explosion", pos, -2.0)
+	elif sch != "":
+		MagicFX.impact(pos, sch, 0.7, false)
 	elif kind in ["magic", "spark", "pulse"]:
 		VFX.burst(pos, color, 8, 0.3)
 	if on_end.is_valid():

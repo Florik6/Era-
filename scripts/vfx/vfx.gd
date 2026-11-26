@@ -82,3 +82,31 @@ static func decal(pos: Vector3, kind: String, size: float = 1.5, life: float = 2
 	var m = _m()
 	if m and m.has_method("decal"):
 		m.decal(pos, kind, size, life, rot)
+
+## The live VFXManager (or null) for richer effects (see MagicFX).
+static func mgr():
+	return _m()
+
+## Muzzle flash by weapon model / projectile kind.
+static func muzzle(pos: Vector3, dir: Vector3, model: String = "", kind: String = "bullet") -> void:
+	var m = _m()
+	if m:
+		m.muzzle(pos, dir, model, kind)
+
+## Branching lightning bolt between two points.
+static func lightning(a: Vector3, b: Vector3, c: Color = Color(0.7, 0.78, 1.0), dur: float = 0.2, width: float = 0.07, branches: int = 2) -> void:
+	var m = _m()
+	if m:
+		m.bolt(a, b, c, dur, width, branches)
+
+## Crescent swing arc in front of an attacker.
+static func slash(origin: Vector3, facing: Vector3, rng: float, arc_deg: float, anim: String = "slash", c: Color = Color(1, 1, 1)) -> void:
+	var m = _m()
+	if m:
+		m.slash_arc(origin, facing, rng, arc_deg, anim, c)
+
+## Expanding shock ring on the ground.
+static func shock(pos: Vector3, r: float, c: Color, dur: float = 0.35) -> void:
+	var m = _m()
+	if m:
+		m.shock(pos, r, c, dur)

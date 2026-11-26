@@ -401,11 +401,11 @@ func _draw() -> void:
 		draw_circle(c, r, _a(col))
 		draw_arc(c, r, 0, TAU, 40, _a(ring), 3.0 if b != "attack" else 4.0, true)
 		Icons.draw(self, icon, c, r * (0.5 if b == "attack" else 0.56), _a(icol))
-		if cd_frac > 0.0:
+		if cd_frac > 0.03:
 			var pts := PackedVector2Array([c])
 			var steps := 24
 			for i in steps + 1:
-				var a := -PI * 0.5 + TAU * cd_frac * float(i) / steps
+				var a := -PI * 0.5 + TAU * minf(cd_frac, 0.999) * float(i) / steps
 				pts.append(c + Vector2(cos(a), sin(a)) * (r - 3.0))
 			draw_colored_polygon(pts, _a(Color(0, 0, 0, 0.55)))
 		if badge != "":

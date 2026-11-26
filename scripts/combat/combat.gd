@@ -177,7 +177,7 @@ static func _on_hit(att: Actor, tgt: Actor, dealt: float, info: Dictionary) -> v
 				pi.amount = dealt * 0.6
 				pi.proc = true
 				pi.dtype = "dark"
-				VFX.burst(tgt.chest(), Color(0.6, 0.4, 1.0), 10, 0.4)
+				MagicFX.hit(tgt.chest(), att.facing, "dark", true)
 				deal(att, tgt, pi)
 	match w.get("mythic", ""):
 		"time_echo":
@@ -195,7 +195,7 @@ static func echo_strike(att: Actor, e: Dictionary) -> void:
 	info.amount = e.amount
 	info.echo = true
 	info.proc = true
-	VFX.burst(tgt.chest(), Color(0.4, 1.0, 0.9), 12, 0.5)
+	MagicFX.hit(tgt.chest(), Vector3.UP, "time", true)
 	VFX.text(tgt.chest() + Vector3(0, 0.8, 0), "Эхо", Color(0.4, 1.0, 0.9), 0.8)
 	deal(att, tgt, info)
 
@@ -207,6 +207,7 @@ static func melee(att: Actor, rng: float, arc_deg: float, info: Dictionary, max_
 	cands.sort_custom(func(a, b): return a.global_position.distance_squared_to(att.global_position) < b.global_position.distance_squared_to(att.global_position))
 	var limit := max_targets
 	var anim: String = att.act.get("data", {}).get("anim", "")
+	_swing_fx(att, rng, arc_deg, anim)
 	if anim in ["thrust", "stab"] and att.weapon_cat() in ["spear", "dagger", "sword"]:
 		limit = mini(limit, 2 if (att.data and att.data.has_node("sp_impale")) else 1)
 	for t in cands:
@@ -228,9 +229,22 @@ static func melee(att: Actor, rng: float, arc_deg: float, info: Dictionary, max_
 			continue
 		var dealt := deal(att, t, info.duplicate())
 		hits.append({"target": t, "dmg": dealt, "metal_hit": DBActors.ENEMIES.get(t.def_id, {}).get("metal", false)})
-		VFX.burst(t.chest(), Color(1.0, 0.9, 0.8) if dealt > 0 else Color(0.6, 0.6, 0.6), 6, 0.25)
 	_hit_destructibles(att, att.global_position, rng + 0.6, arc_deg, info)
 	return hits
+
+## Swing visuals: weapon wielders get a blade trail from VFXManager, so only
+## wide sweeps draw an arc for them; creatures (claws, jaws) always do.
+static func _swing_fx(att: Actor, rng: float, arc_deg: float, anim: String) -> void:
+	var rig = att.rig
+	var has_trail: bool = rig != null and is_instance_valid(rig) and is_instance_valid(rig.get("weapon_node"))
+	var origin := att.global_position + Vector3(0, 0.95 * att._scale(), 0)
+	if not has_trail:
+		var c := Color(1.0, 0.75, 0.6) if att.kind in ["creature", "boss"] else Color(0.9, 0.93, 1.0)
+		VFX.slash(origin, att.facing, rng, arc_deg, anim if anim != "" else "slash", c)
+	elif arc_deg >= 359.0 or anim in ["overhead", "slam"]:
+		VFX.slash(origin, att.facing, rng, arc_deg, anim, Color(0.9, 0.93, 1.0, 0.8))
+	if anim == "slam":
+		VFX.ground_impact(att.global_position + att.facing * minf(rng, 2.0), 1.4 * att._scale())
 
 static func _hit_destructibles(att: Actor, center: Vector3, rng: float, arc_deg: float, info: Dictionary) -> void:
 	for d in Game.grid.query(center, rng + 1.0, "destructible"):
@@ -318,9 +332,7 @@ static func fire_weapon(att: Actor) -> void:
 		"plasma_cannon": snd = "plasma"
 		"tesla_gun": snd = "lightning"
 	Audio.play_sfx(snd, att.global_position, -3.0 if not att.is_player else 0.0)
-	if cat == "firearm":
-		VFX.flash(muzzle, Color(1.0, 0.8, 0.4) if kind in ["bullet", "pellet"] else Color(0.5, 0.8, 1.0), 0.06)
-		VFX.burst(muzzle, Color(0.8, 0.8, 0.8, 0.6), 4, 0.15)
+	VFX.muzzle(muzzle, att.facing, model, kind)
 
 static func staff_bolt(att: Actor) -> void:
 	var info := weapon_info(att)
@@ -331,6 +343,7 @@ static func staff_bolt(att: Actor) -> void:
 		info.school = school
 		info.status = school_status(school, info.amount * 0.25)
 	var muzzle := att.chest() + att.facing * 1.0 + Vector3(0, 0.2, 0)
+	MagicFX.release(MagicFX.hand_pos(att), att.facing, MagicFX.school(str(info.get("school", info.dtype))))
 	Projectile.spawn(att, muzzle, att.facing * 26.0, info, "magic", {"range": att.weapon_range() * 1.1, "color": element_color(info.dtype)})
 	Audio.play_sfx("fire_cast" if info.dtype == "fire" else "ice_cast" if info.dtype == "ice" else "dark_cast", att.global_position, -6.0)
 
@@ -360,7 +373,7 @@ static func on_kill(killer, victim) -> void:
 	var w: Dictionary = k.weapon()
 	if w.get("ability", "") == "nova_kill":
 		var inf := {"amount": 15.0 + k.level * 4.0, "dtype": "fire", "status": {"burn": 5.0}, "proc": true}
-		VFX.ring(k.global_position, 4.0, Color(1.0, 0.5, 0.15), 0.4)
+		MagicFX.impact(k.global_position + Vector3(0, 0.5, 0), "fire", 4.0)
 		aoe(k, k.global_position, 4.0, inf)
 	if w.get("mythic", "") == "soul_harvest" and victim.kind != "boss":
 		Spells.summon(k, "spirit", 1, victim.global_position, 15.0)

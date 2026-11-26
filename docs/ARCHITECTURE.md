@@ -87,6 +87,26 @@ Biographies are built only from Chronicle events that reference the record id, s
 - Player input can be overridden with `Player.scripted_move` (tests, cutscenes).
 - Bot "avoid stronger enemy" rule applies only to `role == "bot"` (contenders); bandits/monsters keep fighting.
 
+## 0.10.0 additions
+
+- **Boot**: `scenes/boot.gd` (loading screen, threaded menu load, error/safe-mode buttons) + `scripts/core/boot_guard.gd`
+  (`user://boot_state.cfg` stage marker → automatic safe graphics after a failed start, `user://boot.log`).
+  Two export presets: "Android" (Mobile/Vulkan) and "Android GL" (`--rendering-method gl_compatibility`).
+- **Spatial grid**: static interactables register with `Game.grid.insert_deferred(node, cat)` (their final position at end
+  of frame). Never call `insert(self, global_position, …)` from `_ready()`.
+- **Curses**: `scripts/items/curses.gd` (`Curses`) — severity/kind, `rituals_for(item, player, station)`, `pay()` only
+  after success, `apply(item, effect, name)`. UI `scripts/ui/screens/altar.gd`; in-world sequence
+  `scripts/world/altar_ritual.gd` (`world.active_ritual` locks gear).
+- **Rifts**: `poi.gd` rift label/access/walk-through, `world.portal_block_until`, `enter_dimension(kind, {return_pos})`;
+  `dimension.gd` stages (guards → `RiftAnchor` ×3 → echo boss with meta `rift_echo`), retreat `DimensionExit`.
+- **Optional world subsystems** (`world.sys(name)`, attached from `world.gd`): `road_encounters` (25 templates),
+  `discovery`, `tracking`, `living_pois`, `traces`, `cinematic` (CanvasLayer), `music` (`MusicDirector`).
+  Each has `setup(world)` and keeps its state in `Game.world_state` (saved per era).
+- **Touch controls**: fixed stick, `Settings.ui_layout` (element → {x, y fractions of the safe area, s}), `ui_opacity`,
+  `joy_sensitivity`, `joy_deadzone`; editor `scripts/ui/screens/layout_editor.gd`.
+- **Settlements**: `world.activity_points(sid)` (streamer layout points or fallback) → villager `job` meta → BotBrain
+  `work` goal; `factions.change_settlement_owner` recolours banners.
+
 ## Tests
 `tools/check.sh` (compile all), `tests/logic_test.tscn` (67 checks), `tests/world_logic_test.tscn` (122 checks),
 `tests/game_smoke.tscn`, `tests/modes_smoke.tscn`, `tests/world_test.tscn`, `tests/ui_test.tscn` (screenshots; run with

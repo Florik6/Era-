@@ -314,6 +314,8 @@ func change_settlement_owner(sid: String, fid: String, reason: String) -> void:
 	var fname: String = DBEras.faction(fid).get("name", "мятежников") if fid != "" else "вольных жителей"
 	Chronicle.record("settlement_captured", [{"id": "faction_" + fid, "name": fname}], {"extra": {"settlement": settlements[sid].name, "faction": fname, "reason": reason}})
 	Events.settlement_changed.emit(settlements[sid])
+	if world and world.get("terrain") and world.terrain and world.terrain.has_method("set_settlement_banner"):
+		world.terrain.set_settlement_banner(sid, DBEras.faction(fid).get("color", Color(0.85, 0.85, 0.85)) if fid != "" else Color(0.85, 0.85, 0.85))
 	if world.settlement_npcs.has(sid):
 		for n in world.settlement_npcs[sid]:
 			if is_instance_valid(n):

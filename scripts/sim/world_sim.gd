@@ -168,7 +168,22 @@ func _background_step(dt: float) -> void:
 		if gp == Vector2.ZERO or p.distance_to(gp) < 10.0:
 			gp = _pick_goal(r)
 			r.goal_pos = [gp.x, gp.y]
-		var np := p.move_toward(gp, 1.3 * dt)
+			# travel along the road network when there is one
+			r.erase("route")
+			if world.gen and world.gen.has_method("road_path") and p.distance_to(gp) > 60.0:
+				var rp: Array = world.gen.road_path(p, gp)
+				if rp.size() > 2:
+					var flat: Array = []
+					for v in rp:
+						flat.append([v.x, v.y])
+					r["route"] = flat
+		var step_to := gp
+		var route: Array = r.get("route", [])
+		while not route.is_empty() and p.distance_to(Vector2(route[0][0], route[0][1])) < 6.0:
+			route.pop_front()
+		if not route.is_empty():
+			step_to = Vector2(route[0][0], route[0][1])
+		var np := p.move_toward(step_to, 1.3 * dt * (1.25 if not route.is_empty() else 1.0))
 		# keep simulated movement out of the player's active bubble edge popping
 		r.pos = [np.x, np.y]
 		var cd: CharData = null

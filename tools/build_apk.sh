@@ -56,4 +56,8 @@ if [ "$MODE" = "release" ] || [ "$MODE" = "both" ]; then
   export GODOT_ANDROID_KEYSTORE_RELEASE_PASSWORD="$ERA_RELEASE_PASSWORD"
   godot --headless --path . --export-release "Android" builds/ERA_Ascension.apk
   ls -la builds/ERA_Ascension.apk
+  # compatibility build: same package and key, OpenGL ES 3 renderer for
+  # phones whose Vulkan drivers misbehave (installs over the main one)
+  godot --headless --path . --export-release "Android GL" builds/ERA_Ascension_GL.apk
+  ls -la builds/ERA_Ascension_GL.apk
 fi

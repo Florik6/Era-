@@ -81,7 +81,7 @@ func _process(delta: float) -> void:
 			var tw := create_tween()
 			tw.tween_property(self, "modulate:a", 0.0, 0.35)
 			tw.tween_callback(func(): visible = false)
-	elif not _queue.is_empty():
+	elif not _queue.is_empty() and not _cine_playing():
 		var id: String = _queue.pop_front()
 		_label.text = "[color=#ffd36b]Подсказка:[/color] " + TIPS.get(id, id)
 		visible = true
@@ -94,7 +94,7 @@ func _process(delta: float) -> void:
 		return
 	_check_t = 0.0
 	var p = Game.player
-	if _elapsed > 0.4:
+	if _elapsed > 4.0:
 		show_tip("move")
 	if _elapsed > 12.0:
 		show_tip("attack")
@@ -113,3 +113,7 @@ func _process(delta: float) -> void:
 			show_tip("rift")
 		elif o is NPC and o.get("role") in ["villager", "trader"]:
 			show_tip("settlement")
+
+func _cine_playing() -> bool:
+	var c = Game.world.sys("cinematic") if Game.world and Game.world.has_method("sys") else null
+	return c != null and c.has_method("is_playing") and c.is_playing()

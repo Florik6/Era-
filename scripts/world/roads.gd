@@ -14,8 +14,9 @@ const HW_TRAIL := 1.35
 const FLAG_ROAD := 0
 const FLAG_BRIDGE := 1
 const FLAG_HIDDEN := 2            # link from a plaza edge to the settlement centre (graph only)
+const RAIL_OFFSET := 5.4            # railway centre line distance from the road centre
 const FINE := 16.0
-const FINE_MARGIN := 9.0
+const FINE_MARGIN := 11.0
 const COARSE := 64.0
 const COARSE_MARGIN := 44.0
 
@@ -35,6 +36,7 @@ var s_hw := PackedFloat32Array()
 var s_flag := PackedByteArray()
 var s_line := PackedInt32Array()
 var s_s0 := PackedFloat32Array()  # arclength of the segment start along its polyline
+var s_ext := PackedFloat32Array() # extra flattened margin (railway beside the road)
 var s_na := PackedInt32Array()
 var s_nb := PackedInt32Array()
 var s_prev := PackedInt32Array()  # previous connected segment of the same polyline or -1
@@ -70,6 +72,7 @@ func _clear_final() -> void:
 	s_flag = PackedByteArray()
 	s_line = PackedInt32Array()
 	s_s0 = PackedFloat32Array()
+	s_ext = PackedFloat32Array()
 	s_na = PackedInt32Array()
 	s_nb = PackedInt32Array()
 	s_prev = PackedInt32Array()
@@ -126,6 +129,7 @@ func finalize(settlements: Array) -> void:
 			s_flag.append(fl[i] if i < fl.size() else 0)
 			s_line.append(li)
 			s_s0.append(acc)
+			s_ext.append(RAIL_OFFSET + 1.4 - hw if line_rail[li] == 1 else 0.0)
 			s_na.append(na)
 			s_nb.append(nb)
 			s_prev.append(prev_seg)
@@ -948,8 +952,9 @@ class Planner:
 			add.append(sp + Vector2(cos(th), sin(th)) * ring)
 		var dv := Vector2(cos(th), sin(th))
 		add.append(sp + dv * R * 0.98)
+		var pr := RoadNet.plaza_ratio(str(s.type))
 		add.append(sp + dv * R * 0.62)
-		add.append(sp + dv * R * 0.3)
+		add.append(sp + dv * R * pr)
 		add.append(sp)
 		for q in add.size():
 			pts.append(add[q])
@@ -992,7 +997,7 @@ class Planner:
 		return best
 
 	func _water(p: Vector2) -> bool:
-		return gen.raw_height(p.x, p.y) < gen.water_level + 0.15
+		return gen.ground_base(p.x, p.y) < gen.water_level + 0.15
 
 	func _bridges(li: int) -> void:
 		var pts: PackedVector2Array = net.lines[li]
@@ -1029,3 +1034,238 @@ class Planner:
 		nfl.resize(maxi(0, npts.size() - 1))
 		net.lines[li] = npts
 		net.line_flags[li] = nfl
+
+# ---------------------------------------------------------------- rendering
+## Road surface shader. Vertex data: UV = (lateral offset m, arclength m) for
+## roads, world xz for plazas; COLOR.r = edge factor (0 outer .. 1 inner),
+## COLOR.g = kind (0 main, .33 trail, .66 rail ballast, 1 plaza),
+## COLOR.b = lateral position 0..1, COLOR.a = half width / 8.
+const ROAD_SHADER := """
+shader_type spatial;
+render_mode cull_back, diffuse_burley;
+uniform int style = 0;
+uniform vec3 c_main : source_color = vec3(0.5, 0.42, 0.3);
+uniform vec3 c_trail : source_color = vec3(0.45, 0.38, 0.28);
+uniform vec3 c_stone : source_color = vec3(0.6, 0.58, 0.55);
+uniform vec3 c_edge : source_color = vec3(0.7, 0.7, 0.7);
+uniform vec3 c_grass : source_color = vec3(0.3, 0.45, 0.2);
+uniform vec3 c_glow : source_color = vec3(0.2, 0.9, 1.0);
+uniform float margin = 0.9;
+varying vec3 wpos;
+float hash2(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float vnoise(vec2 p) {
+	vec2 i = floor(p); vec2 f = fract(p); vec2 u = f * f * (3.0 - 2.0 * f);
+	return mix(mix(hash2(i), hash2(i + vec2(1.0, 0.0)), u.x), mix(hash2(i + vec2(0.0, 1.0)), hash2(i + vec2(1.0, 1.0)), u.x), u.y);
+}
+vec3 voro(vec2 x) {
+	vec2 n = floor(x); vec2 f = fract(x);
+	float d1 = 8.0; float d2 = 8.0; float id = 0.0;
+	for (int j = -1; j <= 1; j++) {
+		for (int i = -1; i <= 1; i++) {
+			vec2 g = vec2(float(i), float(j));
+			vec2 o = vec2(hash2(n + g), hash2(n + g + 17.31));
+			vec2 r = g + o * 0.85 - f;
+			float d = dot(r, r);
+			if (d < d1) { d2 = d1; d1 = d; id = hash2(n + g + 3.7); } else if (d < d2) { d2 = d; }
+		}
+	}
+	return vec3(sqrt(d1), sqrt(d2) - sqrt(d1), id);
+}
+vec3 lin(vec3 c) { return c * c; }
+void vertex() { wpos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz; }
+void fragment() {
+	float kind = COLOR.g;
+	float hw = COLOR.a * 8.0;
+	float edge = COLOR.r;
+	vec2 wp = wpos.xz;
+	float lat = UV.x;
+	float alng = UV.y;
+	float n1 = vnoise(wp * 0.7);
+	float n2 = vnoise(wp * 3.3);
+	bool is_trail = kind > 0.16 && kind < 0.5;
+	bool is_ballast = kind >= 0.5 && kind < 0.83;
+	bool is_plaza = kind >= 0.83;
+	vec3 col = c_main;
+	float rough = 0.92;
+	vec3 emit = vec3(0.0);
+	float alpha_noise = 0.6;
+	float sharp = 0.0;
+	if (is_ballast) {
+		vec3 v = voro(wp * 6.0);
+		col = mix(vec3(0.22, 0.2, 0.19), vec3(0.5, 0.48, 0.45) * (0.7 + 0.6 * v.z), smoothstep(0.02, 0.12, v.y));
+	} else if (is_plaza) {
+		if (style == 3) {
+			vec2 t = fract(wp / 1.5);
+			col = c_edge * (0.85 + 0.25 * hash2(floor(wp / 1.5))) * mix(0.7, 1.0, step(0.04, t.x) * step(0.04, t.y));
+		} else if (style == 4) {
+			vec2 t = fract(wp / 2.0);
+			col = c_main * (0.9 + 0.2 * hash2(floor(wp / 2.0)));
+			float seam = 1.0 - step(0.03, t.x) * step(0.03, t.y);
+			col = mix(col, c_glow * 0.4, seam * 0.6);
+			emit = c_glow * seam * 0.25;
+			rough = 0.3;
+		} else if (style == 0 && COLOR.a < 0.4) {
+			col = c_main * (0.82 + 0.3 * n1) * (0.92 + 0.16 * n2);
+			vec3 v = voro(wp * 1.3);
+			float stone = (1.0 - smoothstep(0.2, 0.32, v.x)) * step(0.62, v.z);
+			col = mix(col, c_stone * (0.6 + 0.4 * v.z), stone * 0.85);
+			col = mix(col, c_grass, smoothstep(0.62, 0.8, vnoise(wp * 0.3)) * 0.35);
+		} else {
+			vec3 v = voro(wp * 2.1);
+			vec3 stone = c_stone * (0.62 + 0.42 * v.z) * (0.9 + 0.2 * n1);
+			vec3 mortar = style == 0 ? c_main * 0.7 : c_stone * 0.4;
+			col = mix(mortar, stone, smoothstep(0.03, 0.12, v.y));
+			if (style == 0) { col = mix(col, c_main * (0.8 + 0.3 * n1), smoothstep(0.66, 0.82, vnoise(wp * 0.35)) * 0.5); }
+		}
+		alpha_noise = 0.35;
+	} else if (is_trail) {
+		col = c_trail * (0.78 + 0.35 * n1) * (0.9 + 0.2 * n2);
+		if (style == 1) { vec3 v = voro(wp * 7.0); col = mix(col * 0.75, c_stone * (0.8 + 0.4 * v.z), smoothstep(0.03, 0.1, v.y) * 0.7); }
+		if (style == 2) { col = mix(col, vec3(0.12, 0.11, 0.11), 0.35 + 0.3 * n2); }
+		if (style == 3) {
+			vec2 t = fract(vec2(lat + 0.5, alng) / vec2(1.0, 1.2));
+			col = c_edge * (0.82 + 0.2 * hash2(floor(vec2(lat + 0.5, alng) / vec2(1.0, 1.2)))) * mix(0.75, 1.0, step(0.05, t.y));
+			sharp = 1.0;
+		}
+		if (style == 4) {
+			col = c_main * (0.9 + 0.2 * n2);
+			float dots = step(abs(lat), 0.08) * step(fract(alng / 2.0 - TIME * 0.4), 0.3);
+			emit = c_glow * dots * 1.6;
+			rough = 0.35;
+			sharp = 1.0;
+		}
+		// grass strip in the middle of footpaths
+		if (style <= 2) { col = mix(col, c_grass, exp(-lat * lat / 0.05) * 0.45 * smoothstep(0.35, 0.7, n1)); }
+	} else if (style == 0) {
+		col = c_main * (0.8 + 0.32 * n1) * (0.92 + 0.16 * n2);
+		float rut = exp(-pow((abs(lat) - hw * 0.42) / 0.32, 2.0));
+		col *= 1.0 - 0.32 * rut;
+		col = mix(col, c_grass, exp(-lat * lat / 0.22) * 0.25 * smoothstep(0.4, 0.8, n1));
+		vec3 v = voro(wp * 1.6);
+		float stone = (1.0 - smoothstep(0.16, 0.26, v.x)) * step(0.86, v.z);
+		col = mix(col, c_stone * (0.5 + 0.3 * v.z), stone * 0.75);
+		float puddle = smoothstep(0.66, 0.74, vnoise(wp * 0.22 + 7.3)) * (1.0 - smoothstep(0.5, 0.9, abs(lat) / hw));
+		col = mix(col, col * 0.45 + vec3(0.02, 0.03, 0.05), puddle);
+		rough = mix(0.92, 0.12, puddle);
+	} else if (style == 1) {
+		vec3 v = voro(vec2(lat, alng) * 1.9 + wp * 0.001);
+		vec3 stone = c_stone * (0.7 + 0.55 * v.z) * (0.9 + 0.2 * n1);
+		col = mix(c_stone * 0.4, stone, smoothstep(0.03, 0.11, v.y));
+		float curb = smoothstep(hw - 0.45, hw - 0.3, abs(lat));
+		vec2 cb = vec2(alng / 0.9, 0.0);
+		col = mix(col, c_edge * (0.8 + 0.25 * hash2(floor(cb))) * step(0.06, fract(cb.x)), curb);
+		alpha_noise = 0.3;
+	} else if (style == 2) {
+		vec2 b = vec2(alng / 0.46, lat / 0.22);
+		b.x += floor(b.y) * 0.5;
+		vec2 f = fract(b);
+		float mortar = step(0.07, f.x) * step(0.1, f.y);
+		vec3 brick = c_main * (0.75 + 0.45 * hash2(floor(b)));
+		col = mix(vec3(0.18, 0.17, 0.16), brick, mortar);
+		col *= 0.8 + 0.3 * n1;
+		float curb = smoothstep(hw - 0.4, hw - 0.28, abs(lat));
+		col = mix(col, c_edge * (0.85 + 0.2 * n2), curb);
+		alpha_noise = 0.3;
+	} else if (style == 3) {
+		col = c_main * (0.82 + 0.25 * n2) * (0.9 + 0.2 * n1);
+		float al = abs(lat);
+		float centre = step(al, 0.07) * step(fract(alng / 6.0), 0.5);
+		float side = step(hw - 0.45, al) * step(al, hw - 0.3);
+		col = mix(col, c_stone, max(centre, side) * 0.95);
+		float curb = step(hw, al) * step(al, hw + 0.22);
+		float walk = step(hw + 0.22, al);
+		vec2 sl = vec2(alng / 1.4, 0.0);
+		col = mix(col, c_edge * 0.95, curb);
+		col = mix(col, c_edge * (0.78 + 0.18 * hash2(floor(sl))) * mix(0.8, 1.0, step(0.04, fract(sl.x))), walk);
+		rough = 0.85;
+		sharp = 1.0;
+	} else {
+		vec2 t = fract(vec2(lat, alng) / vec2(1.5, 3.0));
+		col = c_main * (0.92 + 0.16 * hash2(floor(vec2(lat, alng) / vec2(1.5, 3.0))));
+		float seam = 1.0 - step(0.025, t.x) * step(0.02, t.y);
+		col = mix(col, c_main * 2.0, seam * 0.5);
+		float al = abs(lat);
+		float strip = step(hw - 0.35, al) * step(al, hw - 0.18);
+		float chev = step(al, 0.12) * step(fract(alng / 5.0 - TIME * 0.6), 0.25);
+		emit = c_glow * (strip * 2.2 + chev * 1.4);
+		col = mix(col, c_glow, max(strip, chev) * 0.7);
+		rough = 0.28;
+		sharp = 1.0;
+	}
+	float a = edge + (n1 * 0.7 + n2 * 0.3 - 0.5) * alpha_noise * (1.0 - sharp);
+	if (sharp > 0.5) { a = edge * 4.0 - 0.4; }
+	ALPHA = clamp(a, 0.0, 1.0);
+	ALPHA_SCISSOR_THRESHOLD = 0.5;
+#if CURRENT_RENDERER == RENDERER_COMPATIBILITY
+	ALBEDO = col * 0.8;
+#else
+	ALBEDO = col;
+#endif
+	ROUGHNESS = rough;
+	SPECULAR = 0.3;
+	EMISSION = emit;
+}
+"""
+
+static var _road_mats := {}
+
+## Era road material (shared). Styles: 0 dirt + ruts, 1 cobblestone,
+## 2 brick + granite curbs, 3 asphalt + markings + sidewalks, 4 tech lanes.
+static func material(era: int) -> ShaderMaterial:
+	if _road_mats.has(era):
+		return _road_mats[era]
+	var sh := Shader.new()
+	sh.code = ROAD_SHADER
+	var m := ShaderMaterial.new()
+	m.shader = sh
+	var e: Dictionary = DBEras.era(era)
+	var g: Dictionary = e.ground
+	m.set_shader_parameter("style", era)
+	m.set_shader_parameter("c_grass", g.plains)
+	match era:
+		0:
+			m.set_shader_parameter("c_main", Color(0.5, 0.4, 0.28))
+			m.set_shader_parameter("c_trail", Color(0.47, 0.38, 0.27))
+			m.set_shader_parameter("c_stone", Color(0.52, 0.5, 0.47))
+			m.set_shader_parameter("margin", 0.9)
+		1:
+			m.set_shader_parameter("c_main", Color(0.56, 0.5, 0.42))
+			m.set_shader_parameter("c_trail", Color(0.58, 0.52, 0.42))
+			m.set_shader_parameter("c_stone", Color(0.62, 0.57, 0.5))
+			m.set_shader_parameter("c_edge", Color(0.7, 0.66, 0.6))
+			m.set_shader_parameter("margin", 0.7)
+		2:
+			m.set_shader_parameter("c_main", Color(0.5, 0.27, 0.2))
+			m.set_shader_parameter("c_trail", Color(0.33, 0.3, 0.28))
+			m.set_shader_parameter("c_stone", Color(0.45, 0.43, 0.41))
+			m.set_shader_parameter("c_edge", Color(0.55, 0.55, 0.55))
+			m.set_shader_parameter("margin", 0.7)
+		3:
+			m.set_shader_parameter("c_main", Color(0.22, 0.22, 0.24))
+			m.set_shader_parameter("c_trail", Color(0.5, 0.48, 0.42))
+			m.set_shader_parameter("c_stone", Color(0.92, 0.9, 0.82))
+			m.set_shader_parameter("c_edge", Color(0.62, 0.62, 0.6))
+			m.set_shader_parameter("margin", 1.6)
+		_:
+			m.set_shader_parameter("c_main", Color(0.13, 0.14, 0.19))
+			m.set_shader_parameter("c_trail", Color(0.16, 0.17, 0.22))
+			m.set_shader_parameter("c_stone", Color(0.4, 0.42, 0.5))
+			m.set_shader_parameter("c_edge", Color(0.3, 0.32, 0.4))
+			m.set_shader_parameter("c_glow", Color(0.25, 0.95, 1.0))
+			m.set_shader_parameter("margin", 0.6)
+	_road_mats[era] = m
+	return m
+
+## Radius of the paved square relative to the settlement radius.
+static func plaza_ratio(typ: String) -> float:
+	match typ:
+		"village": return 0.2
+		"town", "port": return 0.24
+		"castle", "fort": return 0.22
+	return 0.28
+
+## Lateral soft margin beyond the half width (sidewalks for the modern era).
+static func margin_of(era: int, typ: int) -> float:
+	if typ == TRAIL:
+		return 0.7 if era != 3 else 0.35
+	return [0.9, 0.7, 0.7, 1.6, 0.6][era]

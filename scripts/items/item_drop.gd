@@ -13,6 +13,7 @@ var _t := 0.0
 var _vis: Node3D
 var _label: Label3D
 var _beam: MeshInstance3D
+var _beam_base := Vector3.ONE
 
 func setup(it: Dictionary, g: int = 0, by_player: bool = false) -> void:
 	item = it
@@ -51,32 +52,13 @@ func _ready() -> void:
 	var disc := MeshLib.part(self, MeshLib.cyl(0.45, 0.45, 0.02, 12), MeshLib.mat(Color(col.r, col.g, col.b, 0.35), 0.0, 1.0, 1.5, true), Vector3(0, 0.03, 0), Vector3.ZERO, Vector3.ONE, false)
 	disc.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	if rar >= 3 and gold == 0:
-		var p := CPUParticles3D.new()
-		p.amount = 12 if rar == 3 else 20
-		p.lifetime = 1.2
-		p.direction = Vector3.UP
-		p.spread = 20.0
-		p.initial_velocity_min = 0.6
-		p.initial_velocity_max = 1.6
-		p.gravity = Vector3.ZERO
-		p.emission_shape = CPUParticles3D.EMISSION_SHAPE_SPHERE
-		p.emission_sphere_radius = 0.4
-		p.mesh = MeshLib.box(Vector3(0.05, 0.05, 0.05))
-		p.material_override = MeshLib.mat(col, 0.0, 1.0, 3.0, true)
-		p.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		add_child(p)
-	if rar >= 4 and gold == 0:
-		_beam = MeshLib.part(self, MeshLib.cyl(0.12, 0.25, 9.0, 8), MeshLib.mat(Color(col.r, col.g, col.b, 0.4), 0.0, 1.0, 3.0, true), Vector3(0, 4.5, 0), Vector3.ZERO, Vector3.ONE, false)
-		var l := OmniLight3D.new()
-		l.light_color = col
-		l.light_energy = 1.6 if rar == 4 else 2.5
-		l.omni_range = 5.0
-		l.position.y = 1.0
-		l.shadow_enabled = false
-		add_child(l)
-		if rar == 5:
-			var dist := MeshLib.part(self, MeshLib.sphere(1.0, 12, 8), MeshLib.mat(Color(0.9, 0.1, 0.2, 0.18), 0.0, 1.0, 1.0, true), Vector3(0, 0.6, 0), Vector3.ZERO, Vector3.ONE, false)
-			dist.name = "Distortion"
+		# epic: violet motes; legendary: golden beam, sparkle swirl, coin glints;
+		# mythic: crimson column, floating runes, distortion ring (MagicFX.loot)
+		_beam = MagicFX.loot(self, rar, col)
+		if _beam:
+			_beam_base = _beam.scale
+		if rar >= 5 and VFX.mgr() != null:
+			VFX.mgr().attach_light(self, Color(1.0, 0.15, 0.25), 2.0, 5.0, Vector3(0, 1.0, 0))
 	_label = Label3D.new()
 	_label.text = ("%d %s" % [gold, DBEras.era(Profile.current_era).currency]) if gold > 0 else ItemDB.display_name(item) + ((" ×%d" % item.get("qty", 1)) if item.get("qty", 1) > 1 else "")
 	_label.modulate = col
@@ -100,11 +82,17 @@ func announce() -> void:
 	elif rar == 4:
 		Audio.play_sfx("drop_legendary", global_position)
 		VFX.flash(global_position + Vector3(0, 2, 0), Color(1.0, 0.8, 0.3), 0.4, 6.0)
+		VFX.shock(global_position, 3.0, Color(1.0, 0.82, 0.35), 0.6)
+		VFX.burst(global_position + Vector3(0, 1.0, 0), Color(1.0, 0.85, 0.4), 18, 0.3)
 		Audio.play_sting("legendary_sting")
 	elif rar == 5:
 		Audio.play_sfx("drop_mythic", global_position)
 		VFX.flash(global_position + Vector3(0, 2, 0), Color(1.0, 0.1, 0.2), 0.6, 8.0)
 		VFX.ring(global_position, 6.0, Color(1.0, 0.1, 0.2), 1.2)
+		var mg = VFX.mgr()
+		if mg:
+			mg.distort(global_position + Vector3(0, 1.0, 0), 5.0, 0.8, Color(1.0, 0.1, 0.2, 0.25), true)
+			MagicFX.ground_rune(global_position, "sigil", Color(1.0, 0.15, 0.25), 2.5, 1.5, 1.5, 1.0)
 		Audio.play_sting("mythic_sting")
 
 func _potion_color(b: String) -> Color:
@@ -140,7 +128,8 @@ func _process(delta: float) -> void:
 	_vis.rotation.y += delta * 1.2
 	_vis.position.y = 0.1 + sin(_t * 2.5) * 0.06
 	if _beam:
-		_beam.scale = Vector3(1.0 + sin(_t * 4.0) * 0.15, 1.0, 1.0 + sin(_t * 4.0) * 0.15)
+		var pk := 1.0 + sin(_t * 4.0) * 0.15
+		_beam.scale = _beam_base * Vector3(pk, 1.0, pk)
 	var pl = Game.player
 	if pl == null or not is_instance_valid(pl) or pl.is_dead:
 		return

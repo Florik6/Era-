@@ -205,6 +205,13 @@ static func build(model: String, item: Dictionary = {}, accent_override: Color =
 			root.set_meta("string_len", h * 0.5)
 			top.scale = Vector3(1, h * 0.5, 1)
 			bot.scale = Vector3(1, h * 0.5, 1)
+			# nocked arrow, shown by the rig only while drawing
+			var arrow := MeshLib.pivot(root, Vector3(0, 0, -0.02), "Arrow")
+			MeshLib.part(arrow, MeshLib.box(Vector3(0.012, 0.012, 0.76)), MeshLib.mat(Color(0.62, 0.5, 0.32)), Vector3(0, 0, -0.38), Vector3.ZERO, Vector3.ONE, false)
+			MeshLib.part(arrow, MeshLib.prism(Vector3(0.03, 0.07, 0.012)), MeshLib.mat(IRON, 0.7, 0.4), Vector3(0, 0, -0.79), Vector3(-90, 0, 0), Vector3.ONE, false)
+			_small(MeshLib.part(arrow, MeshLib.box(Vector3(0.004, 0.04, 0.09)), MeshLib.mat(Color(0.9, 0.9, 0.85)), Vector3(0, 0, -0.05)))
+			arrow.visible = false
+			root.set_meta("arrow", arrow)
 			_tip(root, Vector3(0, 0, -0.1))
 		"crossbow":
 			MeshLib.part(root, MeshLib.box(Vector3(0.06, 0.07, 0.66)), wood, Vector3(0, 0, -0.22))
@@ -373,14 +380,10 @@ static func stowed(kind: String) -> Node3D:
 			_small(MeshLib.part(root, MeshLib.box(Vector3(0.07, 0.04, 0.06)), iron, Vector3(0, 0, -0.71)))
 			_small(MeshLib.part(root, MeshLib.box(Vector3(0.07, 0.04, 0.05)), iron, Vector3(0, 0, -0.02)))
 		"quiver":
-			MeshLib.part(root, MeshLib.cyl(0.06, 0.05, 0.5, 8), leather, Vector3(0, 0, 0))
-			var shaft := MeshLib.mat(Color(0.6, 0.48, 0.3))
-			var fl := MeshLib.mat(Color(0.9, 0.9, 0.85))
-			for i in 4:
-				var ox := (i % 2) * 0.03 - 0.015
-				var oz := (i / 2) * 0.03 - 0.015
-				_small(MeshLib.part(root, MeshLib.box(Vector3(0.008, 0.18, 0.008)), shaft, Vector3(ox, 0.32, oz)))
-				_small(MeshLib.part(root, MeshLib.box(Vector3(0.03, 0.06, 0.004)), fl, Vector3(ox, 0.4, oz)))
+			MeshLib.part(root, MeshLib.cyl(0.07, 0.055, 0.52, 8), leather, Vector3(0, 0, 0))
+			_small(MeshLib.part(root, MeshLib.torus(0.06, 0.078), MeshLib.mat(BRASS, 0.8, 0.35), Vector3(0, 0.22, 0)))
+			MeshLib.part(root, MeshLib.box(Vector3(0.07, 0.16, 0.06)), MeshLib.mat(Color(0.6, 0.48, 0.3)), Vector3(0, 0.33, 0))
+			MeshLib.part(root, MeshLib.box(Vector3(0.11, 0.09, 0.09)), MeshLib.mat(Color(0.85, 0.2, 0.15)), Vector3(0, 0.44, 0))
 		"dagger_sheath":
 			MeshLib.part(root, MeshLib.box(Vector3(0.05, 0.03, 0.3)), leather, Vector3(0, 0, -0.15))
 			_small(MeshLib.part(root, MeshLib.cyl(0.018, 0.018, 0.1, 6), MeshLib.mat(DARK), Vector3(0, 0, 0.05), Vector3(90, 0, 0)))

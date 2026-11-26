@@ -1,6 +1,10 @@
 class_name Spells
 ## All 20 spells of the five schools, plus shared magical effects used by
 ## items, bosses and hybrids (chain lightning, summons, micro-rifts).
+## Visuals live in MagicFX (charge → release → projectile → impact → linger);
+## nothing visual feeds back into the rules here.
+
+const BIG_SPELLS := ["meteor", "storm", "blizzard", "nova", "summon", "freeze", "timeslow", "thunderclap", "firewall"]
 
 static func cast(c: Actor, id: String, aim: Vector3) -> bool:
 	var sp := DBSkills.spell(id)
@@ -27,6 +31,7 @@ static func cast(c: Actor, id: String, aim: Vector3) -> bool:
 	var info := {"amount": power, "dtype": DBSkills.SCHOOLS[sp.school].dtype, "school": sp.school, "melee": false, "knock": 1.0, "status": {}}
 	var cb := func(): _effect(c, id, sp, aim, info)
 	c.start_action("spell", 0.45, 0.55, {"anim": "cast", "cb": cb})
+	MagicFX.charge(c, sp.school, 0.45 * 0.55, id in BIG_SPELLS)
 	c.data.add_school_xp(sp.school, 4.0)
 	if c.is_player:
 		var n := Profile.add_stat("spells")
@@ -49,6 +54,7 @@ static func cast_free(c: Actor, id: String, aim: Vector3, power: float) -> bool:
 	c.face_dir(aim)
 	var info := {"amount": power, "dtype": DBSkills.SCHOOLS[sp.school].dtype, "school": "", "melee": false, "knock": 1.0, "status": {}}
 	c.start_action("spell", 0.6, 0.6, {"anim": "cast", "cb": func(): _effect(c, id, sp, aim, info)})
+	MagicFX.charge(c, sp.school, 0.36, id in BIG_SPELLS)
 	return true
 
 static func _target(c: Actor, aim: Vector3, rng: float, cone: float = 50.0) -> Actor:
@@ -82,6 +88,7 @@ static func _effect(c: Actor, id: String, sp: Dictionary, aim: Vector3, info: Di
 		# ---------------- fire
 		"fireball":
 			info.status = {"burn": info.amount * 0.2}
+			MagicFX.release(muzzle, aim, "fire")
 			Projectile.spawn(c, muzzle, aim * 22.0, info, "fireball", {"splash": 2.8, "range": 24.0, "color": col})
 			Audio.play_sfx("fire_cast", c.global_position)
 		"ignite":
@@ -89,24 +96,26 @@ static func _effect(c: Actor, id: String, sp: Dictionary, aim: Vector3, info: Di
 			if t:
 				info.status = {"burn": info.amount * 0.8}
 				Combat.deal(c, t, info)
-				VFX.burst(t.chest(), col, 16, 0.4)
+				MagicFX.impact(t.chest(), "fire", 0.9)
 			else:
 				var p := c.global_position + aim * 4.0
 				for d in Game.grid.query(p, 4.0, "destructible"):
 					if d.has_method("ignite"):
 						d.ignite()
-				VFX.burst(p + Vector3(0, 0.5, 0), col, 14, 0.4)
+				MagicFX.impact(p + Vector3(0, 0.5, 0), "fire", 1.2)
 			Audio.play_sfx("fire_cast", c.global_position)
 		"firewall":
 			var center := c.global_position + aim * 4.0
 			var side := aim.cross(Vector3.UP).normalized()
 			info.status = {"burn": info.amount * 0.4}
+			MagicFX.release(muzzle, aim, "fire")
 			for i in range(-2, 3):
 				Zone.create("fire", c, center + side * i * 1.6, 1.0, 6.0, info)
 			Audio.play_sfx("fire_cast", center)
 		"meteor":
 			var p2 := _aim_point(c, aim, 18.0)
 			VFX.telegraph(p2, 4.0, 1.0, col)
+			MagicFX.meteor(p2, 1.0)
 			info.status = {"burn": 12.0, "stun": 0.6}
 			c.get_tree().create_timer(1.0, false).timeout.connect(func():
 				VFX.explosion(p2, 4.5, col)
@@ -115,12 +124,12 @@ static func _effect(c: Actor, id: String, sp: Dictionary, aim: Vector3, info: Di
 		# ---------------- ice
 		"frostbolt":
 			info.status = {"slow": 0.5}
+			MagicFX.release(muzzle, aim, "ice")
 			Projectile.spawn(c, muzzle, aim * 26.0, info, "magic", {"range": 24.0, "color": col})
 			Audio.play_sfx("ice_cast", c.global_position)
 		"freeze":
 			info.status = {"freeze": 2.0}
-			VFX.ring(c.global_position, 6.0, col, 0.4)
-			VFX.burst(c.chest(), col, 24, 0.4)
+			MagicFX.freeze_nova(c.global_position, 6.0)
 			Combat.aoe(c, c.global_position, 6.0, info)
 			if Game.world and Game.world.has_method("freeze_water"):
 				Game.world.freeze_water(c.global_position, 7.0)
@@ -128,21 +137,23 @@ static func _effect(c: Actor, id: String, sp: Dictionary, aim: Vector3, info: Di
 		"icewall":
 			if Game.world and Game.world.has_method("spawn_ice_wall"):
 				Game.world.spawn_ice_wall(c.global_position + aim * 3.5, aim, 9.0)
+			MagicFX.ice_wall(c.global_position + aim * 3.5, aim, 9.0)
 			Audio.play_sfx("ice_cast", c.global_position)
 		"blizzard":
 			var p3 := _aim_point(c, aim, 18.0)
 			info.status = {"slow": 0.3}
+			MagicFX.release(muzzle, aim, "ice")
 			Zone.create("blizzard", c, p3, 4.5, 6.0, info)
 			Audio.play_sfx("ice_cast", p3)
 		# ---------------- lightning
 		"spark":
 			var t2 := _target(c, aim, 18.0, 60.0)
 			if t2:
-				VFX.beam(muzzle, t2.chest(), col, 0.15, 0.07, true)
+				VFX.lightning(muzzle, t2.chest(), col, 0.18, 0.07, 2)
 				info.status = {"stun": 0.2}
 				Combat.deal(c, t2, info)
 			else:
-				VFX.beam(muzzle, muzzle + aim * 12.0, col, 0.12, 0.06, true)
+				VFX.lightning(muzzle, muzzle + aim * 12.0, col, 0.14, 0.06, 2)
 			Audio.play_sfx("lightning", c.global_position, -2.0)
 		"chain":
 			var t3 := _target(c, aim, 18.0, 60.0)
@@ -151,8 +162,7 @@ static func _effect(c: Actor, id: String, sp: Dictionary, aim: Vector3, info: Di
 			Audio.play_sfx("lightning", c.global_position)
 		"thunderclap":
 			info.status = {"stun": 1.5}
-			VFX.ring(c.global_position, 5.5, col, 0.35)
-			VFX.flash(c.chest(), col, 0.15, 6.0)
+			MagicFX.thunderclap(c.global_position, 5.5)
 			Combat.aoe(c, c.global_position, 5.5, info)
 			Audio.play_sfx("thunder", c.global_position)
 			VFX.shake(0.3)
@@ -163,8 +173,7 @@ static func _effect(c: Actor, id: String, sp: Dictionary, aim: Vector3, info: Di
 						return
 					var tt := _target(c, Vector3.FORWARD, 14.0, 180.0)
 					var p4: Vector3 = tt.global_position if tt else c.global_position + Vector3(randf_range(-8, 8), 0, randf_range(-8, 8))
-					VFX.beam(p4 + Vector3(0, 14, 0), p4, col, 0.15, 0.12, true)
-					VFX.flash(p4 + Vector3(0, 2, 0), col, 0.1, 5.0)
+					MagicFX.sky_strike(p4, col, 2.0)
 					Combat.aoe(c, p4, 2.0, info)
 					Audio.play_sfx("thunder", p4, -4.0))
 		# ---------------- dark
@@ -173,35 +182,38 @@ static func _effect(c: Actor, id: String, sp: Dictionary, aim: Vector3, info: Di
 			if t4:
 				t4.apply_status("curse", 8.0)
 				Combat.deal(c, t4, info)
-				VFX.burst(t4.chest() + Vector3(0, 0.6, 0), col, 16, 0.3)
+				MagicFX.curse_seal(muzzle, t4)
 			Audio.play_sfx("dark_cast", c.global_position)
 		"drain":
 			var t5 := _target(c, aim, 14.0)
 			if t5:
 				var dealt := Combat.deal(c, t5, info)
 				c.heal(dealt * 0.8)
-				VFX.beam(t5.chest(), c.chest(), Color(0.85, 0.1, 0.3), 0.3, 0.1, false)
+				MagicFX.drain(t5, c)
 			Audio.play_sfx("dark_cast", c.global_position)
 		"summon":
+			MagicFX.summon_circle(c.global_position + aim * 2.0)
 			summon(c, "skeleton_minion", 2, c.global_position + aim * 2.0, 25.0)
 			Audio.play_sfx("dark_cast", c.global_position)
 		"nova":
 			info.status = {"fear": 2.0}
-			VFX.ring(c.global_position, 7.0, col, 0.45)
+			MagicFX.dark_nova(c.global_position, 7.0)
 			Combat.aoe(c, c.global_position, 7.0, info)
 			Audio.play_sfx("dark_cast", c.global_position)
 		# ---------------- space & time
 		"blink":
 			var dest := c.global_position + aim * 9.0
 			dest = _safe_dest(c, dest)
-			VFX.burst(c.chest(), col, 16, 0.3)
+			var from := c.global_position
+			MagicFX.blink_out(c, "time")
 			c.global_position = dest
 			if c.has_method("reset_physics_interpolation"):
 				c.reset_physics_interpolation()
-			VFX.burst(c.chest(), col, 16, 0.3)
+			MagicFX.blink_in(c, from, "time")
 			Audio.play_sfx("teleport", dest)
 		"timeslow":
 			var p5 := _aim_point(c, aim, 12.0)
+			MagicFX.release(muzzle, aim, "time")
 			Zone.create("timeslow", c, p5, 5.0, 6.0, info)
 			Audio.play_sfx("time_slow", p5)
 		"timetrap":
@@ -211,7 +223,7 @@ static func _effect(c: Actor, id: String, sp: Dictionary, aim: Vector3, info: Di
 		"riftdash":
 			var start := c.global_position
 			var end := _safe_dest(c, start + aim * 10.0)
-			VFX.beam(start + Vector3(0, 1, 0), end + Vector3(0, 1, 0), col, 0.3, 0.25, false)
+			MagicFX.rift_dash(c, start, end)
 			for a in Game.actors_near((start + end) * 0.5, 7.0):
 				if a == c or a.is_dead or not Game.can_damage(c, a):
 					continue
@@ -240,12 +252,11 @@ static func chain_lightning(c, first: Actor, dmg: float, jumps: int, proc: bool,
 	var hit := {}
 	var cur: Actor = first
 	var prev = from_pos if from_pos != Vector3.INF else (c.chest() if c and is_instance_valid(c) else first.chest())
-	var col := Color(0.75, 0.8, 1.0)
 	for i in jumps:
 		if cur == null:
 			break
 		hit[cur.actor_id] = true
-		VFX.beam(prev, cur.chest(), col, 0.18, 0.07, true)
+		MagicFX.chain_arc(prev, cur.chest())
 		var info := {"amount": dmg * (1.0 - 0.12 * i), "dtype": "lightning", "status": {"stun": 0.15}, "proc": proc, "school": "lightning" if not proc else ""}
 		Combat.deal(c if (c and is_instance_valid(c)) else null, cur, info)
 		prev = cur.chest()
@@ -280,7 +291,7 @@ static func summon(owner_a: Actor, enemy_id: String, count: int, pos: Vector3, l
 			m.summon_time = life
 			m.faction_id = owner_a.faction_id
 			out.append(m)
-			VFX.burst(p + Vector3(0, 1, 0), Color(0.6, 0.3, 0.9), 14, 0.35)
+			MagicFX.summon_puff(p + Vector3(0, 1, 0), Color(0.6, 0.3, 0.9))
 	return out
 
 static func shadow_clone_burst(c: Actor, pos: Vector3) -> void:
