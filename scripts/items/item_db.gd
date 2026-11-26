@@ -16,9 +16,9 @@ const TABLES := {
 	"rift": [5.0, 25.0, 35.0, 24.0, 9.5, 1.5],
 }
 
-const SLOTS := ["main", "off", "head", "body", "hands", "feet", "ring", "amulet", "module"]
-const SLOT_NAMES := {"main": "Оружие", "off": "Доп. рука", "head": "Шлем", "body": "Броня", "hands": "Перчатки",
-	"feet": "Обувь", "ring": "Кольцо", "amulet": "Амулет", "module": "Модуль/Имплант", "use": "Расходник", "mat": "Материал"}
+const SLOTS := ["main", "off", "head", "body", "hands", "legs", "feet", "cloak", "ring", "amulet", "module"]
+const SLOT_NAMES := {"main": "Оружие", "off": "Доп. рука", "head": "Шлем", "body": "Броня", "hands": "Перчатки", "legs": "Поножи",
+	"feet": "Обувь", "cloak": "Плащ", "ring": "Кольцо", "amulet": "Амулет", "module": "Модуль/Имплант", "use": "Расходник", "mat": "Материал", "home": "Для дома"}
 const CAT_NAMES := {"sword": "Мечи", "dagger": "Кинжалы", "spear": "Древковое", "heavy": "Тяжёлое оружие", "bow": "Луки и арбалеты",
 	"firearm": "Огнестрельное", "staff": "Посохи и фокусы", "unarmed": "Кулаки"}
 const DTYPE_NAMES := {"slash": "рубящий", "pierce": "колющий", "blunt": "дробящий", "fire": "огонь", "ice": "лёд",
@@ -275,7 +275,12 @@ static func next_uid() -> int:
 	return int(Time.get_unix_time_from_system()) % 100000 * 10000 + _uid_counter
 
 static func base(id: String) -> Dictionary:
-	return BASES.get(id, {})
+	if BASES.has(id):
+		return BASES[id]
+	return ItemCatalog.base(id)      # expansion items (150)
+
+static func has_base(id: String) -> bool:
+	return BASES.has(id) or ItemCatalog.has(id)
 
 static func roll_rarity(table: String = "normal", luck: float = 0.0, rng: RandomNumberGenerator = null) -> int:
 	var w: Array = TABLES.get(table, TABLES.normal).duplicate()
@@ -311,12 +316,13 @@ static func create(base_id: String, rarity: int = 0, lvl: int = 1, rng: RandomNu
 		r.randomize()
 	var item := {"uid": next_uid(), "base": base_id, "rarity": rarity, "lvl": max(1, lvl), "upg": 0, "qty": 1,
 		"stats": {}, "mods": {}, "ability": "", "mythic": "", "curse": {}, "living": {}, "history": [], "name": ""}
-	if b.get("slot", "") in ["use", "mat"]:
+	if b.get("slot", "") in ["use", "mat", "home"]:
 		item.rarity = 4 if b.get("relic", false) else (2 if b.get("effect", "") in ["learn_school", "release_any", "chrono_double", "companion"] else 0)
 		item.name = b.name
 		return item
 	var mult: float = RARITY_MULT[rarity] * (1.0 + 0.1 * (lvl - 1))
-	for k in ["dmg", "armor", "hp", "mana", "spell", "block", "crit", "speed", "aspd", "dmg_pct", "res_fire", "res_ice", "detect"]:
+	for k in ["dmg", "armor", "hp", "mana", "spell", "block", "crit", "speed", "aspd", "dmg_pct", "res_fire", "res_ice", "detect",
+			"regen", "res_lightning", "res_time", "stealth"]:
 		if b.has(k):
 			var v: float = float(b[k])
 			if k in ["dmg", "armor", "hp", "mana"]:
@@ -395,6 +401,12 @@ static func random_for_era(era_i: int, lvl: int, table: String = "normal", luck:
 		var b: Dictionary = BASES[k]
 		if b.slot in SLOTS and (b.era == era_i or (b.era == era_i - 1 and r.randf() < 0.25)):
 			candidates.append(k)
+	# expansion equipment that drops (named legendaries/mythics come from bosses)
+	var xa := ItemCatalog.all()
+	for k in xa:
+		var xb: Dictionary = xa[k]
+		if xb.slot in SLOTS and int(xb.era) == era_i and "drop" in xb.src and not xb.has("art"):
+			candidates.append(k)
 	var id: String = candidates[r.randi() % candidates.size()]
 	return create(id, rarity, lvl, r)
 
@@ -415,6 +427,10 @@ static func random_consumable(era_i: int, rng: RandomNumberGenerator = null) -> 
 		pool.append(["tome_fire", "tome_ice", "tome_lightning", "tome_dark", "tome_spacetime"][r.randi() % 5])
 	if r.randf() < 0.02:
 		pool.append("mirror_shard")
+	# expansion medicine and materials of the era that can be found
+	for k in ItemCatalog.ids_by("medicine", era_i) + ItemCatalog.ids_by("resource", era_i):
+		if "drop" in ItemCatalog.base(k).src or ItemCatalog.base(k).group == "medicine":
+			pool.append(k)
 	return create(pool[r.randi() % pool.size()], 0, 1, r)
 
 static func _gen_name(item: Dictionary, b: Dictionary, r: RandomNumberGenerator) -> String:

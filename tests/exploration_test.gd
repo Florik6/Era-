@@ -133,7 +133,11 @@ class Harness:
 					if is_instance_valid(a) and a != leader:
 						a.die(pl)
 				leader.hp = leader.max_hp * 0.2
-				await wait(1.2)
+				# the story place checks on its own tick: wait for it (slow under load)
+				for k in 25:
+					await wait(0.2)
+					if w.ui.top_name() == "dialog" and lp._st(s.id).get("yielded", false):
+						break
 				ck("beaten leader yields and asks for mercy", w.ui.top_name() == "dialog" and lp._st(s.id).get("yielded", false))
 				var dlg = w.ui.stack.back() if w.ui.stack.size() > 0 else null
 				if dlg:

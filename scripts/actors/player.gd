@@ -259,6 +259,16 @@ func use_item(item: Dictionary) -> bool:
 	var eff: String = b.get("effect", "")
 	var ok := true
 	match eff:
+		"med":
+			# medicine: in Hardcore it treats wounds (bleeding, infection, fractures…);
+			# in the normal mode it heals a little
+			var hc = Game.world.sys("hardcore") if Game.world else null
+			if hc != null and hc.enabled():
+				ok = hc.apply_medicine(self, item.base, b.get("med", {}))
+			else:
+				heal(max_hp * float(b.get("med", {}).get("heal", 0.05)))
+				VFX.burst(chest(), Color(0.6, 1.0, 0.7), 8, 0.25)
+				Audio.play_sfx("heal", global_position, -4.0)
 		"heal":
 			heal(max_hp * b.power)
 			VFX.burst(chest(), Color(0.4, 1.0, 0.4), 12, 0.3)

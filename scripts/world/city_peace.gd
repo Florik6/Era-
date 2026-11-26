@@ -173,6 +173,8 @@ func _on_damaged(t, amount: float, src, _dt: String) -> void:
 	var c = city_at(t.global_position)
 	if c == null:
 		return
+	if src.has_meta("spar") and t.has_meta("spar"):
+		return      # a sanctioned bout (tournament, training): not a crime
 	if hostile_kind(src):
 		# a monster or raider is hurting people in town
 		if c.state in ["peaceful", "tense", "normalizing", "recovery"]:

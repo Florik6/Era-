@@ -64,6 +64,8 @@ static func build_zone(z) -> bool:
 	if mg == null:
 		return false
 	var kind: String = z.kind
+	if kind.begins_with("ev_"):
+		return _event_zone(z, mg)
 	if not kind in ["steam", "node", "vortex", "instability", "anomaly"]:
 		return false
 	var r: float = z.radius
@@ -115,6 +117,45 @@ static func build_zone(z) -> bool:
 		if e:
 			vis.add_child(e)
 			e.position = od.get("pos", Vector3.ZERO)
+			e.emitting = true
+	vis.set_meta("fx", true)
+	return true
+
+## Event hazard zones (leaks, floods, smog, anomalies): readable, cheap.
+static func _event_zone(z, mg) -> bool:
+	var r: float = z.radius
+	var vis: Node3D = z._vis
+	var c: Color = z.color()
+	var o := {}
+	match String(z.kind):
+		"ev_steam", "ev_smog":
+			o = {"n": int(r * 5.0), "life": 2.6, "mat": "mix", "col": Color(c.r, c.g, c.b, 0.45 if z.kind == "ev_steam" else 0.3), "ramp": "smoke", "size": 2.2, "shape": "ring", "rad": r * 0.7, "v0": 0.4, "v1": 1.2, "dir": Vector3.UP, "spread": 25.0, "grav": Vector3(0, 0.6, 0), "curve": "puff"}
+		"ev_gas":
+			o = {"n": int(r * 4.0), "life": 3.0, "mat": "mix", "col": Color(0.5, 0.8, 0.3, 0.35), "ramp": "smoke", "size": 1.8, "shape": "ring", "rad": r * 0.8, "v0": 0.1, "v1": 0.4, "grav": Vector3(0, 0.15, 0), "curve": "puff"}
+		"ev_flood":
+			var disc := MeshInstance3D.new()
+			disc.mesh = MeshLib.cyl(1.0, 1.0, 0.04, 24)
+			disc.material_override = MeshLib.mat(Color(0.18, 0.3, 0.45, 0.6), 0.2, 0.1, 0.0, true)
+			disc.scale = Vector3(r, 1, r)
+			disc.position.y = 0.05
+			disc.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			vis.add_child(disc)
+			mg.decal(z.global_position, "wet", r * 2.4, z.life, 0.0)
+		"ev_electric":
+			MagicFX.ground_rune(Vector3(0, 0.08, 0), "storm", c, r, 0.0, 1.0, 0.6, vis)
+			o = {"n": 8, "life": 0.2, "mat": "streak", "col": c, "size": 0.3, "shape": "ring", "rad": r * 0.8, "v0": 3.0, "v1": 6.0, "spread": 180.0, "grav": Vector3.ZERO}
+		"ev_nano":
+			o = {"n": int(r * 6.0), "life": 1.8, "mat": "add", "col": Color(0.8, 0.8, 0.9, 0.7), "size": 0.08, "shape": "sphere", "rad": r * 0.8, "v0": 0.2, "v1": 0.8, "grav": Vector3.ZERO, "ramp": "pop"}
+		"ev_gravity", "ev_time":
+			MagicFX.ground_rune(Vector3(0, 0.08, 0), "clock", c, r, 0.0, 0.4, 0.6, vis)
+			o = {"n": int(r * 4.0), "life": 2.5, "mat": "star", "col": c, "size": 0.18, "shape": "sphere", "rad": r * 0.8, "v0": 0.05, "v1": 0.3, "grav": Vector3(0, 0.3, 0), "ramp": "pop"}
+	if not o.is_empty():
+		o["local"] = true
+		o["expl"] = 0.0
+		var e: CPUParticles3D = mg.make_emitter(o)
+		if e:
+			vis.add_child(e)
+			e.position.y = 0.6
 			e.emitting = true
 	vis.set_meta("fx", true)
 	return true

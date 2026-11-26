@@ -112,6 +112,10 @@ func describe(ev: Dictionary) -> String:
 			return "%s прошёл(ла) Суд Хроноса и открыл(а) эпоху «%s»." % [nm(ev, 0), x.get("era", "")]
 		"world_event":
 			return "Событие: %s%s." % [x.get("name", ""), at]
+		"event2":
+			return "%s%s: %s." % [x.get("name", "Событие"), at, x.get("result", "")]
+		"legend_visit":
+			return ev.get("text", "%s прибыл(а)%s." % [nm(ev, 0), at])
 		"city_recovery":
 			return "%s приходит в себя после нападения: %s." % [ev.get("place", "Город"), x.get("outcome", "")]
 		"resonance_catastrophe":

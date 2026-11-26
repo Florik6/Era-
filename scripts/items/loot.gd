@@ -76,6 +76,11 @@ func boss_rewards(boss: Boss) -> void:
 	var reward: String = boss.def.get("reward", "")
 	if reward != "":
 		spawn_drop(ItemDB.create_unique(reward, boss.level), _scatter(p))
+	# expansion: the era's named legendary weapons drop from its bosses (one the
+	# hero doesn't own yet), the mythic one from the era's last boss
+	var named := named_drop(boss, era)
+	if not named.is_empty():
+		spawn_drop(named, _scatter(p))
 	for i in 2:
 		spawn_drop(ItemDB.random_for_era(era, boss.level, "boss"), _scatter(p))
 	var shards := ItemDB.create("chrono_shard", 0, 1)
@@ -87,6 +92,27 @@ func boss_rewards(boss: Boss) -> void:
 	spawn_drop({}, _scatter(p), false, 150 * (era + 1))
 	for i in 3:
 		spawn_drop(ItemDB.random_consumable(era), _scatter(p))
+
+func named_drop(boss, era: int) -> Dictionary:
+	var owned := {}
+	if Game.player and Game.player.data:
+		for it in Game.player.data.inv.items:
+			owned[it.base] = true
+		for sl in Game.player.data.inv.equip:
+			owned[Game.player.data.inv.equip[sl].get("base", "")] = true
+	var bosses: Array = DBEras.era(era).bosses
+	var last: bool = not bosses.is_empty() and str(boss.get("boss_id")) == str(bosses[bosses.size() - 1])
+	var want := 5 if last else 4
+	for k in ItemCatalog.ids_by("weapon", era):
+		var b := ItemCatalog.base(k)
+		if b.has("art") and int(b.rarity) == want and not owned.has(k):
+			return ItemCatalog.create_named(k, boss.level)
+	if last:
+		for k in ItemCatalog.ids_by("weapon", era):
+			var b2 := ItemCatalog.base(k)
+			if b2.has("art") and int(b2.rarity) == 4 and not owned.has(k):
+				return ItemCatalog.create_named(k, boss.level)
+	return {}
 
 func roll_chest(chest, actor) -> void:
 	var era := Profile.current_era

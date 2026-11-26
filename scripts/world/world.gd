@@ -107,7 +107,7 @@ func _ready() -> void:
 			["perf_lod", "res://scripts/world/perf_lod.gd"], ["dcq", "res://scripts/core/dynamic_quality.gd"],
 			["resonance", "res://scripts/combat/resonance.gd"], ["echoes", "res://scripts/world/echoes.gd"],
 			["city_peace", "res://scripts/world/city_peace.gd"], ["city_life", "res://scripts/world/city_life.gd"],
-			["city_economy", "res://scripts/world/city_economy.gd"]]:
+			["city_economy", "res://scripts/world/city_economy.gd"], ["events2", "res://scripts/sim/event_director2.gd"]]:
 		if not spec[0] in DISABLED_SUBSYSTEMS:
 			_attach_optional(spec[0], spec[1])
 	cam = GameCamera.new()
@@ -442,6 +442,10 @@ func map_markers(minimap: bool = false) -> Array:
 		for ev in director.active_events():
 			if ev.has("pos"):
 				out.append({"pos": Vector2(ev.pos.x, ev.pos.z), "kind": "event", "name": ev.name, "color": Color(1.0, 0.5, 0.1)})
+	var ev2 = sys("events2")
+	if ev2 and ev2.get("active") != null:
+		for e in ev2.active:
+			out.append({"pos": Vector2(e.pos.x, e.pos.z), "kind": "event", "name": e.tpl.name, "color": Color(1.0, 0.75, 0.3) if e.tpl.cat != "danger" else Color(1.0, 0.4, 0.3)})
 	var re = sys("road_encounters")
 	if re and re.get("active") != null:
 		for e in re.active:

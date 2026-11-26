@@ -142,7 +142,7 @@ func is_enemy(a, b) -> bool:
 	var rb = _team_root(b)
 	if ra == rb:
 		return false
-	# personal grudges expire (aggro stores an expiry time; it used to count forever)
+	# personal grudges (aggro stores an expiry time; expired keys are purged by Actor)
 	var now := Time.get_ticks_msec()
 	if _fresh(b.aggro, a.actor_id, now) or _fresh(a.aggro, b.actor_id, now) or _fresh(rb.aggro, ra.actor_id, now) or _fresh(ra.aggro, rb.actor_id, now):
 		return true

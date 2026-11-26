@@ -10,6 +10,8 @@ func _init(w) -> void:
 	world = w
 
 func open_npc(n) -> void:
+	if EventDirector2.inst != null and EventDirector2.inst.talk_to(n):
+		return
 	var opts: Array = []
 	var text := ""
 	var col := Color(0.6, 0.6, 0.6)
@@ -21,8 +23,11 @@ func open_npc(n) -> void:
 			Witness.dialog(world, n)
 			return
 		"trader":
-			text = "«Добро пожаловать! Лучшие товары эпохи «%s»»." % DBEras.era(Profile.current_era).name
-			opts.append({"text": "Торговать", "cb": func(): open_trade(n)})
+			if CityLife.inst != null and n.has_meta("prof") and not CityLife.inst.is_open(n):
+				text = "«Лавка закрыта. Приходите с утра — с восьми до семи вечера»."
+			else:
+				text = "«Добро пожаловать! Лучшие товары эпохи «%s»»." % DBEras.era(Profile.current_era).name
+				opts.append({"text": "Торговать", "cb": func(): open_trade(n)})
 		"guard":
 			var st: Dictionary = world.factions.settlement_state(n.settlement_id)
 			var owner_f: String = st.get("owner", "")
@@ -105,6 +110,11 @@ func open_trade(n) -> void:
 	var mult := 1.0
 	if owner_f != "" and world.factions.member_of() == owner_f:
 		mult = 0.85
+	if CityEconomy.inst != null and str(n.settlement_id) != "":
+		mult *= CityEconomy.inst.price_mult(n.settlement_id, "goods")      # town supply and shortages
+	for b in ItemCatalog.special_stock(era, "goods").slice(0, 3):
+		if ItemDB.has_base(b):
+			items.append(ItemDB.create(b, 0, lvl))
 	world.ui.open("trade", {"title": "Торговец: " + n.display_name, "items": items, "price_mult": mult, "sell": true, "sell_mult": 0.35,
 		"buy_cb": func(it): return world.factions.buy(it, mult)})
 

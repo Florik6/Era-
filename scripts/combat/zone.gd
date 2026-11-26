@@ -44,6 +44,12 @@ func color() -> Color:
 		"heal": return Color(0.4, 1.0, 0.5)
 		"dark": return Color(0.6, 0.2, 0.85)
 		"steam", "node", "vortex", "instability", "anomaly": return ResonanceFX.color(kind)
+		"ev_steam", "ev_smog": return Color(0.85, 0.88, 0.92)
+		"ev_gas": return Color(0.55, 0.85, 0.35)
+		"ev_flood": return Color(0.3, 0.5, 0.8)
+		"ev_electric": return Color(0.55, 0.75, 1.0)
+		"ev_nano": return Color(0.75, 0.75, 0.85)
+		"ev_gravity", "ev_time": return Color(0.45, 1.0, 0.85)
 	return Color(1, 1, 1)
 
 func _build() -> void:
@@ -188,6 +194,19 @@ func _physics_process(delta: float) -> void:
 				Combat.deal(s, a, inf5)
 			if randf() < 0.35:
 				MagicFX.time_snap(global_position, radius * 0.8)
+		"ev_steam", "ev_gas", "ev_nano", "ev_electric":
+			for a in victims:
+				var infe := info.duplicate()
+				infe.proc = true
+				Combat.deal(null, a, infe)
+				if kind == "ev_steam" or kind == "ev_gas":
+					a.apply_status("slow", 1.2, {"f": 0.7})
+		"ev_flood":
+			for a in victims:
+				a.apply_status("slow", 1.2, {"f": 0.55})
+		"ev_gravity", "ev_time":
+			for a in victims:
+				a.apply_status("timeslow", 1.0)
 		"anomaly":
 			for a in victims:
 				if randf() < 0.4:

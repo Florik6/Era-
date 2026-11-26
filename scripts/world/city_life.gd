@@ -367,6 +367,9 @@ func perform(n, pl: Dictionary, delta: float) -> void:
 			n.start_action("work", 2.0, 0.5, {"anim": "play"})
 			if Game.player and n.global_position.distance_to(Game.player.global_position) < 25.0 and randf() < 0.4:
 				VFX.text(n.global_position + Vector3(0, 2.3, 0), "♪", Color(1.0, 0.9, 0.6), 0.8)
+		"watch":
+			n.set_meta("act_cd", randf_range(3.0, 7.0))
+			n.start_action("work", 1.0, 0.5, {"anim": "cheer" if randf() < 0.35 else "talk"})
 		"post", "bench":
 			n.set_meta("act_cd", randf_range(6.0, 12.0))
 			if randf() < 0.3:
