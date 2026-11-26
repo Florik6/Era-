@@ -1,0 +1,367 @@
+{
+  "dcq": false,
+  "order": [
+    "empty",
+    "walk",
+    "npcs",
+    "battle",
+    "magic",
+    "explosion"
+  ],
+  "results": {
+    "battle": {
+      "draw_calls": {
+        "avg": 1406.28,
+        "max": 1614.0,
+        "p95": 1605.0
+      },
+      "frame_ms": {
+        "avg": 168.37,
+        "max": 231.56,
+        "p95": 210.24
+      },
+      "frames": 54,
+      "objects": {
+        "avg": 1667.63,
+        "max": 1898.0,
+        "p95": 1877.0
+      },
+      "peak": {
+        "actors": 63.0,
+        "lights": 18.0,
+        "nodes": 9349.0,
+        "particle_amount": 659.0,
+        "particles": 83.0,
+        "phys_active": 0.0,
+        "shadow_lights": 0.0
+      },
+      "physics_ms": {
+        "avg": 15.75,
+        "max": 19.29,
+        "p95": 19.29
+      },
+      "primitives": {
+        "avg": 120735.52,
+        "max": 131976.0,
+        "p95": 131678.0
+      },
+      "process_ms": {
+        "avg": 146.68,
+        "max": 191.41,
+        "p95": 191.41
+      },
+      "sub_ms": {
+        "actor_phys": {
+          "avg": 19.23,
+          "max": 36.04,
+          "p95": 24.55
+        },
+        "ai": {
+          "avg": 9.66,
+          "max": 19.59,
+          "p95": 16.47
+        },
+        "rig": {
+          "avg": 2.27,
+          "max": 3.69,
+          "p95": 2.98
+        }
+      }
+    },
+    "empty": {
+      "draw_calls": {
+        "avg": 926.24,
+        "max": 1035.0,
+        "p95": 1018.0
+      },
+      "frame_ms": {
+        "avg": 104.03,
+        "max": 127.0,
+        "p95": 121.12
+      },
+      "frames": 54,
+      "objects": {
+        "avg": 1269.3,
+        "max": 1612.0,
+        "p95": 1610.0
+      },
+      "peak": {
+        "actors": 25.0,
+        "lights": 12.0,
+        "nodes": 6101.0,
+        "particle_amount": 456.0,
+        "particles": 53.0,
+        "phys_active": 0.0,
+        "shadow_lights": 0.0
+      },
+      "physics_ms": {
+        "avg": 4.05,
+        "max": 5.74,
+        "p95": 5.74
+      },
+      "primitives": {
+        "avg": 93940.81,
+        "max": 100796.0,
+        "p95": 99660.0
+      },
+      "process_ms": {
+        "avg": 114.59,
+        "max": 125.65,
+        "p95": 125.65
+      },
+      "sub_ms": {
+        "actor_phys": {
+          "avg": 3.81,
+          "max": 8.45,
+          "p95": 5.01
+        },
+        "ai": {
+          "avg": 1.18,
+          "max": 2.61,
+          "p95": 1.47
+        },
+        "rig": {
+          "avg": 0.71,
+          "max": 3.79,
+          "p95": 0.93
+        }
+      }
+    },
+    "explosion": {
+      "draw_calls": {
+        "avg": 1195.16,
+        "max": 1321.0,
+        "p95": 1245.0
+      },
+      "frame_ms": {
+        "avg": 168.74,
+        "max": 278.77,
+        "p95": 205.92
+      },
+      "frames": 43,
+      "objects": {
+        "avg": 1420.63,
+        "max": 1607.0,
+        "p95": 1509.0
+      },
+      "peak": {
+        "actors": 55.0,
+        "lights": 24.0,
+        "nodes": 8818.0,
+        "particle_amount": 707.0,
+        "particles": 82.0,
+        "phys_active": 0.0,
+        "shadow_lights": 0.0
+      },
+      "physics_ms": {
+        "avg": 10.8,
+        "max": 17.13,
+        "p95": 17.13
+      },
+      "primitives": {
+        "avg": 101942.33,
+        "max": 110554.0,
+        "p95": 105130.0
+      },
+      "process_ms": {
+        "avg": 161.37,
+        "max": 190.19,
+        "p95": 190.19
+      },
+      "sub_ms": {
+        "actor_phys": {
+          "avg": 12.45,
+          "max": 27.99,
+          "p95": 17.11
+        },
+        "ai": {
+          "avg": 4.85,
+          "max": 12.98,
+          "p95": 7.44
+        },
+        "rig": {
+          "avg": 1.86,
+          "max": 5.04,
+          "p95": 2.49
+        }
+      }
+    },
+    "magic": {
+      "draw_calls": {
+        "avg": 1365.59,
+        "max": 1462.0,
+        "p95": 1436.0
+      },
+      "frame_ms": {
+        "avg": 175.71,
+        "max": 210.19,
+        "p95": 195.95
+      },
+      "frames": 41,
+      "objects": {
+        "avg": 1594.41,
+        "max": 1691.0,
+        "p95": 1663.0
+      },
+      "peak": {
+        "actors": 66.0,
+        "lights": 23.0,
+        "nodes": 9343.0,
+        "particle_amount": 591.0,
+        "particles": 69.0,
+        "phys_active": 0.0,
+        "shadow_lights": 0.0
+      },
+      "physics_ms": {
+        "avg": 13.97,
+        "max": 19.28,
+        "p95": 19.28
+      },
+      "primitives": {
+        "avg": 115527.27,
+        "max": 122742.0,
+        "p95": 121118.0
+      },
+      "process_ms": {
+        "avg": 154.82,
+        "max": 179.29,
+        "p95": 179.29
+      },
+      "sub_ms": {
+        "actor_phys": {
+          "avg": 16.65,
+          "max": 30.89,
+          "p95": 20.33
+        },
+        "ai": {
+          "avg": 7.98,
+          "max": 15.43,
+          "p95": 10.78
+        },
+        "rig": {
+          "avg": 2.24,
+          "max": 3.76,
+          "p95": 2.96
+        }
+      }
+    },
+    "npcs": {
+      "draw_calls": {
+        "avg": 1316.82,
+        "max": 1904.0,
+        "p95": 1452.0
+      },
+      "frame_ms": {
+        "avg": 157.38,
+        "max": 217.54,
+        "p95": 183.58
+      },
+      "frames": 34,
+      "objects": {
+        "avg": 1611.76,
+        "max": 2214.0,
+        "p95": 1767.0
+      },
+      "peak": {
+        "actors": 49.0,
+        "lights": 19.0,
+        "nodes": 8092.0,
+        "particle_amount": 833.0,
+        "particles": 93.0,
+        "phys_active": 0.0,
+        "shadow_lights": 0.0
+      },
+      "physics_ms": {
+        "avg": 10.71,
+        "max": 14.72,
+        "p95": 13.84
+      },
+      "primitives": {
+        "avg": 116554.41,
+        "max": 157462.0,
+        "p95": 125148.0
+      },
+      "process_ms": {
+        "avg": 144.9,
+        "max": 186.12,
+        "p95": 186.12
+      },
+      "sub_ms": {
+        "actor_phys": {
+          "avg": 15.29,
+          "max": 21.69,
+          "p95": 17.87
+        },
+        "ai": {
+          "avg": 7.69,
+          "max": 10.72,
+          "p95": 9.27
+        },
+        "rig": {
+          "avg": 1.63,
+          "max": 2.54,
+          "p95": 2.02
+        }
+      }
+    },
+    "walk": {
+      "draw_calls": {
+        "avg": 856.44,
+        "max": 934.0,
+        "p95": 917.0
+      },
+      "frame_ms": {
+        "avg": 104.42,
+        "max": 238.38,
+        "p95": 113.19
+      },
+      "frames": 54,
+      "objects": {
+        "avg": 1131.89,
+        "max": 1206.0,
+        "p95": 1189.0
+      },
+      "peak": {
+        "actors": 25.0,
+        "lights": 12.0,
+        "nodes": 6093.0,
+        "particle_amount": 317.0,
+        "particles": 37.0,
+        "phys_active": 0.0,
+        "shadow_lights": 0.0
+      },
+      "physics_ms": {
+        "avg": 3.83,
+        "max": 5.89,
+        "p95": 5.89
+      },
+      "primitives": {
+        "avg": 88956.69,
+        "max": 94698.0,
+        "p95": 93836.0
+      },
+      "process_ms": {
+        "avg": 126.91,
+        "max": 229.0,
+        "p95": 229.0
+      },
+      "sub_ms": {
+        "actor_phys": {
+          "avg": 3.59,
+          "max": 5.72,
+          "p95": 4.68
+        },
+        "ai": {
+          "avg": 1.16,
+          "max": 2.3,
+          "p95": 1.53
+        },
+        "rig": {
+          "avg": 0.64,
+          "max": 1.28,
+          "p95": 0.89
+        }
+      }
+    }
+  }
+}

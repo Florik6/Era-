@@ -121,6 +121,8 @@ func _build_visual() -> void:
 		"rift":
 			_portal_ring(Color(0.65, 0.3, 1.0), 1.9)
 			_lbl(nm if nm != "" else "Разлом", 4.8, Color(0.8, 0.6, 1.0))
+			_label.visibility_range_end = 60.0
+			interact_radius = 4.5
 		"cp":
 			MeshLib.part(self, MeshLib.cyl(4.0, 4.2, 0.3, 16), stone, Vector3(0, 0.15, 0))
 			MeshLib.part(self, MeshLib.cyl(0.08, 0.08, 6.0, 6), MeshLib.mat(Color(0.3, 0.25, 0.2)), Vector3(0, 3.0, 0))
@@ -135,7 +137,11 @@ func _build_visual() -> void:
 		"altar":
 			MeshLib.part(self, MeshLib.box(Vector3(2.0, 1.0, 1.2)), stone, Vector3(0, 0.5, 0))
 			MeshLib.part(self, MeshLib.sphere(0.3, 8, 6), MeshLib.glow(Color(0.5, 1.0, 0.8), 2.0), Vector3(0, 1.4, 0))
-			_lbl("Древний алтарь", 2.6, Color(0.6, 1.0, 0.85))
+			_lbl(Curses.flavour(Profile.current_era).title, 2.6, Color(0.6, 1.0, 0.85))
+			for i in 6:
+				var ra := TAU * i / 6.0
+				MeshLib.part(self, MeshLib.box(Vector3(0.08, 0.02, 0.2)), MeshLib.glow(Color(0.5, 1.0, 0.8), 1.6), Vector3(cos(ra) * 0.55, 1.01, sin(ra) * 0.35), Vector3(0, rad_to_deg(-ra), 0))
+			interact_radius = 3.5
 		"mirror":
 			MeshLib.part(self, MeshLib.box(Vector3(1.8, 3.0, 0.2)), MeshLib.mat(Color(0.75, 0.9, 1.0), 0.95, 0.05, 0.4), Vector3(0, 1.8, 0))
 			MeshLib.part(self, MeshLib.box(Vector3(2.1, 3.3, 0.15)), MeshLib.mat(Color(0.7, 0.55, 0.3), 0.8, 0.4), Vector3(0, 1.8, 0.05))

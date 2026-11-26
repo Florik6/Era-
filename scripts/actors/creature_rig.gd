@@ -171,9 +171,22 @@ func set_dormant(v: bool) -> void:
 			j["legm%d" % k].visible = not v
 		j.tongue.visible = not v
 
+var _lod_acc := 0.0
+
 func _process(delta: float) -> void:
 	if not is_visible_in_tree():
 		return
+	# distant creatures animate at a lower rate (same scheme as humanoids)
+	if not dead:
+		var cam := get_viewport().get_camera_3d()
+		if cam:
+			var d2 := cam.global_position.distance_squared_to(global_position)
+			if d2 > 1600.0:
+				_lod_acc += delta
+				if _lod_acc < (0.066 if d2 < 4900.0 else 0.15):
+					return
+				delta = _lod_acc
+				_lod_acc = 0.0
 	_t += delta
 	hit_t = maxf(0.0, hit_t - delta)
 	var sp := clampf(move_speed, 0.0, 2.0)

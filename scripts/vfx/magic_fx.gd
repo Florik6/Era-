@@ -635,6 +635,19 @@ static func _img(kind: String) -> Image:
 static func mgr():
 	return VFX._m()
 
+## Distant decoration of non-player effects is skipped: the core visuals of
+## the hero's own spells, damage, hitboxes and danger telegraphs are never
+## touched. Dynamic Combat Quality shrinks the radius under heavy load.
+static func lod_far(pos: Vector3, owner = null) -> bool:
+	if owner != null and is_instance_valid(owner) and owner.get("is_player") == true:
+		return false
+	var vp = Engine.get_main_loop().root if Engine.get_main_loop() else null
+	var cam: Camera3D = vp.get_camera_3d() if vp else null
+	if cam == null:
+		return false
+	var r := 40.0 - 5.0 * float(DynamicQuality.level)
+	return cam.global_position.distance_squared_to(pos) > r * r
+
 static func school(s: String) -> String:
 	match s:
 		"fire", "ice", "lightning", "dark", "energy", "earth":
@@ -748,7 +761,7 @@ static func _quad(parent: Node3D, mat: Material, size: float, pos: Vector3 = Vec
 ## Flat animated rune circle on the ground; returns it (null without VFX).
 static func ground_rune(pos: Vector3, style: String, c: Color, r: float, life: float, spin: float = 0.6, intensity: float = 1.0, parent: Node3D = null) -> MeshInstance3D:
 	var mg = mgr()
-	if mg == null:
+	if mg == null or (parent == null and lod_far(pos)):
 		return null
 	var host: Node3D = parent if parent != null else mg
 	var mi := _quad(host, rune_mat(style, c, spin, intensity), 0.1)
@@ -778,6 +791,8 @@ static func rune_style_for(sch: String) -> String:
 static func charge(a, sch: String, dur: float, big: bool = false) -> void:
 	var mg = mgr()
 	if mg == null or a == null or not is_instance_valid(a) or not a.is_inside_tree():
+		return
+	if lod_far(a.global_position, a) or (DynamicQuality.level >= 3 and a.get("is_player") != true and not big):
 		return
 	if Game.player and is_instance_valid(Game.player) and a.global_position.distance_to(Game.player.global_position) > 45.0:
 		return
@@ -827,7 +842,7 @@ static func charge(a, sch: String, dur: float, big: bool = false) -> void:
 # ============================================================ phase 2: release
 static func release(pos: Vector3, dir: Vector3, sch: String) -> void:
 	var mg = mgr()
-	if mg == null:
+	if mg == null or lod_far(pos):
 		return
 	sch = school(sch)
 	var c0 := pal(sch, 0)
@@ -965,7 +980,8 @@ static func impact(pos: Vector3, sch: String, r: float = 1.0, crit: bool = true)
 	var mg = mgr()
 	if mg == null:
 		return
-	var fx: int = mg.fx
+	# distant impacts keep only their core layer
+	var fx: int = mg.fx if not lod_far(pos) else 0
 	var c0 := pal(sch, 0)
 	var c1 := pal(sch, 1)
 	var c3 := pal(sch, 3)
@@ -1236,6 +1252,8 @@ static func summon_puff(p: Vector3, c: Color = Color(0.6, 0.3, 0.9)) -> void:
 static func ghost(a, c: Color, life: float = 0.5, at = null) -> void:
 	var mg = mgr()
 	if mg == null or a == null or not is_instance_valid(a):
+		return
+	if lod_far(a.global_position, a):
 		return
 	var rig = a.get("rig")
 	if rig == null or not is_instance_valid(rig) or not rig.is_inside_tree():

@@ -27,8 +27,12 @@ func _ready() -> void:
 	home = global_position if home == Vector3.ZERO else home
 
 func _physics_process(delta: float) -> void:
+	if _lod_skip(delta):
+		return
+	delta = _lod_dt
 	if not is_dead and brain != null:
 		brain.tick(delta)
+	_lod_pre = true
 	super._physics_process(delta)
 	_ig_t -= delta
 	if _ig_t <= 0.0:

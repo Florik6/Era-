@@ -103,7 +103,8 @@ func _ready() -> void:
 	for spec in [["road_encounters", "res://scripts/sim/road_encounters.gd"], ["living_pois", "res://scripts/world/living_poi.gd"],
 			["tracking", "res://scripts/world/tracking.gd"], ["discovery", "res://scripts/world/discovery.gd"],
 			["traces", "res://scripts/world/event_traces.gd"], ["cinematic", "res://scripts/ui/cinematic.gd"],
-			["music", "res://scripts/audio/music_director.gd"], ["combat_overlay", "res://scripts/ui/combat_overlay.gd"]]:
+			["music", "res://scripts/audio/music_director.gd"], ["combat_overlay", "res://scripts/ui/combat_overlay.gd"],
+			["perf_lod", "res://scripts/world/perf_lod.gd"], ["dcq", "res://scripts/core/dynamic_quality.gd"]]:
 		if not spec[0] in DISABLED_SUBSYSTEMS:
 			_attach_optional(spec[0], spec[1])
 	cam = GameCamera.new()

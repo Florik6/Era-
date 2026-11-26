@@ -71,6 +71,11 @@ var _mstyle: Dictionary = {}
 var _lean := 0.0
 var _pitch := 0.0
 var _prev_yaw := 0.0
+var lod_tier := 0              # 0 near, 1 mid, 2 far (set by PerfLOD)
+var _lod_n := 0
+var _lod_sum := 0.0
+var _lod_dt := 0.0
+var _lod_pre := false          # subclass already did the LOD gate this tick
 var skill_cd := {}
 var statuses := {}
 var riposte := false
@@ -239,6 +244,37 @@ func busy() -> bool:
 
 # ---------------------------------------------------------------- loop
 func _physics_process(delta: float) -> void:
+	if _lod_pre:
+		_lod_pre = false
+	elif _lod_skip(delta):
+		return
+	else:
+		delta = _lod_dt
+	if Perf.enabled:
+		var t0 := Time.get_ticks_usec()
+		_physics_step(delta)
+		Perf.add("actor_phys", Time.get_ticks_usec() - t0)
+	else:
+		_physics_step(delta)
+
+## Far actors (LOD tier 2) update every third physics tick with the summed
+## time step; returns true when this tick is skipped. _lod_dt holds the step.
+func _lod_skip(delta: float) -> bool:
+	if lod_tier < 2 or is_player or is_dead:
+		_lod_dt = delta
+		_lod_n = 0
+		_lod_sum = 0.0
+		return false
+	_lod_n += 1
+	_lod_sum += delta
+	if _lod_n < 3:
+		return true
+	_lod_dt = _lod_sum
+	_lod_n = 0
+	_lod_sum = 0.0
+	return false
+
+func _physics_step(delta: float) -> void:
 	if is_dead:
 		dead_t += delta
 		velocity.x = 0
@@ -400,11 +436,21 @@ func _move(delta: float) -> void:
 	lunge_vel = lunge_vel.move_toward(Vector3.ZERO, delta * 60.0)
 	velocity.x = v.x
 	velocity.z = v.z
-	if is_on_floor():
-		velocity.y = -0.5 if velocity.y <= 0.0 else velocity.y - gravity * delta
+	if lod_tier >= 2 and not is_player and Game.world and Game.world.has_method("ground_height"):
+		# far away: cheap kinematic step on the terrain, no collision solve
+		global_position += Vector3(v.x, 0.0, v.z) * delta
+		global_position.y = Game.world.ground_height(global_position)
+		velocity.y = 0.0
+	elif not is_player and v.length_squared() < 0.0004 and is_on_floor() and velocity.y <= 0.0:
+		# standing still on the ground (villagers at work, guards on post): sleep
+		velocity.x = 0.0
+		velocity.z = 0.0
 	else:
-		velocity.y -= gravity * delta
-	move_and_slide()
+		if is_on_floor():
+			velocity.y = -0.5 if velocity.y <= 0.0 else velocity.y - gravity * delta
+		else:
+			velocity.y -= gravity * delta
+		move_and_slide()
 	# world bounds and fall-through guard
 	if Game.world and Game.world.has_method("clamp_to_world"):
 		Game.world.clamp_to_world(self)

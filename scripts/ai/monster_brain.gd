@@ -26,7 +26,7 @@ func tick(delta: float) -> void:
 		return
 	think_t -= delta
 	if think_t <= 0.0:
-		think_t = 0.3 + randf() * 0.1
+		think_t = (1.5 if m.lod_tier >= 2 else (0.55 if m.lod_tier == 1 else 0.3)) + randf() * 0.1
 		_think()
 	_act(delta)
 

@@ -92,7 +92,8 @@ static func speed_lines(dur: float = 0.3, strength: float = 1.0) -> void:
 		o.speed_lines(dur, strength)
 
 static func particles(n: int) -> int:
-	return maxi(1, int(round(n * k("particles") * float(Settings.profile().get("particles", 1.0)))))
+	var dq: float = [1.0, 0.75, 0.7, 0.6, 0.55, 0.5][clampi(DynamicQuality.level, 0, 5)]
+	return maxi(1, int(round(n * k("particles") * float(Settings.profile().get("particles", 1.0)) * dq)))
 
 # ------------------------------------------------------------------ moments
 ## The player's melee/ranged hit landed: weight-dependent hit-stop and camera kick.

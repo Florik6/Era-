@@ -838,7 +838,12 @@ func _process(delta: float) -> void:
 				return
 			delta = _lod_acc
 			_lod_acc = 0.0
-	animate(delta)
+	if Perf.enabled:
+		var t0 := Time.get_ticks_usec()
+		animate(delta)
+		Perf.add("rig", Time.get_ticks_usec() - t0)
+	else:
+		animate(delta)
 
 static func _ss(x: float) -> float:
 	var c := clampf(x, 0.0, 1.0)

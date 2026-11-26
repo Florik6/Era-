@@ -11,6 +11,8 @@ func _ready() -> void:
 	Chronicle.clear()
 	Profile.new_character("Боец", "warrior", false, {"skin": 1, "hair": 1, "hair_color": 1, "beard": 1, "cloth": 0})
 	Profile.current_era = 0
+	Profile.world_seed = 515151
+	seed(515151)
 	Settings.combat_fx = 2
 	var h := Harness.new()
 	get_tree().root.add_child.call_deferred(h)
@@ -187,7 +189,15 @@ class Harness:
 			pl.combo_t = 5.0
 			pl.attack_cd = 0.0
 			pl.act = {}
-			pl.attack(pl.facing)
+			var st0: bool = false
+			for tries in 12:
+				pl.act = {}
+				pl.attack_cd = 0.0
+				pl.combo = pl._combo_chain(cat).size() - 1
+				st0 = pl.attack(pl.facing)
+				if st0:
+					break
+				await frames(1)
 			var mx := 0.0
 			var launched := false
 			for i in 40:

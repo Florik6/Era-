@@ -98,6 +98,7 @@ class Harness:
 		await wait(0.5)
 		ck("rift is the interaction target (button shown)", pl.interact_target == rn, "target=%s" % str(pl.interact_target))
 		ck("rift label offers entry", pl.interact_label().begins_with("Войти"), pl.interact_label())
+		ck("rift interaction radius is 4.5 m", rn != null and is_equal_approx(float(rn.interact_radius), 4.5))
 		ck("rift label shows danger + state", rn != null and rn._label.text.find("Опасность") >= 0, rn._label.text if rn else "")
 		pl.do_interact()
 		await wait(1.5)

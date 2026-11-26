@@ -33,6 +33,8 @@ var _variant := 0
 var _split: Array = []             # [base, lows[4], ups[4]] MeshInstances when the player is inside
 var _check := 0.0
 var _inside := false
+var _interior: Array = []       # ground-floor furniture and chests: drawn only while inside
+var _interior_ready := false
 var _rng := RandomNumberGenerator.new()
 
 func configure(b: Dictionary, era_i: int, st: Dictionary, settlement: String = "", level: int = 1) -> void:
@@ -562,6 +564,8 @@ func _process(delta: float) -> void:
 	if _check > 0.0:
 		return
 	_check = 0.15
+	if not _interior_ready:
+		_collect_interior()
 	var v: Node3D = viewer
 	if v == null and Game.player != null and is_instance_valid(Game.player):
 		v = Game.player
@@ -579,6 +583,7 @@ func _process(delta: float) -> void:
 			_ensure_split()
 		for n in _split_nodes():
 			n.visible = inside
+		_show_interior(inside)
 	if _inside:
 		_update_cutaway()
 
@@ -668,3 +673,19 @@ class Trapdoor extends Node3D:
 		Audio.play_sfx("ui_open", dest, -6.0)
 		if Game.world and Game.world.has_method("camera_snap"):
 			Game.world.camera_snap()
+
+
+## Interior content is hidden while the roof covers it (the top-down camera
+## can't see it), so it costs no draw calls; collisions and logic stay.
+func _collect_interior() -> void:
+	_interior_ready = true
+	_interior.clear()
+	for c in get_children():
+		if (c is Chest or (c is Destructible and c.get("kind") != "door")) and _covers(c.global_position):
+			_interior.append(c)
+	_show_interior(_inside)
+
+func _show_interior(on: bool) -> void:
+	for n in _interior:
+		if is_instance_valid(n):
+			n.visible = on

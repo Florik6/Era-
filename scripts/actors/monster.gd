@@ -21,8 +21,12 @@ func _ready() -> void:
 		brain = MonsterBrain.new(self)
 
 func _physics_process(delta: float) -> void:
+	if _lod_skip(delta):
+		return
+	delta = _lod_dt
 	if not is_dead and brain != null:
 		brain.tick(delta)
+	_lod_pre = true
 	super._physics_process(delta)
 
 func is_ranged() -> bool:

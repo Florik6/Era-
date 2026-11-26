@@ -26,6 +26,11 @@ var cover_pos = null
 var cover_t := 0.0
 var swap_cd := 0.0
 var idle_t := 0.0
+var _sep_cache := Vector3.ZERO   # separation push, refreshed every 0.15 s
+var _sep_t := 0.0
+var _los_ok := false             # line of sight to the target, refreshed every 0.2 s
+var _los_t := 0.0
+var _los_tgt = null
 var _work_t := 0.0          # >0 working at the job spot, <0 short break
 var _work_anim_t := 0.0
 var _patrol_i := 0
@@ -102,6 +107,14 @@ func on_lost_to(winner) -> void:
 
 # ---------------------------------------------------------------- main loop
 func tick(delta: float) -> void:
+	if Perf.enabled:
+		var t0 := Time.get_ticks_usec()
+		_tick(delta)
+		Perf.add("ai", Time.get_ticks_usec() - t0)
+	else:
+		_tick(delta)
+
+func _tick(delta: float) -> void:
 	if n.yielding:
 		n.move_input = Vector3.ZERO
 		n.yield_t -= delta
@@ -114,7 +127,7 @@ func tick(delta: float) -> void:
 	think_t -= delta
 	if think_t <= 0.0:
 		var far = Game.player != null and is_instance_valid(Game.player) and n.global_position.distance_squared_to(Game.player.global_position) > 3600.0
-		think_t = (0.9 if far else 0.32) + randf() * 0.12
+		think_t = (2.0 if n.lod_tier >= 2 else (0.9 if far else 0.32)) + randf() * 0.12
 		_think()
 	_act(delta)
 
@@ -572,15 +585,28 @@ func _steer(dir: Vector3, delta: float, spd: float) -> void:
 				path.pop_front()
 		last_pos = n.global_position
 		stuck_t = 0.0
-	# separation from nearby actors
-	var sep := Vector3.ZERO
-	for a in Game.actors_near(n.global_position, 1.4):
-		if a != n and not a.is_dead:
-			var off: Vector3 = n.global_position - a.global_position
-			off.y = 0
-			if off.length() > 0.01:
-				sep += off.normalized() * (1.4 - off.length())
-	n.move_input = (dir + sep * 0.6).normalized() * spd
+	# separation from nearby actors (spread over frames: refreshed every 0.15 s)
+	_sep_t -= delta
+	if _sep_t <= 0.0:
+		_sep_t = 0.15
+		var sep := Vector3.ZERO
+		for a in Game.actors_near(n.global_position, 1.4):
+			if a != n and not a.is_dead:
+				var off: Vector3 = n.global_position - a.global_position
+				off.y = 0
+				if off.length() > 0.01:
+					sep += off.normalized() * (1.4 - off.length())
+		_sep_cache = sep
+	n.move_input = (dir + _sep_cache * 0.6).normalized() * spd
+
+## Cached line of sight to the current target (one ray per 0.2 s, not per tick).
+func _has_los(t, delta: float) -> bool:
+	_los_t -= delta
+	if _los_t <= 0.0 or _los_tgt != t:
+		_los_t = 0.2
+		_los_tgt = t
+		_los_ok = Combat.line_of_sight(n.chest(), t.chest())
+	return _los_ok
 
 func _combat(delta: float) -> void:
 	var t = target
@@ -626,7 +652,7 @@ func _combat(delta: float) -> void:
 			_steer(-dir, delta, 0.9)
 		else:
 			_steer(dir.cross(Vector3.UP) * strafe, delta, 0.6)
-		if d <= r and Combat.line_of_sight(n.chest(), t.chest()):
+		if d <= r and _has_los(t, delta):
 			n.attack(dir)
 	else:
 		if d > r * 0.8:
