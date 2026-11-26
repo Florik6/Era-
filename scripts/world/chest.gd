@@ -43,7 +43,7 @@ func _ready() -> void:
 		_lid.rotation.x = -1.9
 		is_mimic = false
 	else:
-		Game.grid.insert(self, global_position, "interact")
+		Game.grid.insert_deferred(self, "interact")
 		_registered = true
 	set_process(is_mimic and not opened)
 

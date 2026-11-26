@@ -134,6 +134,8 @@ func _ambient_population() -> void:
 		var m = world.spawner.spawn_enemy(id, center + Vector3(randf_range(-3, 3), 0, randf_range(-3, 3)))
 		if m:
 			ambient.append(m)
+			if blood_moon_active() and randf() < 0.35:
+				_make_blood_variant(m)
 
 func _maybe_start_event() -> void:
 	if events.size() >= 2:
@@ -174,12 +176,20 @@ func _start(type: String, pp: Vector3) -> void:
 				start_raid_on(s.id, "")
 		"blood_moon":
 			var e := _ev("blood_moon", pp, 150.0)
-			mods.enemy_dmg = 1.3
-			mods.spawn = 2.0
+			mods.enemy_dmg = 1.25
+			mods.spawn = 1.7
 			mods.loot = 0.15
 			if world.day_night and world.day_night.has_method("set_override"):
 				world.day_night.set_override("blood_moon", true)
-			Events.banner.emit("Кровавая луна", "Враги сильнее и многочисленнее. Добыча богаче.", Color(1.0, 0.25, 0.25))
+			e.data.embers = _blood_embers()
+			# a unique champion of the night
+			var night_pool: Array = DBEras.era(era).night_enemies
+			var champ = world.spawner.spawn_enemy(night_pool[night_pool.size() - 1], _ring_pos(pp, 30.0, 40.0), world.spawner.level_near_player(2))
+			if champ:
+				_make_blood_variant(champ, true)
+				e.actors.append(champ)
+			Events.banner.emit("Кровавая луна", "Враги сильнее, бродит Вестник Кровавой Луны. Добыча богаче.", Color(1.0, 0.3, 0.3))
+			Audio.play_sfx("boss_phase", null, -8.0)
 		"magic_storm":
 			_ev("magic_storm", pp, 120.0)
 			mods.spell = 1.25
@@ -278,6 +288,59 @@ func _start(type: String, pp: Vector3) -> void:
 			var q := {"id": "", "objectives": [{"pos": [pp.x + 150.0, pp.z], "from": [pp.x - 20.0, pp.z]}]}
 			start_caravan(q, true)
 
+func blood_moon_active() -> bool:
+	for e in events:
+		if e.type == "blood_moon":
+			return true
+	return false
+
+## Drifting crimson motes around the player (cheap, few particles).
+func _blood_embers() -> Node3D:
+	var p := CPUParticles3D.new()
+	p.amount = int(24 * Settings.profile().get("particles", 0.7)) + 4
+	p.lifetime = 4.0
+	p.emission_shape = CPUParticles3D.EMISSION_SHAPE_BOX
+	p.emission_box_extents = Vector3(18, 4, 14)
+	p.direction = Vector3(0.3, 1, 0)
+	p.spread = 30.0
+	p.initial_velocity_min = 0.3
+	p.initial_velocity_max = 0.9
+	p.gravity = Vector3(0, 0.15, 0)
+	p.scale_amount_min = 0.6
+	p.scale_amount_max = 1.2
+	p.mesh = MeshLib.box(Vector3(0.07, 0.07, 0.07))
+	p.material_override = MeshLib.mat(Color(1.0, 0.25, 0.2), 0.0, 1.0, 3.0, true)
+	p.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	world.fx_root.add_child(p)
+	if world.player:
+		p.global_position = world.player.global_position + Vector3(0, 6, 0)
+	p.emitting = true
+	return p
+
+## Blood-moon enemies: tougher, red glow, better loot (elite), named.
+func _make_blood_variant(m, champion: bool = false) -> void:
+	m.set_meta("blood_variant", true)
+	m.elite = true
+	m.display_name = ("Вестник Кровавой Луны: " if champion else "Кровавый ") + m.display_name
+	var k := 2.5 if champion else 1.35
+	if m.data:
+		m.base_hp_override *= k
+		m.refresh_gear()
+	else:
+		m.max_hp *= k
+		m.stats["base_hp"] = m.max_hp
+	m.hp = m.max_hp
+	if Settings.profile().get("fx", 1) >= 1 or champion:
+		var l := OmniLight3D.new()
+		l.name = "BloodGlow"
+		l.light_color = Color(1.0, 0.18, 0.15)
+		l.light_energy = 0.9 if champion else 0.5
+		l.omni_range = 3.5 if champion else 2.2
+		l.position = Vector3(0, 1.6, 0)
+		l.shadow_enabled = false
+		m.add_child(l)
+	world.spawner.name_tag(m, Color(1.0, 0.35, 0.3))
+
 func _invasion(e: Dictionary, p: Vector3) -> void:
 	var era := Profile.current_era
 	var others: Array = []
@@ -301,12 +364,23 @@ func _invasion(e: Dictionary, p: Vector3) -> void:
 func _tick_event(e: Dictionary, _delta: float) -> void:
 	match e.type:
 		"blood_moon":
+			var emb = e.data.get("embers")
+			if emb != null and is_instance_valid(emb) and world.player:
+				emb.global_position = world.player.global_position + Vector3(0, 6, 0)
 			if e.t >= e.dur or not Game.is_night():
 				mods.enemy_dmg = 1.0
 				mods.spawn = 1.0
 				mods.loot = 0.0
 				if world.day_night and world.day_night.has_method("set_override"):
 					world.day_night.set_override("blood_moon", false)
+				if emb != null and is_instance_valid(emb):
+					emb.queue_free()
+				for a in Game.actors.duplicate():
+					if is_instance_valid(a) and a.has_meta("blood_variant") and not a.is_dead:
+						a.remove_meta("blood_variant")
+						var gl = a.get_node_or_null("BloodGlow")
+						if gl:
+							gl.queue_free()
 				_end(e, "Кровавая луна зашла.")
 		"magic_storm":
 			if randf() < 0.02:

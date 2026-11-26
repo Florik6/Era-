@@ -12,6 +12,7 @@ var weather = null              # optional Weather reference (sun multiplier)
 var time_override := -1.0       # tests: fixed hour
 var _lf := 1.0
 var _first := true
+var blood := 0.0              # 0..1 smoothed blood-moon factor (never accumulates)
 
 func setup(world_env: WorldEnvironment, sun_light: DirectionalLight3D, era_i: int) -> void:
 	env = world_env
@@ -65,6 +66,8 @@ func hour() -> float:
 	return time_override if time_override >= 0.0 else Game.hour()
 
 func _process(delta: float) -> void:
+	var want := 1.0 if overrides.has("blood_moon") else 0.0
+	blood = move_toward(blood, want, delta * 0.35)
 	_update(minf(1.0, delta * 1.5))
 
 func _update(k: float) -> void:
@@ -79,13 +82,13 @@ func _update(k: float) -> void:
 	var elev := sin(t * PI) if t >= 0.0 and t <= 1.0 else -0.4
 	var day := clampf(elev * 3.0, 0.0, 1.0)
 	var dusk := clampf(1.0 - absf(elev) * 4.0, 0.0, 1.0) if t > -0.1 and t < 1.1 else 0.0
-	var blood := overrides.has("blood_moon")
+	# Blood moon: the SKY turns crimson; light only warms slightly, so ground,
+	# roads, characters and items keep their colours (no red screen filter).
+	var bm: float = blood * clampf(Settings.effects_intensity, 0.0, 1.0)
 	var sun_c: Color = e.sun
-	var moon_c := Color(0.55, 0.64, 0.9)
-	if blood:
-		moon_c = Color(1.0, 0.32, 0.25)
+	var moon_c := Color(0.55, 0.64, 0.9).lerp(Color(0.86, 0.62, 0.64), bm * 0.4)
 	var col := moon_c.lerp(sun_c, day).lerp(Color(1.0, 0.6, 0.35), dusk * 0.6)
-	var energy := lerpf(0.5 if not blood else 0.55, 1.4, day)
+	var energy := lerpf(0.5, 1.4, day)
 	var wm := 1.0
 	var w = weather
 	if w == null and Game.world and Game.world.get("weather"):
@@ -115,17 +118,14 @@ func _update(k: float) -> void:
 		sun.rotation = sun.rotation.lerp(target_rot, k)
 	var en := env.environment
 	var amb: Color = (e.ambient as Color).lerp(e.sun as Color, 0.35)
-	var night_amb := Color(0.36, 0.42, 0.62) if not blood else Color(0.55, 0.25, 0.25)
+	var night_amb := Color(0.36, 0.42, 0.62).lerp(Color(0.46, 0.38, 0.45), bm * 0.45)
 	en.ambient_light_color = en.ambient_light_color.lerp(night_amb.lerp(amb, day), k)
 	var amb_boost := 0.22 if era == 4 else (0.08 if era == 2 else 0.0)
 	en.ambient_light_energy = lerpf(en.ambient_light_energy, (lerpf(0.62, 0.48, day) + amb_boost) * (0.85 + 0.15 * wm), k)
 	var top: Color = e.sky_top
 	var hor: Color = e.sky_horizon
-	var n_top := Color(0.04, 0.06, 0.16)
-	var n_hor := Color(0.12, 0.15, 0.28)
-	if blood:
-		n_top = Color(0.22, 0.02, 0.04)
-		n_hor = Color(0.55, 0.1, 0.08)
+	var n_top := Color(0.04, 0.06, 0.16).lerp(Color(0.24, 0.02, 0.05), bm)
+	var n_hor := Color(0.12, 0.15, 0.28).lerp(Color(0.58, 0.12, 0.09), bm)
 	var s_top := n_top.lerp(top, day).lerp(Color(0.35, 0.25, 0.5), dusk * 0.5)
 	var s_hor := n_hor.lerp(hor, day).lerp(Color(0.98, 0.55, 0.32), dusk * 0.7)
 	if wm < 0.9:

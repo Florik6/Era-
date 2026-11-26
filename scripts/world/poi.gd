@@ -16,6 +16,12 @@ var _flag: MeshInstance3D
 var _label: Label3D
 var _boss = null
 var _ring: Node3D
+var _info_t := 0.0
+var _activating := false
+
+const RIFT_KINDS := [["forgotten", "warped_medieval", "chronos"], ["forgotten", "warped_medieval", "mechanical"], ["mechanical", "chronos", "forgotten"],
+	["mechanical", "future_rift", "chronos"], ["future_rift", "chronos", "mechanical"]]
+const RIFT_TIER := {"forgotten": 1, "warped_medieval": 2, "mechanical": 2, "chronos": 3, "future_rift": 3}
 
 static func create(p: Dictionary, w) -> Poi:
 	var n := Poi.new()
@@ -28,7 +34,7 @@ static func create(p: Dictionary, w) -> Poi:
 func _ready() -> void:
 	_build_visual()
 	if type in ["trial", "rift", "dungeon", "altar", "mirror", "forge", "lab", "workshop", "terminal", "fortress", "relic_site", "monument", "tourney", "shrine", "cp"]:
-		Game.grid.insert(self, global_position, "interact")
+		Game.grid.insert_deferred(self, "interact")
 	if type == "witness":
 		Witness.spawn_at(world, global_position)
 
@@ -192,10 +198,12 @@ func can_interact(_a) -> bool:
 func interact_label() -> String:
 	match type:
 		"trial": return "Суд Хроноса"
-		"rift": return "Войти в разлом"
+		"rift":
+			var why := rift_block_reason()
+			return ("Войти: " + rift_title()) if why == "" else ("Закрыто: " + why)
 		"cp": return "Контрольная точка"
 		"dungeon": return "Спуститься в подземелье"
-		"altar": return "Алтарь"
+		"altar": return "Использовать алтарь"
 		"mirror": return "Коснуться зеркала"
 		"forge": return "Кузница"
 		"lab": return "Варить зелья"
@@ -240,6 +248,9 @@ func _process(delta: float) -> void:
 	if world.player == null or not is_instance_valid(world.player):
 		return
 	var d: float = world.player.global_position.distance_to(global_position)
+	if type == "rift":
+		_rift_tick(delta, d)
+		return
 	match type:
 		"camp":
 			if _t > 1.0:
@@ -368,44 +379,91 @@ func _trial_dialog() -> void:
 	opts.append({"text": "Уйти", "cb": func(): pass})
 	world.ui.open("dialog", {"title": "Суд Хроноса", "text": "Чтобы открыть следующую эпоху, нужно доказать мастерство:\n\n" + "\n".join(lines), "portrait_color": Color(1.0, 0.85, 0.3), "options": opts})
 
-func _enter_rift() -> void:
+# ---------------------------------------------------------------- rifts
+func rift_kind() -> String:
+	var opts: Array = RIFT_KINDS[clampi(Profile.current_era, 0, 4)]
+	return data.data.get("rift_kind", opts[hash(data.id) % opts.size()])
+
+func rift_title() -> String:
+	return Dimension.THEMES.get(rift_kind(), {}).get("title", "Разлом")
+
+## Empty string when the rift can be entered, otherwise the reason it is shut.
+func rift_block_reason() -> String:
 	var st := _st()
 	if Game.day() - int(st.get("cleared_day", -99)) < 1 and not data.data.get("temporary", false):
-		Events.notify.emit("Разлом нестабилен и закрыт до завтра.", Color(0.8, 0.6, 1.0))
+		return "разлом покорён сегодня и нестабилен до завтра"
+	if world.dimension != "":
+		return "вы уже в другом измерении"
+	if world.get("mode") != null and world.mode != "world":
+		return "недоступно в этом режиме"
+	var pl = world.player
+	if pl == null or not is_instance_valid(pl) or pl.is_dead:
+		return "герой не готов"
+	for a in Game.actors_near(pl.global_position, 9.0):
+		if a != pl and not a.is_dead and Game.is_enemy(pl, a) and a.aggro.has("player"):
+			return "рядом враги — сначала отбейтесь"
+	if world.get("portal_block_until") != null and Time.get_ticks_msec() < int(world.portal_block_until):
+		return "портал восстанавливается"
+	return ""
+
+func _rift_danger() -> String:
+	var tier: int = RIFT_TIER.get(rift_kind(), 2)
+	var lvl: int = world.spawner.level_near_player(2) if world.spawner else 1
+	return "Опасность: %s · ур. ~%d" % ["◆".repeat(tier) + "◇".repeat(3 - tier), lvl]
+
+func _rift_tick(delta: float, d: float) -> void:
+	# label: name, danger and access state, refreshed while the hero is near
+	_info_t -= delta
+	if _info_t <= 0.0 and _label:
+		_info_t = 0.5
+		if d < 40.0:
+			var why := rift_block_reason()
+			_label.text = "%s\n%s\n%s" % [rift_title(), _rift_danger(), "Открыт — войдите в кольцо" if why == "" else "Закрыт: " + why]
+			_label.modulate = Color(0.85, 0.65, 1.0) if why == "" else Color(0.7, 0.6, 0.75)
+		else:
+			_label.text = data.get("name", "Разлом")
+	# walking through the ring enters it directly (with a short re-entry guard)
+	if not _activating and d < 1.6 and rift_block_reason() == "":
+		var pl = world.player
+		var v: Vector3 = pl.velocity if pl is CharacterBody3D else Vector3.ZERO
+		if Vector2(v.x, v.z).length() > 0.5:
+			_enter_rift()
+
+func _enter_rift() -> void:
+	if _activating:
 		return
-	var kinds := [["forgotten", "warped_medieval", "chronos"], ["forgotten", "warped_medieval", "mechanical"], ["mechanical", "chronos", "forgotten"],
-		["mechanical", "future_rift", "chronos"], ["future_rift", "chronos", "mechanical"]]
-	var opts: Array = kinds[clampi(Profile.current_era, 0, 4)]
-	var k: String = opts[hash(data.id) % opts.size()]
-	world.enter_dimension(k, {"expedition": true, "poi": data.id})
+	var why := rift_block_reason()
+	if why != "":
+		Events.notify.emit("Разлом закрыт: " + why + ".", Color(0.8, 0.6, 1.0))
+		Audio.play_sfx("error")
+		return
+	_activating = true
+	var pl = world.player
+	# return point: a few metres in front of the ring, outside the trigger
+	var away: Vector3 = pl.global_position - global_position
+	away.y = 0.0
+	if away.length() < 0.5:
+		away = Vector3(0, 0, 1)
+	var ret: Vector3 = global_position + away.normalized() * 5.0
+	pl.apply_status("invuln", 2.0)
+	Audio.play_sfx("portal_open", global_position)
+	VFX.ring(global_position, 5.0, Color(0.65, 0.3, 1.0), 0.7)
+	VFX.flash(global_position + Vector3(0, 2.0, 0), Color(0.75, 0.45, 1.0), 0.5, 9.0)
+	if world.cam:
+		world.cam.shake(0.25)
+	if _ring:
+		var tw := _ring.create_tween()
+		tw.tween_property(_ring, "scale", Vector3(1.35, 1.35, 1.35), 0.45).set_trans(Tween.TRANS_BACK)
+		tw.tween_property(_ring, "scale", Vector3.ONE, 0.3)
+	var k := rift_kind()
+	get_tree().create_timer(0.55, false).timeout.connect(func():
+		_activating = false
+		if not is_instance_valid(self) or world.dimension != "" or pl.is_dead:
+			return
+		world.enter_dimension(k, {"expedition": true, "poi": data.id, "return_pos": ret, "portal_name": rift_title()}))
 
 func _altar() -> void:
-	var opts: Array = []
-	var cost := 60 * (Profile.current_era + 1)
-	opts.append({"text": "Распознать проклятия (%d)" % (cost / 2), "cb": func():
-		if world.player.data.gold >= cost / 2:
-			world.player.data.gold -= cost / 2
-			world.player.identify_all()
-		else:
-			Events.notify.emit("Недостаточно золота", Color(1, 0.4, 0.4))})
-	opts.append({"text": "Очищение (%d)" % cost, "cb": func():
-		if world.player.data.gold >= cost:
-			if world.player.purify("purify"):
-				world.player.data.gold -= cost
-		else:
-			Events.notify.emit("Недостаточно золота", Color(1, 0.4, 0.4))})
-	opts.append({"text": "Провести ритуал (только ночью)", "disabled": not Game.is_night(), "cb": func():
-		if world.player.purify("ritual"):
-			VFX.ring(global_position, 6.0, Color(0.5, 1.0, 0.8), 1.2)
-			for i in 3:
-				var nid: String = DBEras.era(Profile.current_era).night_enemies[randi() % DBEras.era(Profile.current_era).night_enemies.size()]
-				world.spawner.spawn_enemy(nid, global_position + Vector3(randf_range(-8, 8), 0, randf_range(-8, 8)))
-			Events.notify.emit("Ритуал пробудил стражей тьмы!", Color(0.7, 1.0, 0.8))})
-	opts.append({"text": "Помолиться (исцеление)", "cb": func():
-		world.player.heal(world.player.max_hp)
-		Audio.play_sfx("heal")})
-	opts.append({"text": "Уйти", "cb": func(): pass})
-	world.ui.open("dialog", {"title": "Древний алтарь", "text": "Камень тёплый на ощупь. Здесь можно распознать и снять проклятия.", "portrait_color": Color(0.5, 1.0, 0.8), "options": opts})
+	world.ui.open("altar", {"altar": self, "station": "altar"})
 
 func _mirror() -> void:
 	var st := _st()

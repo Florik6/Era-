@@ -88,9 +88,9 @@ func open_trade(n) -> void:
 	var era := Profile.current_era
 	var lvl: int = world.player.level
 	var items: Array = []
-	for b in ["potion_hp", "potion_mana", "scroll_identify", "scroll_purify"]:
+	for b in ["potion_hp", "potion_mana", "scroll_identify", "scroll_purify", "purify_salt", "spirit_essence"]:
 		var it := ItemDB.create(b, 0, 1)
-		it.qty = 5 if b.begins_with("potion") else 2
+		it.qty = 5 if b.begins_with("potion") else (3 if b == "purify_salt" else (1 if b == "spirit_essence" else 2))
 		items.append(it)
 	var tomes := ["tome_fire", "tome_ice", "tome_lightning", "tome_dark", "tome_spacetime"]
 	items.append(ItemDB.create(tomes[hash(n.actor_id) % tomes.size()], 0, 1))

@@ -24,6 +24,10 @@ var aim_assist := true
 var auto_pickup := true
 var dev_unlock_all := false     # test option: open all eras
 var vibration := true
+var ui_opacity := 0.85          # touch controls opacity
+var joy_sensitivity := 1.0      # stick deflection multiplier
+var joy_deadzone := 0.12        # fraction of the stick radius ignored
+var ui_layout := {}             # element -> {"x": frac, "y": frac, "s": scale} (layout editor)
 
 # Auto-quality runtime measurement
 var _fps_samples: Array = []
@@ -54,6 +58,11 @@ func load_settings() -> void:
 	aim_assist = cf.get_value("ctrl", "aim_assist", aim_assist)
 	auto_pickup = cf.get_value("ctrl", "auto_pickup", auto_pickup)
 	vibration = cf.get_value("ctrl", "vibration", vibration)
+	ui_opacity = cf.get_value("ctrl", "ui_opacity", ui_opacity)
+	joy_sensitivity = cf.get_value("ctrl", "joy_sensitivity", joy_sensitivity)
+	joy_deadzone = cf.get_value("ctrl", "joy_deadzone", joy_deadzone)
+	var lay = cf.get_value("ctrl", "ui_layout", {})
+	ui_layout = lay if lay is Dictionary else {}
 	dev_unlock_all = cf.get_value("dev", "unlock_all", dev_unlock_all)
 
 func save_settings() -> void:
@@ -74,6 +83,10 @@ func save_settings() -> void:
 	cf.set_value("ctrl", "aim_assist", aim_assist)
 	cf.set_value("ctrl", "auto_pickup", auto_pickup)
 	cf.set_value("ctrl", "vibration", vibration)
+	cf.set_value("ctrl", "ui_opacity", ui_opacity)
+	cf.set_value("ctrl", "joy_sensitivity", joy_sensitivity)
+	cf.set_value("ctrl", "joy_deadzone", joy_deadzone)
+	cf.set_value("ctrl", "ui_layout", ui_layout)
 	cf.set_value("dev", "unlock_all", dev_unlock_all)
 	var tmp := PATH + ".tmp"
 	if cf.save(tmp) == OK:
@@ -129,6 +142,14 @@ func fog_value(base: float) -> float:
 	return clampf(base * k, 0.0, 0.012)
 
 ## Profile value with a default (Visual Quality Manager entry point).
+func reset_layout() -> void:
+	ui_layout = {}
+	ui_opacity = 0.85
+	joy_sensitivity = 1.0
+	joy_deadzone = 0.12
+	joystick_size = 1.0
+	button_size = 1.0
+
 func vq(key: String, default = null):
 	return profile().get(key, default)
 

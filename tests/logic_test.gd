@@ -341,6 +341,11 @@ class Suite:
 			if is_instance_valid(e):
 				e.die(p)
 		await wait(1.0)
+		ok("rift stage 2 spawns anchors", w.dim_node.anchors.size() == 3)
+		for an in w.dim_node.anchors.duplicate():
+			an.progress = 1.0
+			await wait(0.2)
+		await wait(0.5)
 		for e in w.dim_node.stage_enemies:
 			if is_instance_valid(e):
 				e.die(p)

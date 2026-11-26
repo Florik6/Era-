@@ -88,8 +88,8 @@ func _ready() -> void:
 	_label.no_depth_test = true
 	_label.visible = rar >= 2
 	add_child(_label)
-	Game.grid.insert(self, global_position, "interact")
-	Game.grid.insert(self, global_position, "pickup")
+	Game.grid.insert_deferred(self, "interact")
+	Game.grid.insert_deferred(self, "pickup")
 
 func announce() -> void:
 	var rar: int = item.get("rarity", 0)

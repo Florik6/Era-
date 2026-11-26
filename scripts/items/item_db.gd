@@ -143,6 +143,8 @@ const BASES := {
 	"herbs": {"name": "Травы", "era": -1, "slot": "mat", "stack": true, "value": 3},
 	"gears": {"name": "Шестерни", "era": -1, "slot": "mat", "stack": true, "value": 8},
 	"circuits": {"name": "Микросхемы", "era": -1, "slot": "mat", "stack": true, "value": 12},
+	"purify_salt": {"name": "Очищающая соль", "era": -1, "slot": "mat", "stack": true, "value": 18},
+	"spirit_essence": {"name": "Эссенция духа", "era": -1, "slot": "mat", "stack": true, "value": 45},
 	"relic_iron_crown": {"name": "Железная Корона Эпохи", "era": 0, "slot": "mat", "stack": true, "value": 500, "relic": true},
 	"relic_astrolabe": {"name": "Астролябия Возрождения", "era": 1, "slot": "mat", "stack": true, "value": 600, "relic": true},
 	"relic_steam_heart": {"name": "Паровое Сердце", "era": 2, "slot": "mat", "stack": true, "value": 700, "relic": true},
@@ -351,6 +353,7 @@ static func create(base_id: String, rarity: int = 0, lvl: int = 1, rng: RandomNu
 			item.stats.dmg = snappedf(item.stats.dmg * 1.3, 0.01)
 		if item.stats.has("armor"):
 			item.stats.armor = snappedf(item.stats.armor * 1.3, 0.01)
+		item["curse_boost"] = 1.3      # the curse's share of the power (removed by full cleansing)
 	item.name = _gen_name(item, b, r)
 	return item
 
@@ -399,7 +402,7 @@ static func random_consumable(era_i: int, rng: RandomNumberGenerator = null) -> 
 	var r := rng if rng else RandomNumberGenerator.new()
 	if rng == null:
 		r.randomize()
-	var pool := ["potion_hp", "potion_hp", "potion_hp", "potion_mana", "potion_mana", "scroll_identify", "herbs", "iron_ore"]
+	var pool := ["potion_hp", "potion_hp", "potion_hp", "potion_mana", "potion_mana", "scroll_identify", "herbs", "iron_ore", "purify_salt"]
 	if era_i >= 1:
 		pool.append_array(["bomb_flask", "elixir_mutation", "gears"])
 	if era_i >= 2:

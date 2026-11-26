@@ -269,7 +269,8 @@ func _peaceful_goal(hp_f: float) -> Dictionary:
 		return out
 	# schedules
 	if n.role in ["villager", "trader"]:
-		if Game.is_night() and n.role == "villager":
+		var bm_on: bool = w.get("director") != null and w.director != null and w.director.has_method("blood_moon_active") and w.director.blood_moon_active()
+		if (Game.is_night() and n.role == "villager") or bm_on:
 			return {"g": "home", "s": 1.2}
 		return {"g": "wander_home", "s": 0.6}
 	if n.role == "guard":
@@ -300,6 +301,21 @@ func _peaceful_goal(hp_f: float) -> Dictionary:
 			if sc > out.s:
 				out = {"g": "chest", "s": sc}
 				obj = ch
+	# blood moon: cautious contenders seek the safety of a settlement, the bold go hunting
+	if n.role == "bot" and w.get("director") and w.director != null and w.director.has_method("blood_moon_active") and w.director.blood_moon_active():
+		if p.caution > 0.55 and w.gen:
+			var best_s = null
+			var bd := 400.0
+			for s in w.gen.settlements:
+				var d: float = Vector2(n.global_position.x, n.global_position.z).distance_to(s.pos)
+				if d < bd:
+					bd = d
+					best_s = s
+			if best_s != null and bd > 18.0:
+				dest = Vector3(best_s.pos.x, 0, best_s.pos.y)
+				return {"g": "travel", "s": 1.4}
+		elif p.aggr > 0.6:
+			out.s = minf(out.s, 0.3)   # roam and fight rather than gather
 	if n.role == "bot" and w.get("director") and w.director.has_method("event_near"):
 		var ev = w.director.event_near(n.global_position, 220.0)
 		if ev != null:

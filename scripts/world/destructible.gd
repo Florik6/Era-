@@ -67,7 +67,7 @@ func _ready() -> void:
 	if is_destroyed:
 		_apply_destroyed(false)
 	else:
-		Game.grid.insert(self, global_position, "destructible")
+		Game.grid.insert_deferred(self, "destructible")
 		_registered = true
 	set_process(kind == "door" and not is_destroyed)
 	set_physics_process(false)

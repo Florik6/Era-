@@ -10,7 +10,10 @@ const KINDS := ["clear", "cloudy", "rain", "storm", "fog", "snow", "wind"]
 const NAMES := {"clear": "Ясно", "cloudy": "Облачно", "rain": "Дождь", "storm": "Гроза", "fog": "Туман", "snow": "Снег", "wind": "Ветер"}
 const WEIGHTS := {"clear": 34.0, "cloudy": 20.0, "rain": 14.0, "storm": 6.0, "fog": 10.0, "snow": 6.0, "wind": 10.0}
 const FOG_ADD := {"clear": 0.0, "cloudy": 0.0008, "rain": 0.002, "storm": 0.003, "fog": 0.0055, "snow": 0.003, "wind": 0.0005}
-const FOG_SCALE := 0.35
+const FOG_SCALE := 0.24
+## Hard ceiling for the combined atmosphere (weather + cursed fog + night):
+## nearby enemies, attacks and roads must always stay visible.
+const MAX_FOG := 0.0026
 const SUN := {"clear": 1.0, "cloudy": 0.78, "rain": 0.62, "storm": 0.48, "fog": 0.72, "snow": 0.8, "wind": 0.95}
 
 var current := "clear"
@@ -270,6 +273,10 @@ func _apply_fog(k: float) -> void:
 	# heaviest fog still keeps the hero, roads and nearby enemies clearly visible.
 	var in_dim := _in_dimension()
 	var dens := Settings.fog_value(0.004 if in_dim else fog_base()) * FOG_SCALE
+	var dn0 = day_night if day_night != null else (Game.world.day_night if Game.world and Game.world.get("day_night") else null)
+	if dn0 != null and dn0.has_method("light_factor") and dn0.light_factor() < 0.4:
+		dens *= 0.7   # darkness already limits view; don't stack thick fog on top
+	dens = minf(dens, MAX_FOG)
 	if en.fog_mode != Environment.FOG_MODE_EXPONENTIAL:
 		en.fog_mode = Environment.FOG_MODE_EXPONENTIAL
 	_fog_cur = lerpf(_fog_cur, dens, k)
@@ -289,6 +296,9 @@ func _apply_fog(k: float) -> void:
 	if dn != null and dn.has_method("light_factor"):
 		lf = dn.light_factor()
 	c = c * (0.35 + 0.65 * lf)
+	if dn != null and dn.get("blood") != null and float(dn.blood) > 0.0:
+		# far horizon reddens slightly during the blood moon
+		c = c.lerp(Color(0.42, 0.1, 0.09), float(dn.blood) * 0.45 * clampf(Settings.effects_intensity, 0.0, 1.0))
 	c.a = 1.0
 	en.fog_light_color = en.fog_light_color.lerp(c, k)
 	en.fog_light_energy = 1.0

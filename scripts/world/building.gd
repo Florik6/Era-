@@ -517,7 +517,7 @@ class Trapdoor extends Node3D:
 		MeshLib.part(self, MeshLib.torus(0.06, 0.1), MeshLib.mat(Color(0.3, 0.3, 0.3), 0.7, 0.4), Vector3(0.3, 0.1, 0))
 		if not down:
 			MeshLib.part(self, MeshLib.box(Vector3(0.6, 2.4, 0.08)), MeshLib.mat(Color(0.4, 0.3, 0.2)), Vector3(0, 1.2, -0.3), Vector3(-15, 0, 0))
-		Game.grid.insert(self, global_position, "interact")
+		Game.grid.insert_deferred(self, "interact")
 		_registered = true
 
 	func _exit_tree() -> void:

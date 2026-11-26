@@ -7,6 +7,8 @@ extends Node3D
 
 const WORLD_HALF := 1280.0
 const DIM_OFFSET := Vector3(6000, 0, 6000)
+## Subsystems still being finished are kept out of the running game.
+const DISABLED_SUBSYSTEMS := ["road_encounters"]
 
 var world_half := WORLD_HALF
 var mode := "world"
@@ -38,6 +40,9 @@ var zones: Array = []
 var dimension := ""
 var dim_node: Node3D = null
 var dim_return := Vector3.ZERO
+var portal_block_until := 0
+var active_ritual = null          # AltarRitual in progress (gear is locked meanwhile)
+var last_ritual_stages := 0     # Time.get_ticks_msec(): portals ignore the hero until then
 var mode_ctl = null
 var map_tex: ImageTexture = null
 var poi_nodes := {}
@@ -98,7 +103,8 @@ func _ready() -> void:
 	for spec in [["road_encounters", "res://scripts/sim/road_encounters.gd"], ["living_pois", "res://scripts/world/living_poi.gd"],
 			["tracking", "res://scripts/world/tracking.gd"], ["discovery", "res://scripts/world/discovery.gd"],
 			["traces", "res://scripts/world/event_traces.gd"], ["cinematic", "res://scripts/ui/cinematic.gd"]]:
-		_attach_optional(spec[0], spec[1])
+		if not spec[0] in DISABLED_SUBSYSTEMS:
+			_attach_optional(spec[0], spec[1])
 	cam = GameCamera.new()
 	add_child(cam)
 	hud = HUD.new()
@@ -133,7 +139,13 @@ func _ready() -> void:
 func _attach_optional(nm: String, path: String) -> void:
 	if not ResourceLoader.exists(path):
 		return
-	var n = load(path).new()
+	var scr = load(path)
+	if scr == null or not (scr is GDScript) or not scr.can_instantiate():
+		push_warning("optional subsystem %s failed to load" % nm)
+		return
+	var n = scr.new()
+	if n == null:
+		return
 	n.name = nm
 	add_child(n)
 	ext[nm] = n
@@ -229,6 +241,7 @@ func _setup_world() -> void:
 	sp.y = ground_height(sp) + 0.3
 	_spawn_player(sp)
 	player.respawn_point = sp
+	portal_block_until = Time.get_ticks_msec() + 4000   # loading next to a portal never re-enters it
 	if Profile.char.companion.size() > 0:
 		summon_companion(player, false)
 
@@ -528,6 +541,18 @@ func _on_actor_killed(victim, killer) -> void:
 		Chronicle.record("kill", [k if (k != null and is_instance_valid(k)) else {"id": "unknown", "name": "неизвестный"}, victim], {"pos_v3": victim.global_position})
 
 func _on_boss_defeated(b: Boss, k) -> void:
+	if b.has_meta("rift_echo"):
+		# a rift's echo: real fight and loot, but the true boss stays untouched
+		for i in 2:
+			loot.spawn_drop(ItemDB.random_for_era(era, b.level, "boss"), b.global_position + Vector3(randf_range(-1.5, 1.5), 0, randf_range(-1.5, 1.5)))
+		Chronicle.record("boss_kill", [k if (k != null and is_instance_valid(k)) else {"id": "unknown", "name": "неизвестный"}, b], {"pos_v3": b.global_position, "extra": {"boss": b.display_name}})
+		Events.boss_defeated.emit(b)
+		if k != null and is_instance_valid(k) and k.is_player:
+			Events.banner.emit("Эхо повержено!", b.display_name, Color(1.0, 0.75, 0.9))
+		Audio.play_music("rift")
+		if dimension != "" and dim_node and dim_node.has_method("on_boss_killed"):
+			dim_node.on_boss_killed(b)
+		return
 	loot.boss_rewards(b)
 	var st: Dictionary = Game.world_state.bosses.get(b.boss_id, {})
 	st.defeated = true
@@ -632,7 +657,7 @@ func _nearest_respawn() -> Vector3:
 func enter_dimension(kind: String, opts: Dictionary = {}) -> void:
 	if dimension != "":
 		return
-	dim_return = player.global_position
+	dim_return = opts.get("return_pos", player.global_position)
 	var d := Dimension.new()
 	add_child(d)
 	d.build(kind, Game.rng.randi(), DIM_OFFSET, era, opts)
@@ -690,14 +715,19 @@ func leave_dimension(success: bool = true) -> void:
 	_restore_env()
 	Audio.play_music(DBEras.era(era).music)
 	Audio.play_sfx("portal_enter")
+	portal_block_until = Time.get_ticks_msec() + 6000
+	player.apply_status("invuln", 2.0)
 	Events.dimension_left.emit(kind)
 
 func _teleport(a: Node3D, p: Vector3) -> void:
 	a.global_position = p
+	if a is CharacterBody3D:
+		(a as CharacterBody3D).velocity = Vector3.ZERO
 	if a.has_method("reset_physics_interpolation"):
 		a.reset_physics_interpolation()
 	if a == player:
 		cam.snap()
+		Events.input_reset.emit()
 
 func _apply_dim_env(d) -> void:
 	var e: Environment = env.environment

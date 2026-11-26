@@ -23,17 +23,14 @@ func build() -> void:
 	vb.add_child(_slider("Масштаб рендера", 0.5, 1.0, 0.05, Settings.render_scale, func(v):
 		Settings.render_scale = v
 		Settings.apply(), true))
-	vb.add_child(_check("Туман", Settings.fog_enabled, func(v):
-		Settings.fog_enabled = v
-		_fog_slider.editable = v
+	vb.add_child(_choice("Туман", ["Выключен", "Слабый", "Стандартный"], Settings.fog_level, func(i):
+		Settings.fog_level = i
+		Settings.fog_enabled = i > 0
 		Settings.apply()))
-	var fs := _slider("Плотность тумана", 0.0, 1.0, 0.05, Settings.fog_density, func(v):
-		Settings.fog_density = v
-		Settings.apply(), true)
-	_fog_slider = fs.get_meta("slider")
-	_fog_slider.editable = Settings.fog_enabled
-	vb.add_child(fs)
-	vb.add_child(UITheme.wrap_label("Туман никогда не закрывает обзор полностью: даже на максимуме видны персонаж, дорога и враги.", 15))
+	vb.add_child(UITheme.wrap_label("Туман никогда не закрывает обзор полностью: персонаж, дорога, враги и предупреждения об атаках всегда видны.", 15))
+	vb.add_child(_choice("Кинематографические сцены", ["Выключены", "Короткие", "Полные"], Settings.cinematics, func(i): Settings.cinematics = i))
+	vb.add_child(_slider("Яркость эффектов событий (кровавая луна, вспышки)", 0.0, 1.0, 0.05, Settings.effects_intensity, func(v):
+		Settings.effects_intensity = v, true))
 	vb.add_child(_check("Показывать FPS", Settings.show_fps, func(v): Settings.show_fps = v))
 	vb.add_child(_header("Звук"))
 	vb.add_child(_slider("Музыка", 0.0, 1.0, 0.05, Settings.music_vol, func(v):
@@ -44,9 +41,20 @@ func build() -> void:
 		Settings.apply()
 		Audio.play_sfx("ui_click"), true))
 	vb.add_child(_header("Управление"))
+	var ed_row := HBoxContainer.new()
+	ed_row.add_theme_constant_override("separation", 10)
+	vb.add_child(ed_row)
+	ed_row.add_child(UITheme.button("Редактор интерфейса", func():
+		Settings.save_settings()
+		if manager:
+			manager.open("layout_editor"), 58, 300))
+	ed_row.add_child(UITheme.wrap_label("Перемещение и размер джойстика и кнопок, прозрачность, чувствительность, мёртвая зона.", 15))
+	vb.add_child(_slider("Чувствительность джойстика", 0.5, 2.0, 0.05, Settings.joy_sensitivity, func(v): Settings.joy_sensitivity = v, true))
+	vb.add_child(_slider("Мёртвая зона джойстика", 0.0, 0.4, 0.01, Settings.joy_deadzone, func(v): Settings.joy_deadzone = v, true))
+	vb.add_child(_slider("Прозрачность кнопок", 0.3, 1.0, 0.05, Settings.ui_opacity, func(v): Settings.ui_opacity = v, true))
 	vb.add_child(_slider("Размер джойстика", 0.7, 1.5, 0.05, Settings.joystick_size, func(v): Settings.joystick_size = v, true))
 	vb.add_child(_slider("Размер кнопок", 0.7, 1.5, 0.05, Settings.button_size, func(v): Settings.button_size = v, true))
-	vb.add_child(_slider("Отдаление камеры", 0.7, 1.5, 0.05, Settings.camera_zoom, func(v): Settings.camera_zoom = v, true))
+	vb.add_child(_slider("Приближение камеры", 0.7, 1.5, 0.05, Settings.camera_zoom, func(v): Settings.camera_zoom = v, true))
 	vb.add_child(_check("Помощь в прицеливании", Settings.aim_assist, func(v): Settings.aim_assist = v))
 	vb.add_child(_check("Автоподбор расходников", Settings.auto_pickup, func(v): Settings.auto_pickup = v))
 	vb.add_child(_check("Вибрация", Settings.vibration, func(v): Settings.vibration = v))
@@ -98,6 +106,33 @@ func _slider(t: String, mn: float, mx: float, step: float, val: float, cb: Calla
 		upd.call(v)
 		cb.call(v))
 	row.set_meta("slider", s)
+	return row
+
+## Row of mutually exclusive buttons.
+func _choice(t: String, names: Array, val: int, cb: Callable) -> Control:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 8)
+	var l := Label.new()
+	l.text = t
+	l.custom_minimum_size = Vector2(300, 0)
+	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	row.add_child(l)
+	var btns: Array = []
+	for i in names.size():
+		var idx: int = i
+		var b := Button.new()
+		b.text = names[i]
+		b.toggle_mode = true
+		b.button_pressed = i == val
+		b.custom_minimum_size = Vector2(150, 54)
+		b.focus_mode = Control.FOCUS_NONE
+		b.pressed.connect(func():
+			for o in btns:
+				o.button_pressed = o == b
+			Audio.play_sfx("ui_click")
+			cb.call(idx))
+		btns.append(b)
+		row.add_child(b)
 	return row
 
 func _check(t: String, val: bool, cb: Callable) -> Control:

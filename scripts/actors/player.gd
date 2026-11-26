@@ -180,7 +180,7 @@ func _tick_auras() -> void:
 func _scan_interact() -> void:
 	var best = null
 	var bd := INF
-	for o in Game.grid.query(global_position, 4.0, "interact"):
+	for o in Game.grid.query(global_position, 7.0, "interact"):
 		if not is_instance_valid(o) or o == self:
 			continue
 		var r: float = o.get("interact_radius") if o.get("interact_radius") != null else 2.0
@@ -208,7 +208,12 @@ func do_interact() -> void:
 		_interact_t = 0.0
 
 # ---------------------------------------------------------------- equipment
+func _ritual_lock() -> bool:
+	return Game.world != null and Game.world.get("active_ritual") != null and is_instance_valid(Game.world.active_ritual)
+
 func equip_item(item: Dictionary) -> Dictionary:
+	if _ritual_lock():
+		return {"ok": false, "msg": "Нельзя менять снаряжение во время ритуала."}
 	var res: Dictionary = data.inv.equip_item(item)
 	if res.ok:
 		Audio.play_sfx("pickup", global_position, -4.0)
@@ -224,6 +229,8 @@ func equip_item(item: Dictionary) -> Dictionary:
 	return res
 
 func unequip_slot(slot: String) -> Dictionary:
+	if _ritual_lock():
+		return {"ok": false, "msg": "Нельзя снимать снаряжение во время ритуала."}
 	var res: Dictionary = data.inv.unequip(slot)
 	if res.ok:
 		refresh_gear()

@@ -31,6 +31,10 @@ func drop_for(victim: Actor, killer) -> void:
 	var luck := 0.0
 	if killer and is_instance_valid(killer) and killer.data:
 		luck = killer.stat("luck")
+	if world.director != null:
+		luck += float(world.director.mods.get("loot", 0.0))
+	if victim.has_meta("blood_variant") and randf() < 0.35:
+		spawn_drop(ItemDB.create("chrono_shard", 0, 1), _scatter(victim.global_position))
 	var p: Vector3 = victim.global_position
 	# NPC inventories drop what they carried
 	if victim.data and victim.kind == "humanoid" and victim.get("role") in ["bot", "enemy", "hunter", "soldier"]:
@@ -59,6 +63,10 @@ func drop_for(victim: Actor, killer) -> void:
 		spawn_drop(ItemDB.random_consumable(era), _scatter(p))
 	if victim.elite and randf() < 0.35:
 		spawn_drop(ItemDB.create("chrono_shard", 0, 1), _scatter(p))
+	# spirit essence (curse rituals): restless dead, dark casters and rift-born
+	var dark: bool = DBActors.ENEMIES.get(victim.def_id, {}).get("dtype", "") == "dark" or victim.def_id in ["skeleton", "wraith", "cursed_warrior", "necro_acolyte", "dark_mage", "chrono_anomaly", "spirit"]
+	if randf() < (0.3 if dark else 0.06) + (0.15 if world.dimension != "" else 0.0):
+		spawn_drop(ItemDB.create("spirit_essence", 0, 1), _scatter(p))
 	if victim.kind == "creature" and randf() < 0.3:
 		spawn_drop({}, _scatter(p), false, randi_range(2, 8) * (era + 1))
 

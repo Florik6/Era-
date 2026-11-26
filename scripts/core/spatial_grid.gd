@@ -5,6 +5,8 @@ extends RefCounted
 
 var cell := 16.0
 var cells := {}     # category -> {Vector2i: Array}
+var _pending: Array = []
+var _flush_queued := false
 
 func _init(cell_size: float = 16.0) -> void:
 	cell = cell_size
@@ -21,6 +23,25 @@ func insert(obj: Object, p: Vector3, cat: String) -> void:
 		c[k] = []
 	c[k].append(obj)
 	obj.set_meta("_gk_" + cat, k)
+
+## Registers a static node at its *final* position at the end of the frame.
+## Nodes are usually added to the tree first and positioned afterwards, so
+## inserting from _ready() would file them under the parent's origin and
+## proximity queries (interaction, pickups) would never find them.
+func insert_deferred(obj: Node3D, cat: String) -> void:
+	_pending.append([obj, cat])
+	if not _flush_queued:
+		_flush_queued = true
+		call_deferred("_flush_pending")
+
+func _flush_pending() -> void:
+	_flush_queued = false
+	var batch := _pending
+	_pending = []
+	for e in batch:
+		var o = e[0]
+		if is_instance_valid(o) and o.is_inside_tree() and not o.is_queued_for_deletion():
+			update(o, o.global_position, e[1])
 
 func remove(obj: Object, cat: String) -> void:
 	var mk := "_gk_" + cat

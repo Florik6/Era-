@@ -78,7 +78,7 @@ func equip_item(item: Dictionary) -> Dictionary:
 	if not slot in ItemDB.SLOTS:
 		return {"ok": false, "msg": "Этот предмет нельзя надеть."}
 	if is_bound(slot):
-		return {"ok": false, "msg": "Проклятый предмет не даёт себя снять!"}
+		return {"ok": false, "msg": "Проклятый предмет «%s» не даёт себя заменить! Разорвите связь или очистите его у алтаря." % ItemDB.display_name(equip[slot])}
 	if slot == "main" and b.get("two_h", false) and equip.has("off"):
 		if is_bound("off"):
 			return {"ok": false, "msg": "Проклятый предмет во второй руке мешает взять двуручное оружие."}
@@ -110,7 +110,7 @@ func unequip(slot: String) -> Dictionary:
 		return {"ok": false, "msg": ""}
 	if is_bound(slot):
 		var c: Dictionary = equip[slot].curse
-		return {"ok": false, "msg": "Нельзя снять! " + ItemDB.RELEASE_METHODS.get(c.get("release", "purify"), "")}
+		return {"ok": false, "msg": "Нельзя снять: проклятие «%s» (несъёмность). Алтарь очищения: разрыв связи или очищение. %s" % [ItemDB.CURSES.get(c.get("id", ""), {}).get("name", "?"), ItemDB.RELEASE_METHODS.get(c.get("release", "purify"), "")]}
 	if is_full():
 		return {"ok": false, "msg": "Инвентарь полон."}
 	items.append(equip[slot])

@@ -18,6 +18,8 @@ const SCREENS := {
 	"craft": "res://scripts/ui/screens/craft.gd",
 	"death": "res://scripts/ui/screens/death.gd",
 	"eras": "res://scripts/ui/screens/eras.gd",
+	"altar": "res://scripts/ui/screens/altar.gd",
+	"layout_editor": "res://scripts/ui/screens/layout_editor.gd",
 }
 
 var stack: Array = []

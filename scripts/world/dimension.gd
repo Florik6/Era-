@@ -25,6 +25,13 @@ var done := false
 var _check_t := 0.0
 var _trap_nodes: Array = []
 var _theme := {}
+var anchors: Array = []
+var _retreat: Node3D = null
+
+## Echo bosses: a rift copies a boss of its theme. Echoes never touch the
+## real boss's world state (lair, escapes, unique reward).
+const ECHO_BOSS := {"forgotten": "necro_lord", "warped_medieval": "executioner", "mechanical": "steam_colossus",
+	"chronos": "chrono_devourer", "future_rift": "rift_archon"}
 
 const THEMES := {
 	"forgotten": {"title": "Забытое измерение", "sub": "Серые руины мира, которого никогда не было.", "floor": Color(0.35, 0.35, 0.4), "top": Color(0.15, 0.15, 0.22), "hor": Color(0.45, 0.45, 0.55), "light": Color(0.8, 0.85, 1.0), "obst": "ruin", "enemies": ["wraith", "skeleton", "cursed_warrior"], "trap": "dark"},
@@ -67,6 +74,11 @@ func build(k: String, seed: int, offset: Vector3, era_i: int, o: Dictionary = {}
 	if expedition:
 		_spawn_chests(rng, 2 if k != "dungeon" else 2)
 		_spawn_traps(rng)
+		_retreat = DimensionExit.new()
+		_retreat.dim = self
+		_retreat.retreat = true
+		add_child(_retreat)
+		_retreat.global_position = center + Vector3(3.5, 0, radius * 0.7 + 2.0)
 	if k == "distorted" or o.has("boss"):
 		_spawn_traps(rng)
 		for i in 2:
@@ -193,7 +205,7 @@ func _process(delta: float) -> void:
 		for a in stage_enemies:
 			if is_instance_valid(a) and not a.is_dead:
 				alive += 1
-		if alive == 0 and stage_enemies.size() > 0:
+		if alive == 0 and stage_enemies.size() > 0 and not (stage == 2 and not anchors.is_empty()):
 			_next_stage()
 
 func _enemy_pool() -> Array:
@@ -237,19 +249,62 @@ func _start_stage(s: int) -> void:
 				Audio.play_music("boss")
 		return
 	var pool := _enemy_pool()
-	var count := 5 + era if s == 1 else 1
 	if s == 1:
-		for i in count:
+		for i in 5 + era:
 			_spawn(pool[randi() % pool.size()], lvl)
-	elif s == 2:
-		var g = _spawn(pool[pool.size() - 1], lvl + 3)
-		if g:
-			g.elite = true
-			g.display_name = "Хранитель: " + g.display_name
-			g.max_hp *= 3.0
-			g.hp = g.max_hp
-			g.base_dmg *= 1.5
-		Events.banner.emit("Хранитель разлома", "Победите стража, чтобы открыть выход.", Color(0.8, 0.5, 1.0))
+		Events.notify.emit("Этап 1: уничтожьте стражей разлома", Color(0.8, 0.6, 1.0))
+	elif s == 2 and ECHO_BOSS.has(kind):
+		# close three anchors: stand in each circle (or strike the crystal) while defenders pour out
+		for i in 3:
+			var a := TAU * i / 3.0 + 0.6
+			var an := RiftAnchor.new()
+			an.dim = self
+			an.col = _theme.light.lerp(Color(0.8, 0.4, 1.0), 0.5)
+			add_child(an)
+			an.global_position = center + Vector3(cos(a), 0, sin(a)) * radius * 0.55
+			anchors.append(an)
+		Events.banner.emit("Якоря разлома", "Закройте три якоря: стойте в круге или бейте кристалл.", Color(0.8, 0.5, 1.0))
+	elif s == 3 and ECHO_BOSS.has(kind):
+		var bid: String = ECHO_BOSS[kind]
+		var b: Boss = w.spawner.spawn_boss(bid, center + Vector3(0, 0, -radius * 0.35), lvl + 1)
+		if b:
+			b.set_meta("rift_echo", true)
+			b.display_name = "Эхо разлома: " + String(DBActors.BOSSES[bid].name)
+			w.spawner.normalize_to_era(b, int(DBActors.BOSSES[bid].get("era", era)))
+			b.max_hp *= 0.6
+			b.hp = b.max_hp
+			b.can_escape = false
+			b.arena_center = center
+			b.add_aggro(Game.player, 80.0)
+			stage_enemies.append(b)
+			Events.boss_engaged.emit(b)
+			Audio.play_music("boss")
+			Events.banner.emit(b.display_name, "Сердце разлома приняло облик чудовища.", Color(1.0, 0.45, 0.6))
+		else:
+			_spawn_guardian(pool, lvl)
+	else:
+		_spawn_guardian(pool, lvl)
+
+func _spawn_guardian(pool: Array, lvl: int) -> void:
+	var g = _spawn(pool[pool.size() - 1], lvl + 3)
+	if g:
+		g.elite = true
+		g.display_name = "Хранитель: " + g.display_name
+		g.max_hp *= 3.0
+		g.hp = g.max_hp
+		g.base_dmg *= 1.5
+	Events.banner.emit("Хранитель разлома", "Победите стража, чтобы открыть выход.", Color(0.8, 0.5, 1.0))
+
+## Called by an anchor when it closes; defenders it spawned keep fighting.
+func on_anchor_closed(an) -> void:
+	anchors.erase(an)
+	VFX.ring(an.global_position, 6.0, Color(0.9, 0.7, 1.0), 0.8)
+	Audio.play_sfx("capture", an.global_position)
+	if anchors.is_empty():
+		Events.notify.emit("Все якоря закрыты!", Color(0.9, 0.7, 1.0))
+		_start_stage(3)
+	else:
+		Events.notify.emit("Якорь закрыт. Осталось: %d" % anchors.size(), Color(0.9, 0.7, 1.0))
 
 func _spawn(id: String, lvl: int):
 	var a := randf() * TAU
@@ -274,6 +329,8 @@ func _next_stage() -> void:
 		return
 	if stage == 1:
 		_start_stage(2)
+	elif stage == 2 and ECHO_BOSS.has(kind):
+		return   # anchors drive stage 2 → 3
 	else:
 		_complete()
 
@@ -288,7 +345,17 @@ func _complete() -> void:
 		var sh := ItemDB.create("chrono_shard", 0, 1)
 		sh.qty = 1 + era / 2
 		w.loot.spawn_drop(sh, center + Vector3(1.5, 0, 0))
-		Events.banner.emit("Разлом покорён", "Выход открыт. Добыча будет вашей, если вы выберетесь.", Color(0.7, 1.0, 0.8))
+		var ess := ItemDB.create("spirit_essence", 0, 1)
+		if not ess.is_empty():
+			ess.qty = 2 + era / 2
+			w.loot.spawn_drop(ess, center + Vector3(-1.5, 0, 0))
+		if ResourceLoader.exists("res://scripts/world/chest.gd"):
+			var ch = load("res://scripts/world/chest.gd").new()
+			ch.set("tier", "rich")
+			ch.set("lvl", w.spawner.level_near_player(2))
+			add_child(ch)
+			ch.global_position = center + Vector3(0, 0, -2.5)
+		Events.banner.emit("Разлом покорён", "Выход открыт. Сундук хранителя и добыча ждут вас.", Color(0.7, 1.0, 0.8))
 
 func on_boss_killed(_b) -> void:
 	if kind == "chronos_trial":
@@ -345,12 +412,26 @@ func objective_text() -> String:
 	if kind == "chronos_trial":
 		return "[color=#ffd36b]Суд Хроноса, этап %d/3:[/color] осталось врагов %d" % [stage, alive]
 	if expedition:
-		return "[color=#c9a0ff]%s:[/color] %s (%d)" % [title, "уничтожьте стражей" if stage == 1 else "победите хранителя", alive]
+		if stage == 2 and not anchors.is_empty():
+			return "[color=#c9a0ff]%s:[/color] закройте якоря разлома (%d/3)" % [title, 3 - anchors.size()]
+		var what := "уничтожьте стражей" if stage == 1 else ("победите эхо-босса" if stage == 3 else "победите хранителя")
+		return "[color=#c9a0ff]%s:[/color] %s (%d)" % [title, what, alive]
 	return "[color=#c9a0ff]%s[/color]" % title
 
 func target_pos():
 	if done:
 		return center + Vector3(0, 0, radius * 0.5)
+	if stage == 2 and not anchors.is_empty():
+		var best = null
+		var bd := INF
+		for an in anchors:
+			if is_instance_valid(an):
+				var d: float = an.global_position.distance_to(Game.player.global_position)
+				if d < bd:
+					bd = d
+					best = an.global_position
+		if best != null:
+			return best
 	for a in stage_enemies:
 		if is_instance_valid(a) and not a.is_dead:
 			return a.global_position
@@ -359,25 +440,114 @@ func target_pos():
 class DimensionExit:
 	extends Node3D
 	var dim
+	var retreat := false          # always-open way back (keeps loot, no completion reward)
 	var interact_radius := 3.5
 	func _ready() -> void:
-		var ring := MeshLib.part(self, MeshLib.torus(1.6, 1.9), MeshLib.glow(Color(0.5, 1.0, 0.7), 3.0), Vector3(0, 2.1, 0), Vector3(90, 0, 0))
-		MeshLib.part(self, MeshLib.cyl(1.6, 1.6, 0.05, 20), MeshLib.mat(Color(0.5, 1.0, 0.7, 0.4), 0.0, 1.0, 2.0, true), Vector3(0, 2.1, 0), Vector3(90, 0, 0))
+		var c := Color(0.5, 1.0, 0.7) if not retreat else Color(0.55, 0.75, 1.0)
+		var sc := 1.0 if not retreat else 0.7
+		var ring := MeshLib.part(self, MeshLib.torus(1.6 * sc, 1.9 * sc), MeshLib.glow(c, 3.0), Vector3(0, 2.1 * sc, 0), Vector3(90, 0, 0))
+		MeshLib.part(self, MeshLib.cyl(1.6 * sc, 1.6 * sc, 0.05, 20), MeshLib.mat(Color(c.r, c.g, c.b, 0.4), 0.0, 1.0, 2.0, true), Vector3(0, 2.1 * sc, 0), Vector3(90, 0, 0))
+		var lb := Label3D.new()
+		lb.text = "Выход" if not retreat else "Отступить"
+		lb.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+		lb.font_size = 40
+		lb.pixel_size = 0.006
+		lb.outline_size = 10
+		lb.modulate = c
+		lb.position.y = 4.2 * sc + 0.4
+		add_child(lb)
 		var l := OmniLight3D.new()
-		l.light_color = Color(0.5, 1.0, 0.7)
+		l.light_color = c
 		l.light_energy = 2.0
 		l.omni_range = 8.0
 		l.position.y = 2.0
 		add_child(l)
-		Game.grid.insert(self, global_position, "interact")
+		Game.grid.insert_deferred(self, "interact")
 		Audio.play_sfx("portal_open", global_position)
 	func _exit_tree() -> void:
 		Game.grid.remove(self, "interact")
 	func interact_label() -> String:
-		return "Выйти из измерения"
+		return "Выйти из измерения" if not retreat else "Отступить из разлома"
 	func interact(a) -> void:
 		if a.is_player and dim and is_instance_valid(dim):
+			if retreat and not dim.done:
+				Game.world.ui.open("dialog", {"title": "Отступить?", "text": "Портал вернёт вас к входу в разлом.\nДобытые предметы и опыт сохранятся, но награда хранителя будет потеряна, а разлом останется непокорённым.",
+					"options": [{"text": "Отступить", "cb": func(): Game.world.leave_dimension(false)}, {"text": "Остаться", "cb": func(): pass}]})
+				return
 			if Game.mode == "world":
 				dim.finish_and_leave()
 			elif Game.world.mode_ctl and Game.world.mode_ctl.has_method("on_exit"):
 				Game.world.mode_ctl.on_exit()
+
+## Rift anchor: a crystal over a glowing circle. Standing inside (no
+## matter the class) or striking the crystal closes it; while it is being
+## closed it periodically vomits defenders.
+class RiftAnchor:
+	extends Node3D
+	var dim
+	var col := Color(0.8, 0.5, 1.0)
+	var progress := 0.0
+	var hit_radius := 1.0
+	var _crystal: Node3D
+	var _ring_mat: Material
+	var _spawn_t := 1.5
+	var _closed := false
+	func _ready() -> void:
+		_crystal = Node3D.new()
+		add_child(_crystal)
+		MeshLib.part(_crystal, MeshLib.prism(Vector3(1.0, 2.6, 1.0)), MeshLib.glow(col, 2.5), Vector3(0, 1.8, 0))
+		MeshLib.part(_crystal, MeshLib.prism(Vector3(0.5, 1.2, 0.5)), MeshLib.glow(col.lightened(0.3), 3.0), Vector3(0.7, 1.0, 0.2), Vector3(0, 0, 25))
+		MeshLib.part(self, MeshLib.torus(3.0, 3.25), MeshLib.glow(col, 1.6), Vector3(0, 0.06, 0), Vector3.ZERO, Vector3.ONE, false)
+		var l := OmniLight3D.new()
+		l.light_color = col
+		l.light_energy = 1.4
+		l.omni_range = 7.0
+		l.position.y = 2.0
+		l.shadow_enabled = false
+		add_child(l)
+		var lb := Label3D.new()
+		lb.name = "Lbl"
+		lb.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+		lb.font_size = 36
+		lb.pixel_size = 0.006
+		lb.outline_size = 8
+		lb.position.y = 4.0
+		lb.modulate = col.lightened(0.3)
+		add_child(lb)
+		Game.grid.insert_deferred(self, "destructible")
+	func _exit_tree() -> void:
+		Game.grid.remove(self, "destructible")
+	func take_hit(amount: float, _dtype: String = "blunt", _src = null) -> void:
+		if _closed:
+			return
+		progress += clampf(amount / 300.0, 0.02, 0.12)
+		VFX.burst(global_position + Vector3(0, 1.6, 0), col, 6, 0.3)
+	func _process(delta: float) -> void:
+		if _closed:
+			return
+		_crystal.rotation.y += delta * (0.8 + progress * 4.0)
+		var pl = Game.player
+		if pl == null or not is_instance_valid(pl) or pl.is_dead:
+			return
+		var d := Vector2(pl.global_position.x - global_position.x, pl.global_position.z - global_position.z).length()
+		var active := d < 3.2 or progress > 0.0
+		if d < 3.2:
+			progress += delta / 6.0
+		var lb: Label3D = get_node("Lbl")
+		lb.text = "Якорь %d%%" % int(minf(progress, 1.0) * 100.0)
+		if active:
+			_spawn_t -= delta
+			if _spawn_t <= 0.0 and dim and is_instance_valid(dim):
+				_spawn_t = 5.0
+				var pool: Array = dim._enemy_pool()
+				var m = dim._spawn(pool[randi() % pool.size()], Game.world.spawner.level_near_player(0))
+				if m:
+					m.global_position = global_position + Vector3(randf_range(-2, 2), 0, randf_range(-2, 2))
+		if progress >= 1.0:
+			_closed = true
+			var tw := _crystal.create_tween()
+			tw.tween_property(_crystal, "scale", Vector3(0.05, 0.05, 0.05), 0.5).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_IN)
+			tw.tween_callback(_crystal.queue_free)
+			lb.text = "Закрыт"
+			if dim and is_instance_valid(dim):
+				dim.on_anchor_closed(self)

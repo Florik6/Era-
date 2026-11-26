@@ -59,7 +59,7 @@ static func _forge(world) -> void:
 static func _lab(world) -> void:
 	var pd: CharData = world.player.data
 	var defs := [["potion_hp", {"herbs": 2}, 5], ["potion_mana", {"herbs": 2}, 5], ["elixir_mutation", {"herbs": 3}, 40], ["bomb_flask", {"herbs": 1, "iron_ore": 1}, 10],
-		["potion_big", {"herbs": 5}, 60], ["scroll_identify", {"herbs": 1}, 25]]
+		["potion_big", {"herbs": 5}, 60], ["scroll_identify", {"herbs": 1}, 25], ["purify_salt", {"herbs": 2}, 15]]
 	var recipes: Array = []
 	for d in defs:
 		var bid: String = d[0]
@@ -106,9 +106,8 @@ static func _workshop(world) -> void:
 static func _terminal(world, poi) -> void:
 	var opts: Array = []
 	opts.append({"text": "Взломать систему", "cb": func(): _hack(world, poi)})
-	opts.append({"text": "Отключить управляющую технологию (снять тех-проклятие)", "cb": func():
-		if world.player.purify("tech"):
-			Audio.play_sfx("robot_hit")})
+	opts.append({"text": "Отключить блокировки снаряжения (тех-проклятия)", "cb": func():
+		world.ui.open("altar", {"altar": poi, "station": "tech"})})
 	opts.append({"text": "Уйти", "cb": func(): pass})
 	world.ui.open("dialog", {"title": "Терминал", "text": "Экран мерцает. Доступ защищён, но защиту можно обойти. Взлом поднимет тревогу.", "portrait_color": Color(0.3, 0.8, 1.0), "options": opts})
 
