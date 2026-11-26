@@ -759,6 +759,9 @@ func decal(pos: Vector3, kind: String, size: float, life: float, rot: float) -> 
 		p.y = MagicFX.ground_y(pos)
 	var bx := nrm.cross(Vector3.FORWARD if absf(nrm.z) < 0.9 else Vector3.RIGHT).normalized()
 	var bz := bx.cross(nrm).normalized()
+	nrm = nrm.normalized()      # physics normals can be off by ~1e-3 (rotated() needs unit axes)
+	bx = nrm.cross(Vector3.FORWARD if absf(nrm.z) < 0.9 else Vector3.RIGHT).normalized()
+	bz = bx.cross(nrm).normalized()
 	var b := Basis(bx, nrm, bz).rotated(nrm, rot)
 	mi.visible = true
 	mi.global_transform = Transform3D(b.scaled(Vector3(size, 1.0, size)), p + nrm * (0.03 + 0.002 * (_decal_i % 8)))

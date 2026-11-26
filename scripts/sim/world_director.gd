@@ -128,7 +128,9 @@ func _ambient_population() -> void:
 	var pool: Array = era_d.night_enemies if (Game.is_night() and randf() < 0.6) else era_d.enemies
 	pool = world.spawner.suitable(pool)
 	var id: String = pool[randi() % pool.size()]
-	var center := _ring_pos(pp, 30.0, 48.0)
+	var center := _wild_pos(pp, 30.0, 48.0)
+	if center == Vector3.INF:
+		return      # the hero is deep in a town: wild creatures don't spawn on its streets
 	var prog: int = world.spawner.era_progress_levels()
 	var pack := 1 + (randi() % (1 + mini(2, prog / 2)) if DBActors.ENEMIES[id].rig == "wolf" or DBActors.ENEMIES[id].team == "bandit" else 0)
 	for i in pack:
@@ -137,6 +139,21 @@ func _ambient_population() -> void:
 			ambient.append(m)
 			if blood_moon_active() and randf() < 0.35:
 				_make_blood_variant(m)
+
+## Wild spot if there is one, otherwise farther out on the ring.
+func _wild_or_ring(p: Vector3, rmin: float, rmax: float) -> Vector3:
+	var q := _wild_pos(p, rmin, rmax)
+	return q if q != Vector3.INF else _ring_pos(p, rmax + 60.0, rmax + 90.0)
+
+## A spot in the wild (outside any town) on a ring around p, or INF.
+func _wild_pos(p: Vector3, rmin: float, rmax: float) -> Vector3:
+	for i in 10:
+		var q := _ring_pos(p, rmin, rmax + i * 6.0)
+		if CityPeace.inst == null or CityPeace.inst.city_at(q, CityPeace.MARGIN + 12.0) == null:
+			return q
+	if CityPeace.inst:
+		CityPeace.inst.stats.spawns_blocked += 1
+	return Vector3.INF
 
 func _maybe_start_event() -> void:
 	if events.size() >= 2:
@@ -173,7 +190,7 @@ func _start(type: String, pp: Vector3) -> void:
 	match type:
 		"bandit_raid":
 			var s = _nearest_settlement(pp, 250.0)
-			if s != null:
+			if s != null and (CityPeace.inst == null or CityPeace.inst.can_raid(s.id)):
 				start_raid_on(s.id, "")
 		"blood_moon":
 			var e := _ev("blood_moon", pp, 150.0)
@@ -185,7 +202,7 @@ func _start(type: String, pp: Vector3) -> void:
 			e.data.embers = _blood_embers()
 			# a unique champion of the night
 			var night_pool: Array = DBEras.era(era).night_enemies
-			var champ = world.spawner.spawn_enemy(night_pool[night_pool.size() - 1], _ring_pos(pp, 30.0, 40.0), world.spawner.level_near_player(2))
+			var champ = world.spawner.spawn_enemy(night_pool[night_pool.size() - 1], _wild_or_ring(pp, 30.0, 40.0), world.spawner.level_near_player(2))
 			if champ:
 				_make_blood_variant(champ, true)
 				e.actors.append(champ)
@@ -205,12 +222,12 @@ func _start(type: String, pp: Vector3) -> void:
 			var fog_pool: Array = world.spawner.suitable(DBEras.era(era).night_enemies)
 			for i in 2 + mini(2, world.spawner.era_progress_levels() / 2):
 				var nid: String = fog_pool[randi() % fog_pool.size()]
-				var m = world.spawner.spawn_enemy(nid, _ring_pos(pp, 25.0, 40.0))
+				var m = world.spawner.spawn_enemy(nid, _wild_or_ring(pp, 25.0, 40.0))
 				if m:
 					e2.actors.append(m)
 			Events.banner.emit("Проклятый туман", "Из тумана поднимаются порождения тьмы.", Color(0.5, 0.9, 0.5))
 		"meteor":
-			var p := _ring_pos(pp, 30.0, 60.0)
+			var p := _wild_or_ring(pp, 30.0, 60.0)
 			p.y = world.ground_height(p)
 			var e3 := _ev("meteor", p, 160.0)
 			VFX.telegraph(p, 7.0, 3.0, Color(1.0, 0.5, 0.1))
@@ -234,7 +251,7 @@ func _start(type: String, pp: Vector3) -> void:
 					m2.hp = m2.max_hp
 					e3.actors.append(m2))
 		"rift_open", "invasion":
-			var p2 := _ring_pos(pp, 25.0, 45.0)
+			var p2 := _wild_or_ring(pp, 25.0, 45.0)
 			p2.y = world.ground_height(p2)
 			var e4 := _ev("invasion" if type == "invasion" else "rift_open", p2, 180.0)
 			var portal := Poi.create({"id": e4.id, "type": "rift", "pos": Vector2(p2.x, p2.z), "name": "Временный разлом", "data": {"temporary": true}}, world)
@@ -247,10 +264,10 @@ func _start(type: String, pp: Vector3) -> void:
 		"chrono_catastrophe":
 			var e5 := _ev("chrono_catastrophe", pp, 120.0)
 			for i in 3:
-				var zp := _ring_pos(pp, 10.0, 30.0)
+				var zp := _wild_or_ring(pp, 10.0, 30.0)
 				zp.y = world.ground_height(zp)
 				Zone.create("timeslow", null, zp, 5.0, 60.0, {})
-			_invasion(e5, _ring_pos(pp, 20.0, 30.0))
+			_invasion(e5, _wild_or_ring(pp, 20.0, 30.0))
 			Events.banner.emit("Хронокатастрофа", "Время рвётся: аномалии замедления и гости из других эпох.", Color(0.4, 1.0, 0.85))
 		"uprising":
 			var s2 = _nearest_settlement(pp, 600.0)
@@ -274,7 +291,7 @@ func _start(type: String, pp: Vector3) -> void:
 		"world_boss":
 			var bosses: Array = DBEras.era(era).bosses
 			var bid: String = bosses[randi() % bosses.size()]
-			var p4 := _ring_pos(pp, 35.0, 50.0)
+			var p4 := _wild_or_ring(pp, 35.0, 50.0)
 			var e7 := _ev("world_boss", p4, 300.0)
 			var b = world.spawner.spawn_boss(bid, p4, world.spawner.level_near_player(2))
 			if b:
@@ -713,6 +730,8 @@ func start_raid_on(sid: String, qid: String) -> void:
 		return
 	var c := Vector3(s.pos.x, 0, s.pos.y)
 	var e := _ev("raid", c, 200.0, {"sid": sid, "qid": qid})
+	if CityPeace.inst:
+		CityPeace.inst.begin_attack(sid, "налёт разбойников")
 	e.name = "Нападение на %s" % s.name
 	var era_d: Dictionary = DBEras.era(Profile.current_era)
 	var bandits: Array = era_d.enemies.filter(func(x): return DBActors.ENEMIES[x].team == "bandit")
@@ -916,7 +935,7 @@ func _check_boss_returns() -> void:
 			if not bid in DBEras.era(Profile.current_era).bosses:
 				continue
 			st.returned_active = true
-			var p := _ring_pos(world.player.global_position, 30.0, 40.0)
+			var p := _wild_or_ring(world.player.global_position, 30.0, 40.0)
 			var e := _ev("boss_return", p, 400.0)
 			var b = world.spawner.spawn_boss(bid, p, -1, int(st.escaped))
 			if b:
@@ -940,7 +959,7 @@ func _check_hunters() -> void:
 		return
 	var h: Dictionary = hunters_queue.pop_front()
 	cooldowns["hunters"] = Game.game_time + 1.0
-	var p := _ring_pos(world.player.global_position, 40.0, 55.0)
+	var p := _wild_or_ring(world.player.global_position, 40.0, 55.0)
 	var e := _ev("hunters", p, 400.0)
 	e.name = h.name
 	var ids := ["mercenary", "assassin", "mercenary_rifle", "elite_operative", "cyber_hunter"]

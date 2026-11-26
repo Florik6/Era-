@@ -372,7 +372,11 @@ func _process(delta: float) -> void:
 		return
 	var tgt: Array = targets[randi() % targets.size()]
 	var tpos := _poi_pos(tgt[1]) if tgt[0] == "cp" else _settlement_pos(tgt[1])
-	if world.player and world.player.global_position.distance_to(tpos) < 220.0 and world.director:
+	# a siege of a town is a rare, real attack; otherwise the war is fought abstractly
+	var town_ok: bool = tgt[0] != "settlement" or CityPeace.inst == null or CityPeace.inst.can_raid(tgt[1])
+	if town_ok and world.player and world.player.global_position.distance_to(tpos) < 220.0 and world.director:
+		if tgt[0] == "settlement" and CityPeace.inst:
+			CityPeace.inst.begin_attack(tgt[1], "осада: %s" % DBEras.faction(att).name)
 		world.director.start_battle(att, target_f, tgt[0], tgt[1], tpos)
 	else:
 		_abstract_battle(att, target_f, tgt)

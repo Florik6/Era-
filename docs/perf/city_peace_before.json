@@ -1,0 +1,61 @@
+{
+  "city": "Крепость Дальнегорье",
+  "events": {
+    "chrono_catastrophe": 1,
+    "invasion": 1,
+    "magic_storm": 1,
+    "raid": 1,
+    "rift_open": 1
+  },
+  "fight_share": 0.311,
+  "game_hours": 10.06,
+  "hits": 315,
+  "hits_by": {
+    "creature/monster -> enemy/bandit": 3,
+    "creature/monster -> soldier/f_ash_circle": 1,
+    "creature/monster -> soldier/f_steel_lion": 6,
+    "enemy/bandit -> creature/monster": 22,
+    "enemy/bandit -> enemy/monster": 1,
+    "enemy/bandit -> guard/neutral": 12,
+    "enemy/bandit -> soldier/f_steel_lion": 24,
+    "enemy/bandit -> trader/neutral": 6,
+    "enemy/bandit -> villager/neutral": 41,
+    "enemy/monster -> enemy/bandit": 8,
+    "enemy/monster -> soldier/f_steel_lion": 3,
+    "enemy/monster -> trader/neutral": 1,
+    "env -> guard/neutral": 1,
+    "env -> villager/neutral": 1,
+    "guard/neutral -> creature/monster": 11,
+    "guard/neutral -> enemy/bandit": 93,
+    "soldier/f_ash_circle -> creature/monster": 3,
+    "soldier/f_ash_circle -> enemy/bandit": 1,
+    "soldier/f_steel_lion -> creature/monster": 10,
+    "soldier/f_steel_lion -> enemy/bandit": 62,
+    "soldier/f_steel_lion -> enemy/monster": 5
+  },
+  "kills": 53,
+  "kills_by": {
+    "enemy/bandit x creature/monster": 5,
+    "enemy/bandit x enemy/monster": 1,
+    "enemy/bandit x villager/neutral": 3,
+    "guard/neutral x creature/monster": 4,
+    "guard/neutral x enemy/bandit": 15,
+    "soldier/f_ash_circle x creature/monster": 2,
+    "soldier/f_ash_circle x enemy/bandit": 1,
+    "soldier/f_steel_lion x creature/monster": 3,
+    "soldier/f_steel_lion x enemy/bandit": 17,
+    "soldier/f_steel_lion x enemy/monster": 2
+  },
+  "npc_seen": {
+    "creature/monster": 260,
+    "enemy/bandit": 694,
+    "enemy/monster": 21,
+    "guard/neutral": 561,
+    "soldier/f_ash_circle": 15,
+    "soldier/f_steel_lion": 441,
+    "trader/neutral": 295,
+    "villager/neutral": 919
+  },
+  "peace_states": {},
+  "real_s": 150.0
+}

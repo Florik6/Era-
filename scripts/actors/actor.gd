@@ -63,6 +63,7 @@ var dodge_total := 0.45
 var dodge_kind := "roll"
 var move_vel := Vector3.ZERO      # planar velocity with inertia
 var lunge_vel := Vector3.ZERO     # attack step-in impulse
+var _aggro_t := 2.0
 var counter_t := 0.0              # window after a parry: next attack is a counter
 var counter_target = null
 var _skid_t := 0.0
@@ -329,6 +330,10 @@ func _tick_timers(delta: float) -> void:
 		dodge_t -= delta
 		if dodge_t <= 0.0 and dodge_kind == "leap" and is_player:
 			VFX.burst(global_position + Vector3(0, 0.1, 0), Color(0.62, 0.55, 0.42, 0.8), 5, 0.2)
+	_aggro_t -= delta
+	if _aggro_t <= 0.0:
+		_aggro_t = 2.0
+		_purge_aggro()
 	if counter_t > 0.0:
 		counter_t -= delta
 	_regen_t += delta
@@ -812,6 +817,15 @@ func cooldown_of(id: String) -> float:
 	return skill_cd.get(id, 0.0)
 
 # ---------------------------------------------------------------- damage
+## Expired grudges are dropped so fights end (they used to persist forever).
+func _purge_aggro() -> void:
+	if aggro.is_empty():
+		return
+	var now := Time.get_ticks_msec()
+	for k in aggro.keys():
+		if int(aggro[k]) <= now:
+			aggro.erase(k)
+
 func add_aggro(other, secs: float = 25.0) -> void:
 	if other == null or not is_instance_valid(other) or other == self:
 		return

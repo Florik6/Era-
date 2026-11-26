@@ -427,7 +427,8 @@ func _process(delta: float) -> void:
 	_check_t -= delta
 	if _check_t <= 0.0:
 		_check_t = 6.0
-		if active.size() < MAX_ACTIVE and Game.game_time * 720.0 - _last_start > 30.0:
+		var in_town: bool = CityPeace.inst != null and CityPeace.inst.city_at(player().global_position, 45.0) != null
+		if not in_town and active.size() < MAX_ACTIVE and Game.game_time * 720.0 - _last_start > 30.0:
 			if randf() < 0.45:
 				var tpl := pick_template()
 				if tpl != "":

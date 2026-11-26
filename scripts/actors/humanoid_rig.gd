@@ -60,6 +60,7 @@ var dodging := false
 var dodge_p := 0.0
 var dead := false
 var crouch := false
+var pose := ""                 # "" | "sit" | "sleep" (city life: tavern seats, beds)
 var yielding := false
 var casting := false
 var gait := ""              # class gait: heavy (warrior), light (rogue/archer), soft (mage)
@@ -995,6 +996,26 @@ func animate(delta: float) -> void:
 		t.spine.x += 0.15 * pk
 		rate = 26.0
 	hips_y += hips_dy
+	match pose:
+		"sit":
+			hips_y -= 0.42
+			t.leg_l = Vector3(1.45, 0, 0.06)
+			t.leg_r = Vector3(1.45, 0, -0.06)
+			t.knee_l = Vector3(-1.5, 0, 0)
+			t.knee_r = Vector3(-1.5, 0, 0)
+			if action == "":
+				t.arm_l = t.arm_l.lerp(Vector3(0.5, 0, -0.1), 0.8)
+				t.arm_r = t.arm_r.lerp(Vector3(0.5, 0, 0.1), 0.8)
+				t.elbow_l = Vector3(0.9, 0, 0)
+				t.elbow_r = Vector3(0.9, 0, 0)
+		"sleep":
+			t.leg_l = Vector3(0.1, 0, 0)
+			t.leg_r = Vector3(0.05, 0, 0)
+			t.knee_l = Vector3(-0.2, 0, 0)
+			t.knee_r = Vector3(-0.1, 0, 0)
+			t.arm_l = Vector3(0.2, 0, -0.3)
+			t.arm_r = Vector3(0.2, 0, 0.3)
+	rotation.x = lerpf(rotation.x, -1.45 if pose == "sleep" else 0.0, minf(1.0, delta * 4.0))
 	if yielding:
 		hips_y = 0.55
 		t.leg_l = Vector3(1.4, 0, 0)
@@ -1173,6 +1194,25 @@ func _pose_action(t: Dictionary, act: String, p: float) -> Vector2:
 	var yaw := 0.0
 	var two := two_handed or _cat in ["spear"]
 	match act:
+		"talk":
+			var g1 := sin(p * TAU * 2.0)
+			var e1 := _ss(p / 0.2) * (1.0 - _seg(p, 0.8, 1.0))
+			t.arm_r = t.arm_r.lerp(Vector3(1.0 + 0.3 * g1, 0.2, 0.35), e1)
+			t.elbow_r = t.elbow_r.lerp(Vector3(1.1, 0, 0), e1)
+			t.arm_l = t.arm_l.lerp(Vector3(0.6 - 0.2 * g1, 0, -0.3), e1 * 0.7)
+			t.neck.y += 0.15 * g1 * e1
+		"drink":
+			var e2 := _ss(p / 0.35) * (1.0 - _seg(p, 0.7, 1.0))
+			t.arm_r = t.arm_r.lerp(Vector3(1.9, 0, 0.35), e2)
+			t.elbow_r = t.elbow_r.lerp(Vector3(2.2, 0, 0), e2)
+			t.neck.x -= 0.35 * e2
+		"play":
+			var str_k := sin(p * TAU * 4.0)
+			t.arm_l = t.arm_l.lerp(Vector3(1.1, 0.4, -0.2), 0.9)
+			t.elbow_l = t.elbow_l.lerp(Vector3(1.3, 0, 0), 0.9)
+			t.arm_r = t.arm_r.lerp(Vector3(0.7 + 0.15 * str_k, -0.3, 0.25), 0.9)
+			t.elbow_r = t.elbow_r.lerp(Vector3(1.2, 0, 0), 0.9)
+			t.neck.x += 0.1
 		"slash":
 			# forehand: sweep from back-right around the front to the left
 			_ap("spine", Vector3(-0.08, -0.7, 0), Vector3(-0.2, 0.65, 0), w, st, rc)

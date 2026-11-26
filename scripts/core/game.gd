@@ -142,8 +142,13 @@ func is_enemy(a, b) -> bool:
 	var rb = _team_root(b)
 	if ra == rb:
 		return false
-	if a.actor_id in b.aggro or b.actor_id in a.aggro or ra.actor_id in rb.aggro or rb.actor_id in ra.aggro:
+	# personal grudges expire (aggro stores an expiry time; it used to count forever)
+	var now := Time.get_ticks_msec()
+	if _fresh(b.aggro, a.actor_id, now) or _fresh(a.aggro, b.actor_id, now) or _fresh(rb.aggro, ra.actor_id, now) or _fresh(ra.aggro, rb.actor_id, now):
 		return true
+	# town truce: faction wars and rivalries are not fought on a peaceful square
+	if CityPeace.inst != null and CityPeace.inst.truce(ra, rb):
+		return false
 	var ta: String = ra.team
 	var tb: String = rb.team
 	if ta == tb and ta != "bot":
@@ -167,6 +172,9 @@ func is_enemy(a, b) -> bool:
 		return true
 	return false
 
+static func _fresh(aggro: Dictionary, id: String, now: int) -> bool:
+	return aggro.has(id) and int(aggro[id]) > now
+
 ## Can attacker's swing/projectile damage target? Contenders (bots) are fair game.
 func can_damage(attacker, target) -> bool:
 	if attacker == null or target == null or not is_instance_valid(target) or target.is_dead:
@@ -177,6 +185,9 @@ func can_damage(attacker, target) -> bool:
 	if ra == null or not is_instance_valid(ra) or ra == _team_root(target):
 		return false
 	if target.team == "bot" and (ra.team == "player" or ra.team == "bot") and ra.faction_id != target.faction_id:
+		# not in a peaceful town: stray hits there would start pointless brawls
+		if ra.team == "bot" and CityPeace.inst != null and CityPeace.inst.in_peace_zone(target.global_position):
+			return false
 		return true
 	return false
 

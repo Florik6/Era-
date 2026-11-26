@@ -38,6 +38,9 @@ var rel := {}              # actor_id -> {fear, grudge, gratitude, respect, lost
 var lost_to_ranged := 0
 var _orb_cache := Vector3.INF
 var flee_pos := Vector3.INF      # flee from a place (catastrophe) instead of an actor
+var routine := {}                # CityLife plan being carried out
+var _r_state := ""               # "" walking | "door" entering | "at" at the spot
+var _r_patrol_i := 0
 
 func _init(npc) -> void:
 	n = npc
@@ -98,6 +101,8 @@ func on_spared(by) -> void:
 
 ## Panic: run away from a place (a magical catastrophe) for a while.
 func flee_from(pos: Vector3, secs: float = 8.0) -> void:
+	if goal == "routine":
+		_leave_routine()
 	flee_pos = pos
 	goal = "flee"
 	threat = null
@@ -108,6 +113,8 @@ func flee_from(pos: Vector3, secs: float = 8.0) -> void:
 
 ## Guards and soldiers go to check a disturbance.
 func investigate(pos: Vector3, secs: float = 9.0) -> void:
+	if goal == "routine":
+		_leave_routine()
 	var off := Vector3(randf_range(-1, 1), 0, randf_range(-1, 1)).normalized() * randf_range(7.0, 10.0)
 	dest = pos + off
 	path = [dest]
@@ -183,7 +190,9 @@ func _think() -> void:
 		if Game.is_enemy(n, a):
 			enemies.append(a)
 		elif a.team == "bot" and n.team == "bot" and a.faction_id != n.faction_id:
-			contenders.append(a)
+			# rivals settle scores outside town, never on a peaceful street
+			if CityPeace.inst == null or not CityPeace.inst.in_peace_zone(a.global_position):
+				contenders.append(a)
 	var hp_f: float = n.hp / maxf(1.0, n.max_hp)
 	var my_pow := power_of(n)
 	var best_goal := "idle"
@@ -305,6 +314,18 @@ func _peaceful_goal(hp_f: float) -> Dictionary:
 	var w = Game.world
 	if w == null:
 		return out
+	# daily routine of townsfolk (CityLife): work, trade, inn, home, guard posts
+	if n.role in ["villager", "trader", "guard"] and CityLife.inst != null and str(n.get("settlement_id")) != "":
+		var pl: Dictionary = CityLife.inst.plan(n)
+		if not pl.is_empty() and pl.act != "job" and pl.act != "stroll":
+			if pl != routine:
+				if goal == "routine":
+					_exit_building()
+				routine = pl
+				_r_state = ""
+			return {"g": "routine", "s": 1.0}
+		if not pl.is_empty() and pl.act == "stroll":
+			return {"g": "wander_home", "s": 0.6}
 	# schedules
 	if n.role in ["villager", "trader"]:
 		var bm_on: bool = w.get("director") != null and w.director != null and w.director.has_method("blood_moon_active") and w.director.blood_moon_active()
@@ -376,6 +397,8 @@ func _set_goal(g: String, t) -> void:
 	if g != goal:
 		path.clear()
 		idle_t = 0.0
+		if goal == "routine":
+			_leave_routine()
 	goal = g
 	target = t
 	match g:
@@ -461,6 +484,9 @@ func _act(delta: float) -> void:
 	if not n.can_act():
 		n.move_input = Vector3.ZERO
 		return
+	if goal == "routine":
+		_routine(delta)
+		return
 	if n.blocking:
 		block_t -= delta
 		if block_t <= 0.0:
@@ -530,6 +556,86 @@ func _act(delta: float) -> void:
 		_:
 			_follow_path(delta)
 
+## Carry out the CityLife plan: walk to the place (through the door when it
+## is indoors), settle there and perform the activity. Indoors the person is
+## placed at the spot from the doorway (no indoor path-finding needed).
+func _routine(delta: float) -> void:
+	var pl: Dictionary = routine
+	if pl.is_empty():
+		goal = "idle"
+		return
+	if pl.act == "patrol":
+		var ring: Array = pl.get("patrol", [])
+		if ring.is_empty():
+			goal = "idle"
+			return
+		var wp: Vector3 = ring[_r_patrol_i % ring.size()]
+		var to: Vector3 = wp - n.global_position
+		to.y = 0
+		if to.length() < 1.6:
+			_r_patrol_i += 1
+		else:
+			_move_to(wp, delta, 0.7)
+		return
+	var sp: Dictionary = pl.get("spot", {})
+	if sp.is_empty():
+		goal = "idle"
+		return
+	var door: Vector3 = sp.door
+	var indoor: bool = sp.bid != "" and door != Vector3.INF
+	if _r_state == "":
+		var dest: Vector3 = door if indoor else sp.pos
+		var to2: Vector3 = dest - n.global_position
+		to2.y = 0
+		if to2.length() > (1.3 if indoor else 0.7):
+			_move_to(dest, delta, 0.85 if pl.act != "patrol" else 0.7)
+			return
+		if indoor:
+			n.global_position = sp.pos + Vector3(0, 0.05, 0)
+			if n.has_method("reset_physics_interpolation"):
+				n.reset_physics_interpolation()
+			n.set_meta("indoors", sp.bid)
+		_r_state = "at"
+		CityLife.inst.arrived(n, pl)
+		if n.rig:
+			n.rig.pose = "sit" if pl.act in ["eat", "inn", "bench"] and sp.kind in ["inn_seat", "bench"] else ("sleep" if pl.act in ["sleep", "home"] else "")
+	n.move_input = Vector3.ZERO
+	n.velocity = Vector3.ZERO
+	_turn_to(sp.face, delta)
+	CityLife.inst.perform(n, pl, delta)
+
+## Turn toward a direction; snaps when nearly there (slerp between almost
+## parallel vectors produces a non-unit axis and an engine error).
+func _turn_to(face: Vector3, delta: float) -> void:
+	face.y = 0
+	if face.length() < 0.01:
+		return
+	face = face.normalized()
+	if n.facing.dot(face) > 0.995:
+		n.facing = face
+	else:
+		n.facing = n.facing.slerp(face, minf(1.0, delta * 6.0)).normalized()
+
+func _leave_routine() -> void:
+	_exit_building()
+	var sp: Dictionary = routine.get("spot", {})
+	if CityLife.inst and not sp.is_empty() and n.get_meta("spot_id", "") == sp.get("id", ""):
+		CityLife.inst.release(n)
+	routine = {}
+	_r_state = ""
+
+## Step out of the building through its door (and stand up).
+func _exit_building() -> void:
+	if n.rig:
+		n.rig.pose = ""
+	if n.has_meta("indoors"):
+		var sp: Dictionary = routine.get("spot", {})
+		n.remove_meta("indoors")
+		if not sp.is_empty() and sp.door != Vector3.INF:
+			n.global_position = sp.door + Vector3(0, 0.1, 0)
+			if n.has_method("reset_physics_interpolation"):
+				n.reset_physics_interpolation()
+
 ## Working at the job spot: walk there, face the workplace, animate.
 func _work(delta: float) -> void:
 	var job: Dictionary = n.get_meta("job", {})
@@ -551,7 +657,7 @@ func _work(delta: float) -> void:
 	n.move_input = Vector3.ZERO
 	var face: Vector3 = job.get("face", Vector3.ZERO)
 	if face.length() > 0.1:
-		n.facing = n.facing.slerp(face.normalized(), minf(1.0, delta * 6.0)).normalized()
+		_turn_to(face.normalized(), delta)
 	_work_anim_t -= delta
 	if _work_anim_t > 0.0 or not n.act.is_empty():
 		return
