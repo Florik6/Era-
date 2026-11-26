@@ -113,7 +113,7 @@ func _make_particles(kind: String) -> GPUParticles3D:
 	return p
 
 func _set_amount(p: GPUParticles3D, kind: String) -> void:
-	var f: float = Settings.profile().get("particles", 1.0)
+	var f: float = Settings.profile().get("particles", 1.0) * clampf(Settings.weather_density, 0.1, 1.0)
 	var base: int = {"rain": 900, "snow": 600, "wind": 90}[kind]
 	p.amount = maxi(16, int(base * f))
 
@@ -195,6 +195,7 @@ func _process(delta: float) -> void:
 		_bolt_light.light_energy = 0.0
 		_ambient("rain_loop", false)
 		_ambient("wind_loop", false)
+		_update_surfaces(delta, true)
 		return
 	# storm lightning
 	if current == "storm":
@@ -207,9 +208,16 @@ func _process(delta: float) -> void:
 				_strike(tp + Vector3(_rng.randf_range(-20, 20), 0, _rng.randf_range(-20, 20)))
 	if _flash_t > 0.0:
 		_flash_t -= delta
-		_bolt_light.light_energy = 2.4 if _flash_t > 0.09 else 1.0
+		# a lightning flash lights the whole street; with "no flicker" it is a
+		# single soft pulse instead of a double strobe
+		var fk := Settings.flash_k()
+		if Settings.no_flicker:
+			_bolt_light.light_energy = 1.2 * fk * clampf(_flash_t / 0.18, 0.0, 1.0)
+		else:
+			_bolt_light.light_energy = (2.4 if _flash_t > 0.09 else 1.0) * fk
 	else:
 		_bolt_light.light_energy = 0.0
+	_update_surfaces(delta, in_dim)
 	# wet status
 	if is_raining():
 		_wet_t -= delta
@@ -225,6 +233,20 @@ func _process(delta: float) -> void:
 	_ambient("rain_loop", is_raining() and not _indoor)
 	_ambient("wind_loop", current in ["wind", "storm", "snow"])
 	_ambient("night_loop", Game.is_night() and current in ["clear", "cloudy", "fog"])
+
+## Surface state for the terrain/road shaders (global shader parameters):
+## wetness rises in rain within ~20 s and dries over ~70 s; snow cover
+## builds up over ~45 s of snowfall and melts slowly afterwards.
+var wetness := 0.0
+var snow_cover := 0.0
+func _update_surfaces(delta: float, in_dim: bool) -> void:
+	var want_wet := 1.0 if (is_raining() and not in_dim) else 0.0
+	wetness = move_toward(wetness, want_wet, delta / (20.0 if want_wet > wetness else 70.0))
+	var want_snow := 1.0 if (current == "snow" and not in_dim) else 0.0
+	snow_cover = move_toward(snow_cover, want_snow, delta / (45.0 if want_snow > snow_cover else 120.0))
+	if Engine.get_process_frames() % 6 == 0:
+		RenderingServer.global_shader_parameter_set("weather_wet", wetness)
+		RenderingServer.global_shader_parameter_set("weather_snow", snow_cover)
 
 func _ambient(nm: String, on: bool) -> void:
 	if _amb.get(nm, false) == on:

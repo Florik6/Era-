@@ -107,6 +107,29 @@ Biographies are built only from Chronicle events that reference the record id, s
 - **Settlements**: `world.activity_points(sid)` (streamer layout points or fallback) → villager `job` meta → BotBrain
   `work` goal; `factions.change_settlement_owner` recolours banners.
 
+## 0.11.0 additions (Visual Ascension)
+
+- `Resonance` (`scripts/combat/resonance.gd`, optional subsystem "resonance"): imprint list fed by
+  `Spells._effect`, `Projectile._end`, `Zone.create` and mid-air projectile meetings
+  (`Projectile._check_meet`, swept segments); `_add` → threshold/cool-down/limit checks → `_react`
+  (reaction zones steam/node/vortex/instability, `params.no_res` so they never re-feed) →
+  `_check_catastrophe` → `WorldDirector.resonance_catastrophe` (event "resonance": anomaly zone,
+  `BotBrain.flee_from` / `BotBrain.investigate`, chronicle `resonance_catastrophe`, temporary rift POI).
+- `WorldDirector.start_black_storm(center, opts)` / `_tick_black_storm`: event "black_storm", covens
+  spawned through `Spawner.spawn_bot` and registered in `WorldSim.active`.
+- `Clash` (`scripts/combat/clash.gd`): called from `Actor._on_impact` (melee) and `Skills._act`
+  (heavy skills); `Clash.boss_perfect_parry` from `Actor._parry` when the parried info has `heavy`.
+- `Combat.deal` now sets `info.src`; `vulnerable` status multiplies damage ×1.4.
+- `VFXManager` light pool (`_pool_light`, `pool_active`, `pool_peak`); decals `wet`, `rune`, `electric`.
+- Shader globals `weather_wet`, `weather_snow` (project.godot `[shader_globals]`), driven by
+  `Weather._update_surfaces`; used by the terrain and road shaders.
+- `DayNight.apply_era_grade`, `HistoricalEchoes` (`scripts/world/echoes.gd`, subsystem "echoes"),
+  `GearFX` (`scripts/vfx/gear_fx.gd`, from `HumanoidRig.set_gear`), `ResonanceFX`.
+- `Settings`: `Quality.MAX` (appended after AUTO), `VIS_KEYS` (separate visual settings, section "vis").
+- `SmokeTest` (`scripts/core/smoke_test.gd`): `--smoke-test` command-line self check.
+- iOS: preset 2 in `export_presets.cfg`, `tools/export_ios.sh`, `tools/verify_ipa.sh`,
+  `.github/workflows/ios.yml`.
+
 ## Tests
 `tools/check.sh` (compile all), `tests/logic_test.tscn` (67 checks), `tests/world_logic_test.tscn` (122 checks),
 `tests/game_smoke.tscn`, `tests/modes_smoke.tscn`, `tests/world_test.tscn`, `tests/ui_test.tscn` (screenshots; run with

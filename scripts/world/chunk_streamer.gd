@@ -24,6 +24,8 @@ render_mode cull_back, diffuse_burley;
 uniform float water_level = -1.2;
 uniform vec3 rock_col : source_color = vec3(0.5, 0.48, 0.45);
 uniform vec3 mud_col : source_color = vec3(0.35, 0.3, 0.22);
+global uniform float weather_wet;
+global uniform float weather_snow;
 varying vec3 wpos;
 varying vec3 wnrm;
 float hash2(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
@@ -57,9 +59,17 @@ void fragment() {
 	float wet = 1.0 - smoothstep(water_level + 0.05, water_level + 1.1, wpos.y);
 	col = mix(col, mud_col * (0.8 + 0.3 * fine), wet * 0.7);
 	col *= 1.0 - wet * 0.25;
+	// weather: rain darkens and glosses the ground, puddles gather on flat hollows
+	float flatg = clamp(wnrm.y, 0.0, 1.0);
+	float pud = smoothstep(0.6, 0.74, vnoise(p * 0.16) * 0.75 + fine * 0.25) * smoothstep(0.93, 0.99, flatg) * weather_wet * (1.0 - rk);
+	col *= 1.0 - weather_wet * 0.26;
+	col = mix(col, col * 0.35 + vec3(0.03, 0.035, 0.045), pud);
+	// snow settles on faces that look up
+	float snw = weather_snow * smoothstep(0.55, 0.85, flatg + (fine - 0.5) * 0.35 + (macro - 0.5) * 0.2);
+	col = mix(col, vec3(0.64, 0.67, 0.72) * (0.9 + 0.1 * fine), snw * 0.9);
 	ALBEDO = col;
-	ROUGHNESS = mix(0.95, 0.4, wet);
-	SPECULAR = 0.2 + wet * 0.3;
+	ROUGHNESS = mix(mix(mix(0.95, 0.4, wet), 0.5, weather_wet * 0.6), 0.05, pud) * (1.0 - snw * 0.25) + snw * 0.2;
+	SPECULAR = 0.2 + wet * 0.3 + weather_wet * 0.2 + pud * 0.45;
 }
 """
 

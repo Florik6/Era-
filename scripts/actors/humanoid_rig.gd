@@ -70,6 +70,13 @@ var _hit_local := Vector3(0, 0, 1)
 var _hit_heavy := false
 var _death_kind := -1
 var _phase := 0.0
+# secondary motion (cape / hair inertia)
+var _last_yaw := 0.0
+var _yaw_rate := 0.0
+var _last_sp := 0.0
+var _sp_accel := 0.0
+var _cape_z := 0.0
+var _cape_kick := 0.0
 var _dead_t := 0.0
 var _lod_acc := 0.0
 var _breath := 0.0
@@ -403,6 +410,7 @@ func set_gear(equip: Dictionary, faction_color: Color = Color(0, 0, 0, 0), cape:
 		else:
 			j.hand_r.add_child(weapon_node)
 		weapon_node.position = Vector3(0, -0.05, 0)
+		GearFX.attach(weapon_node, main_it)
 	if off_model != "":
 		var fc: Color = faction_color if faction_color.a > 0.5 else Color(0, 0, 0, 0)
 		offhand_node = WeaponModels.build(off_model, off_it, fc)
@@ -885,7 +893,9 @@ func animate(delta: float) -> void:
 			g_arm = 0.55
 			g_bounce = 0.6
 	if sp > 0.04:
-		_phase += delta * (4.4 + 4.6 * sp) * gait_k
+		# below a slow walk the cadence drops too, so feet don't shuffle in place
+		var cadence := clampf(sp / 0.28, 0.4, 1.0)
+		_phase += delta * (4.4 + 4.6 * sp) * gait_k * cadence
 	_breath += delta * (1.9 if build_type != "robot" else 0.0)
 	var s := sin(_phase)
 	var c := cos(_phase)
@@ -1479,12 +1489,27 @@ func _update_gear(delta: float, sp: float) -> void:
 		if _bow_arrow != null:
 			_bow_arrow.visible = drawing and _draw > 0.08
 			_bow_arrow.position.z = -0.02 + _draw
+	# secondary motion: turning swings cape and hair sideways, a sudden stop
+	# throws the cape forward, a sudden start pulls it back
+	if delta > 0.0001 and is_inside_tree():
+		var yaw := global_rotation.y
+		_yaw_rate = lerpf(_yaw_rate, wrapf(yaw - _last_yaw, -PI, PI) / delta, minf(1.0, delta * 10.0))
+		_last_yaw = yaw
+		_sp_accel = lerpf(_sp_accel, (sp - _last_sp) / delta, minf(1.0, delta * 8.0))
+		_last_sp = sp
+	_cape_z = lerpf(_cape_z, clampf(-_yaw_rate * 0.07, -0.4, 0.4), minf(1.0, delta * 5.0))
+	_cape_kick = lerpf(_cape_kick, clampf(-_sp_accel * 0.12, -0.35, 0.45), minf(1.0, delta * 4.0))
+	if parts.has("hair") and parts.hair is Node3D and (parts.hair as Node3D).visible:
+		var hn: Node3D = parts.hair
+		hn.rotation.z = lerpf(hn.rotation.z, clampf(-_yaw_rate * 0.015, -0.06, 0.06), minf(1.0, delta * 7.0))
+		hn.rotation.x = lerpf(hn.rotation.x, sin(_phase * 2.0) * 0.01 * minf(sp, 1.2) + _cape_kick * 0.04, minf(1.0, delta * 9.0))
 	# cape: hangs from the shoulders, lifts when running, flutters
 	if j.has("cape"):
 		var cp: Node3D = j.cape
-		var lift := 0.08 + sp * 0.42 + sin(_breath * 1.7) * 0.03
+		var lift := 0.08 + sp * 0.42 + sin(_breath * 1.7) * 0.03 - _cape_kick
 		var spine_x: float = (j.spine as Node3D).rotation.x + (j.hips as Node3D).rotation.x
 		cp.rotation.x = lerpf(cp.rotation.x, -lift - spine_x, minf(1.0, delta * 8.0))
+		cp.rotation.z = _cape_z
 		if j.has("cape2"):
 			var c2: Node3D = j.cape2
 			c2.rotation.x = lerpf(c2.rotation.x, -sp * 0.35 - absf(sin(_phase)) * 0.12 * sp - sin(_clock * 2.3) * 0.05, minf(1.0, delta * 6.0))

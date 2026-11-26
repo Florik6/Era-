@@ -21,6 +21,14 @@ func _ready() -> void:
 	Settings.cinematics = 0
 	Settings.combat_fx = 2
 	Settings.quality = Settings.Quality.MEDIUM
+	match OS.get_environment("BENCH_Q"):
+		"low":
+			Settings.quality = Settings.Quality.LOW
+		"high":
+			Settings.quality = Settings.Quality.HIGH
+		"max":
+			Settings.quality = Settings.Quality.MAX
+	Settings.effective_quality = Settings.quality
 	if "dynamic_quality" in Settings:
 		Settings.set("dynamic_quality", OS.get_environment("BENCH_DCQ") == "1")
 	var h := Harness.new()
@@ -214,6 +222,41 @@ class Harness:
 				pl.act = {}
 				Spells.cast(pl, ults[ui[0]], Vector3(cos(ui[0] * 1.3), 0, sin(ui[0] * 1.3)))
 				ui[0] += 1)
+		# 7 magical resonance: the storm covens duel on the square while
+		#   reactions chain around it (resonance zones, catastrophe, rift)
+		if OS.get_environment("BENCH_EXTRA") != "0":
+			var res = w.sys("resonance")
+			if res:
+				res.cata_ready_at = 0.0
+			w.director.set_process(true)
+			w.director._t = -100000.0
+			w.director.start_black_storm(c3 + Vector3(0, 0, 10), {"arena": true, "dur": 60.0})
+			var rk := [0]
+			var next_r := [0]
+			var rpairs := [["fire", "ice"], ["dark", "fire"], ["lightning", "space"], ["time", "time"]]
+			await measure("resonance", 10.0, func():
+				if Time.get_ticks_msec() >= next_r[0]:
+					next_r[0] = Time.get_ticks_msec() + 700
+					var pr: Array = rpairs[rk[0] % 4]
+					var pp: Vector3 = c3 + Vector3(randf_range(-14, 14), 0, randf_range(-14, 14))
+					Resonance.imprint(pr[0], pp, 40.0, "empowered", null)
+					Resonance.imprint(pr[1], pp, 40.0, "empowered", null)
+					rk[0] += 1)
+			if res:
+				results["resonance"]["resonance_stats"] = {"reactions": res.stats.reactions, "catastrophes": res.stats.catastrophes, "blocked_limit": res.stats.blocked_limit, "blocked_cd": res.stats.blocked_cd}
+			# 8 a boss fights in the city and goes through its phases
+			var bosses: Array = DBEras.era(0).bosses
+			var boss = w.spawner.spawn_boss(bosses[0], c3 + Vector3(6, 0, 6), 5)
+			if boss:
+				for b3 in bots:
+					if is_instance_valid(b3) and not b3.is_dead:
+						b3.add_aggro(boss, 60.0)
+						boss.add_aggro(b3, 60.0)
+			await measure("boss", 10.0, func():
+				if is_instance_valid(boss) and not boss.is_dead:
+					boss.hp = maxf(boss.max_hp * 0.08, boss.hp - boss.max_hp * 0.004)
+					if boss.get("brain") != null and boss.brain.has_method("_check_phase"):
+						boss.brain._check_phase())
 		var out := OS.get_environment("BENCH_OUT")
 		if out != "":
 			var f := FileAccess.open(out, FileAccess.WRITE)

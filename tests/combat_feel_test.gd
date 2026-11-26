@@ -289,6 +289,7 @@ class Harness:
 		ck("boss phase change triggers an event (phase advanced)", b.phase >= 1, "phase %d" % b.phase)
 		ck("boss phase pushes the hero back", pl.knockback.length() > 1.0 or pl.global_position.distance_to(b.global_position) > 6.0)
 		ck("arena changes with the phase (hazards / cracks spawned)", w.fx_root.get_child_count() > hz_before)
+		b.apply_status("invuln", 30.0)    # a stray hit must not kill it at 5 % before the check
 		b.hp = b.max_hp * 0.05
 		b.brain._check_phase()
 		await wait(0.3)

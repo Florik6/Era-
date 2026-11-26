@@ -596,7 +596,7 @@ static func _img(kind: String) -> Image:
 					var ticks := (1.0 - smoothstep(0.0, 0.05, absf(fposmod(ang * 12.0 / TAU, 1.0) - 0.5) * 0.3)) * smoothstep(0.64, 0.66, d) * (1.0 - smoothstep(0.86, 0.88, d))
 					var star := (1.0 - smoothstep(0.0, 0.03, absf(sin(ang * 2.5) * d - 0.0) * 0.4)) * (1.0 - smoothstep(0.55, 0.6, d))
 					var a := clampf(ring1 + ring2 * 0.8 + ticks * 0.7 + star * 0.5, 0.0, 1.0) * 0.9
-					img.set_pixel(x, y, Color(0.85, 0.6, 1.0, a))
+					img.set_pixel(x, y, Color(0.55, 0.35, 0.8, a * 0.7))
 		_:
 			for y in sz:
 				for x in sz:

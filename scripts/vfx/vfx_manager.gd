@@ -72,6 +72,9 @@ func _prewarm() -> void:
 func _refresh_quality() -> void:
 	fx = int(Settings.vq("fx", 1))
 	light_cap = int(Settings.vq("lights", 8))
+	while _pool.size() > light_cap:
+		var l: OmniLight3D = _pool.pop_back()
+		l.queue_free()
 	decals_on = bool(Settings.vq("decals", true))
 	_particle_budget = float(Settings.vq("particles", 0.7))
 	if fx <= 0:
@@ -266,28 +269,68 @@ func ring(pos: Vector3, r: float, c: Color, dur: float) -> void:
 		shock(pos, r * 0.7, Color(c.r, c.g, c.b, 0.6), dur)
 
 # ================================================================ lights
-## Short flash light within the live-light budget (never shadowed).
-func light(pos: Vector3, c: Color, energy: float, rng: float, dur: float) -> void:
+## Pool of short-lived magic lights: created once, reused, never shadowed.
+## The pool size is the "lighting" budget (Settings: lights per profile /
+## the separate lighting quality); when every light is busy the dimmest
+## active one is taken over, so a big burst never adds lights beyond it.
+var _pool: Array = []
+var pool_peak := 0
+var pool_reused := 0
+
+func _pool_light() -> OmniLight3D:
 	var cap := light_cap if fx > 0 else mini(light_cap, 2)
-	if _lights_live >= cap:
+	for l in _pool:
+		if not l.visible:
+			return l
+	if _pool.size() < cap:
+		var nl := OmniLight3D.new()
+		nl.shadow_enabled = false
+		nl.visible = false
+		nl.light_specular = 0.6
+		add_child(nl)
+		_pool.append(nl)
+		return nl
+	# all busy: steal the dimmest
+	var best: OmniLight3D = null
+	for l in _pool:
+		if best == null or l.light_energy < best.light_energy:
+			best = l
+	if best != null:
+		pool_reused += 1
+		var tw0: Tween = best.get_meta("tw") if best.has_meta("tw") else null
+		if tw0 and tw0.is_valid():
+			tw0.kill()
+	return best
+
+func pool_active() -> int:
+	var n := 0
+	for l in _pool:
+		if l.visible:
+			n += 1
+	return n
+
+## Short flash light from the pool (never shadowed).
+func light(pos: Vector3, c: Color, energy: float, rng: float, dur: float) -> void:
+	if energy <= 0.0:
 		return
-	var l := OmniLight3D.new()
+	var l := _pool_light()
+	if l == null:
+		return
 	l.light_color = c
 	l.light_energy = energy
 	l.omni_range = rng
-	l.shadow_enabled = false
-	add_child(l)
 	l.global_position = pos
-	_lights_live += 1
-	l.tree_exiting.connect(func(): _lights_live -= 1)
+	l.visible = true
 	var tw := l.create_tween()
 	tw.tween_property(l, "light_energy", 0.0, maxf(0.03, dur)).set_ease(Tween.EASE_IN)
-	tw.tween_callback(l.queue_free)
+	tw.tween_callback(func(): l.visible = false)
+	l.set_meta("tw", tw)
+	pool_peak = maxi(pool_peak, pool_active())
 
 ## Persistent light parented to an effect; counted against the budget until freed.
 func attach_light(parent: Node3D, c: Color, energy: float, rng: float, offset: Vector3) -> OmniLight3D:
 	var cap := light_cap if fx > 0 else mini(light_cap, 2)
-	if _lights_live >= cap or parent == null:
+	if _lights_live + pool_active() >= cap or parent == null:
 		return null
 	var l := OmniLight3D.new()
 	l.light_color = c
@@ -697,8 +740,8 @@ func decal(pos: Vector3, kind: String, size: float, life: float, rot: float) -> 
 			mat.emission = Color(0.3, 0.5, 0.7)
 			mat.emission_energy_multiplier = 0.5
 		"rune":
-			mat.emission = Color(0.7, 0.4, 1.0)
-			mat.emission_energy_multiplier = 1.4
+			mat.emission = Color(0.45, 0.25, 0.7)
+			mat.emission_energy_multiplier = 0.45
 		"electric":
 			mat.emission = Color(0.4, 0.6, 1.0)
 			mat.emission_energy_multiplier = 1.0

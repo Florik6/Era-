@@ -102,8 +102,8 @@ static func build_zone(z) -> bool:
 			tw.tween_property(dome, "scale", Vector3(r * 0.94, r * 0.75, r * 0.94), 0.31)
 			ems.append({"n": int(r * 6.0), "life": 1.8, "mat": "star", "col": c, "size": 0.2, "shape": "sphere", "rad": r * 0.8, "v0": 0.05, "v1": 0.3, "grav": Vector3.ZERO, "ramp": "pop", "pos": Vector3(0, 1.2, 0)})
 		"anomaly":
-			MagicFX.ground_rune(Vector3(0, 0.08, 0), "rift", c, r, 0.0, 0.5, 0.9, vis)
-			MagicFX.ground_rune(Vector3(0, 0.1, 0), "clock", Color(0.5, 1.0, 0.9), r * 0.6, 0.0, -0.8, 0.7, vis)
+			MagicFX.ground_rune(Vector3(0, 0.08, 0), "rift", c, r, 0.0, 0.5, 0.45, vis)
+			MagicFX.ground_rune(Vector3(0, 0.1, 0), "clock", Color(0.5, 1.0, 0.9), r * 0.6, 0.0, -0.8, 0.35, vis)
 			ems.append({"n": int(r * 4.0), "life": 2.6, "mat": "add", "col": c, "size": 0.18, "shape": "sphere", "rad": r * 0.8, "v0": 0.1, "v1": 0.5, "dir": Vector3.UP, "spread": 60.0, "grav": Vector3(0, 0.6, 0), "ramp": "pop", "pos": Vector3(0, 0.8, 0)})
 			mg.attach_light(vis, c, 1.2, r + 2.0, Vector3(0, 1.5, 0))
 			mg.distort(z.global_position + Vector3(0, 1.5, 0), r * 1.2, z.life, Color(0.6, 0.3, 1.0, 0.12), true)
@@ -128,11 +128,11 @@ static func catastrophe(pos: Vector3, r: float, kind: String) -> void:
 		return
 	var gp := MagicFX.ground_point(pos)
 	var c := color(kind)
-	MagicFX.ground_rune(gp + Vector3(0, 0.07, 0), "rift", c, r * 1.1, 4.0, 1.8, 1.4)
-	MagicFX.ground_rune(gp + Vector3(0, 0.09, 0), "clock", Color(0.7, 1.0, 0.95), r * 0.7, 4.0, -2.4, 1.2)
+	MagicFX.ground_rune(gp + Vector3(0, 0.07, 0), "rift", c, r * 1.1, 4.0, 1.8, 0.9)
+	MagicFX.ground_rune(gp + Vector3(0, 0.09, 0), "clock", Color(0.7, 1.0, 0.95), r * 0.7, 4.0, -2.4, 0.8)
 	var sph := MeshInstance3D.new()
 	sph.mesh = MeshLib.sphere(1.0, 24, 16)
-	sph.material_override = MagicFX.smat("fresnel", {"col": Color(c.r, c.g, c.b, 0.35), "power": 1.6, "bands": 4.0})
+	sph.material_override = MagicFX.smat("fresnel", {"col": Color(c.r, c.g, c.b, 0.2), "power": 2.2, "bands": 4.0})
 	sph.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	mg.add_child(sph)
 	sph.global_position = gp + Vector3(0, 0.5, 0)
@@ -147,7 +147,7 @@ static func catastrophe(pos: Vector3, r: float, kind: String) -> void:
 	mg.glow(gp + Vector3(0, 2.0, 0), c, r * 1.5, 0.6 * Settings.flash_k())
 	mg.light(gp + Vector3(0, 3.0, 0), c, 6.0 * Settings.flash_k(), r * 3.0, 1.8)
 	mg.emit(gp + Vector3(0, 1.0, 0), {"n": 40, "life": 2.2, "mat": "star", "col": c, "size": 0.35, "shape": "sphere", "rad": r * 0.6, "v0": 2.0, "v1": 6.0, "grav": Vector3(0, 0.5, 0), "damp": 1.0, "ramp": "pop", "critical": true})
-	mg.decal(gp, "rune", r * 1.8, 60.0, randf() * TAU)
+	mg.decal(gp, "rune", r * 1.1, 40.0, randf() * TAU)
 	VFX.shake(0.7)
 
 ## Two opposed projectiles collided in the air.

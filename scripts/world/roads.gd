@@ -1051,6 +1051,8 @@ uniform vec3 c_edge : source_color = vec3(0.7, 0.7, 0.7);
 uniform vec3 c_grass : source_color = vec3(0.3, 0.45, 0.2);
 uniform vec3 c_glow : source_color = vec3(0.2, 0.9, 1.0);
 uniform float margin = 0.9;
+global uniform float weather_wet;
+global uniform float weather_snow;
 varying vec3 wpos;
 float hash2(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 float vnoise(vec2 p) {
@@ -1196,13 +1198,22 @@ void fragment() {
 	if (sharp > 0.5) { a = edge * 4.0 - 0.4; }
 	ALPHA = clamp(a, 0.0, 1.0);
 	ALPHA_SCISSOR_THRESHOLD = 0.5;
+	// weather: wet roads darken and shine, puddles collect in ruts and
+	// between stones; snow covers the road but keeps the wheel ruts
+	float pud = smoothstep(0.64, 0.78, vnoise(wp * 0.35) * 0.7 + n2 * 0.3) * weather_wet * (is_trail ? 1.0 : 0.8);
+	col *= 1.0 - weather_wet * 0.3;
+	col = mix(col, col * 0.3 + vec3(0.03, 0.035, 0.045), pud);
+	rough = mix(mix(rough, 0.35, weather_wet * 0.7), 0.04, pud);
+	float rut = 1.0 - smoothstep(0.08, 0.16, abs(abs(lat - 0.5) - 0.22));
+	float snw = weather_snow * (0.85 - rut * 0.55) * (0.8 + 0.2 * n1);
+	col = mix(col, vec3(0.65, 0.68, 0.73), clamp(snw, 0.0, 0.85));
 #if CURRENT_RENDERER == RENDERER_COMPATIBILITY
 	ALBEDO = col * 0.8;
 #else
 	ALBEDO = col;
 #endif
 	ROUGHNESS = rough;
-	SPECULAR = 0.3;
+	SPECULAR = 0.3 + weather_wet * 0.25 + pud * 0.4;
 	EMISSION = emit;
 }
 """

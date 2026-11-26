@@ -1,6 +1,10 @@
-# TEST REPORT — ERA: Восхождение 0.10.2
+# TEST REPORT — ERA: Восхождение 0.11.0
 
 Дата: 2026-11-26. Движок: Godot 4.7.1 stable. Среда: Linux-контейнер.
+
+## 0.11.0 — Visual Ascension
+
+Полный отчёт — в `reports/CROSS_PLATFORM_TEST_REPORT.md`. Кратко: resonance 33/33, black storm 24/24 (арена LOW + столица HIGH с 36 горожанами, катастрофа возникла сама), clash 16/16, echoes 12/12, logic 68/68, combat_feel 29/29, interaction 73/73, controls 28/28, exploration 30/30, encounters 25/25, lod 12/12, dcq 9/9, world_logic 0 ошибок; компиляция 115 скриптов без ошибок; 18 скриншотов `docs/screenshots/va_*.jpg`; замер 8 фаз на LOW и HIGH — `docs/perf/city_bench_0110.md`; самопроверка `--smoke-test`: ok. На телефонах (Android, iPhone) и в iOS Simulator игра **не запускалась**.
 
 ## 0.10.2 — производительность городских сражений
 

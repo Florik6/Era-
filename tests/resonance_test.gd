@@ -228,6 +228,11 @@ class H:
 		await wait(8.6)
 		ck("the anomaly tears into a real rift", rev != null and rev.data.get("portal") != null and is_instance_valid(rev.data.portal))
 		if rev != null and rev.data.get("portal") != null and is_instance_valid(rev.data.portal):
+			# wandering enemies near the hero legitimately block rift entry: clear them first
+			for a in Game.actors_near(pl.global_position, 14.0):
+				if a != pl and Game.is_enemy(pl, a):
+					a.queue_free()
+			await frames(3)
 			var portal = rev.data.portal
 			ck("the rift is temporary and enterable", portal.data.data.get("temporary", false) and portal.rift_block_reason() == "", portal.rift_block_reason())
 		# --- global catastrophe cool-down

@@ -32,13 +32,34 @@ func setup(world_env: WorldEnvironment, sun_light: DirectionalLight3D, era_i: in
 	e.tonemap_mode = Environment.TONE_MAPPER_FILMIC
 	e.tonemap_exposure = 1.05
 	e.adjustment_enabled = true
-	e.adjustment_saturation = 1.18
-	e.adjustment_contrast = 1.06
+	apply_era_grade(e, era)
 	if not Events.settings_changed.is_connected(_apply_settings):
 		Events.settings_changed.connect(_apply_settings)
 	_apply_settings()
 	_first = true
 	_update(1.0)
+
+## Per-era colour grading (visual identity): saturation, contrast,
+## exposure and glow strength (sh/mid/hi document the intended toning). Mild on purpose: enemies, telegraphs and items
+## must keep their readable colours.
+const ERA_GRADE := [
+	{"sat": 1.14, "con": 1.06, "exp": 1.05, "sh": Color(0.13, 0.11, 0.15), "mid": Color(0.52, 0.5, 0.47), "hi": Color(1.0, 0.96, 0.88), "glow": 0.6},
+	{"sat": 1.16, "con": 1.07, "exp": 1.06, "sh": Color(0.09, 0.12, 0.14), "mid": Color(0.53, 0.5, 0.45), "hi": Color(1.0, 0.94, 0.82), "glow": 0.65},
+	{"sat": 0.94, "con": 1.1, "exp": 1.02, "sh": Color(0.11, 0.1, 0.09), "mid": Color(0.52, 0.49, 0.45), "hi": Color(1.0, 0.93, 0.82), "glow": 0.55},
+	{"sat": 1.05, "con": 1.08, "exp": 1.04, "sh": Color(0.07, 0.09, 0.12), "mid": Color(0.49, 0.5, 0.52), "hi": Color(0.98, 0.99, 1.0), "glow": 0.6},
+	{"sat": 1.2, "con": 1.12, "exp": 1.05, "sh": Color(0.07, 0.04, 0.13), "mid": Color(0.47, 0.5, 0.56), "hi": Color(0.92, 1.0, 1.04), "glow": 0.85},
+]
+
+static func apply_era_grade(e: Environment, era_i: int) -> void:
+	var g: Dictionary = ERA_GRADE[clampi(era_i, 0, ERA_GRADE.size() - 1)]
+	e.adjustment_saturation = g.sat
+	e.adjustment_contrast = g.con
+	e.tonemap_exposure = g.exp
+	# No colour-correction LUT: in the GL compatibility renderer it brightened
+	# the whole frame (measured on screenshots); the era tint lives in the
+	# sky/sun/ambient colours of each era instead.
+	e.adjustment_color_correction = null
+	e.set_meta("era_glow", g.glow)
 
 func _apply_settings() -> void:
 	if sun == null:
@@ -50,7 +71,7 @@ func _apply_settings() -> void:
 	sun.shadow_bias = 0.05
 	if env and env.environment:
 		env.environment.glow_enabled = p.get("glow", false)
-		env.environment.glow_intensity = 0.6
+		env.environment.glow_intensity = float(env.environment.get_meta("era_glow", 0.6))
 		env.environment.glow_bloom = 0.05
 
 func set_override(nm: String, on: bool) -> void:

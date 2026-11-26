@@ -12,14 +12,37 @@ func build() -> void:
 	vb.add_child(_header("Графика"))
 	var qrow := HBoxContainer.new()
 	vb.add_child(qrow)
-	var qnames := ["Низкое", "Среднее", "Высокое", "Авто"]
-	for i in 4:
-		var b := UITheme.button(qnames[i], func():
-			Settings.set_quality(i)
+	for i in Q_NAMES.size():
+		var qv: int = Q_VALUES[i]
+		var b := UITheme.button(Q_NAMES[i], func():
+			Settings.set_quality(qv)
 			_update_q(), 56, 150)
 		_qbtns.append(b)
 		qrow.add_child(b)
 	_update_q()
+	vb.add_child(UITheme.wrap_label("Отдельные параметры ниже переопределяют профиль; «как в профиле» — следовать выбранному уровню. Настройки хранятся на этом устройстве.", 15))
+	var follow := "Как в профиле"
+	vb.add_child(_choice("Качество магии", [follow, "Низкое", "Среднее", "Высокое", "Максимум"], Settings.magic_quality + 1, func(i):
+		Settings.magic_quality = i - 1
+		Settings.apply()))
+	vb.add_child(_choice("Частицы", [follow, "Мало", "Средне", "Много", "Максимум"], Settings.particles_q + 1, func(i):
+		Settings.particles_q = i - 1
+		Settings.apply()))
+	vb.add_child(_choice("Тени", [follow, "Выкл", "Низкие", "Высокие"], Settings.shadows_q + 1, func(i):
+		Settings.shadows_q = i - 1
+		Settings.apply()))
+	vb.add_child(_choice("Динамический свет (магия, вспышки)", [follow, "Минимум", "Средне", "Много", "Максимум"], Settings.lighting_q + 1, func(i):
+		Settings.lighting_q = i - 1
+		Settings.apply()))
+	vb.add_child(_slider("Плотность погоды (дождь, снег)", 0.1, 1.0, 0.05, Settings.weather_density, func(v):
+		Settings.weather_density = v
+		Settings.apply(), true))
+	vb.add_child(_header("Камера и вспышки"))
+	vb.add_child(_choice("Режим камеры", ["Минимальный", "Стандартный", "Кинематографичный"], Settings.camera_mode, func(i): Settings.camera_mode = i))
+	vb.add_child(_check("Тряска камеры", Settings.camera_shake, func(v): Settings.camera_shake = v))
+	vb.add_child(_slider("Сила вспышек", 0.0, 1.0, 0.05, Settings.flash_strength, func(v): Settings.flash_strength = v, true))
+	vb.add_child(_check("Без мерцания (мягкие одиночные вспышки вместо стробоскопа)", Settings.no_flicker, func(v): Settings.no_flicker = v))
+	vb.add_child(_check("Исторические эхо (призраки событий из хроники)", Settings.echoes, func(v): Settings.echoes = v))
 	vb.add_child(_slider("Масштаб рендера", 0.5, 1.0, 0.05, Settings.render_scale, func(v):
 		Settings.render_scale = v
 		Settings.apply(), true))
@@ -76,11 +99,14 @@ func close() -> void:
 	Events.settings_changed.emit()
 	super.close()
 
+const Q_NAMES := ["Низкое", "Среднее", "Высокое", "Максимум", "Авто"]
+const Q_VALUES := [Settings.Quality.LOW, Settings.Quality.MEDIUM, Settings.Quality.HIGH, Settings.Quality.MAX, Settings.Quality.AUTO]
+
 func _update_q() -> void:
 	for i in _qbtns.size():
-		var on := Settings.quality == i
+		var on: bool = Settings.quality == Q_VALUES[i]
 		_qbtns[i].modulate = Color(1, 1, 1) if on else Color(0.6, 0.6, 0.6)
-		_qbtns[i].text = ["Низкое", "Среднее", "Высокое", "Авто"][i] + (" ✔" if on else "")
+		_qbtns[i].text = Q_NAMES[i] + (" ✔" if on else "")
 
 func _header(t: String) -> Control:
 	var l := UITheme.label(t, 24, UITheme.GOLD, "title")

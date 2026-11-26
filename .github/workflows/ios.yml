@@ -96,7 +96,9 @@ jobs:
   # 2) IPA, verification and simulator smoke test (macOS runner).
   ios:
     needs: xcode-project
-    runs-on: macos-15
+    # macOS runner label; set the repository variable IOS_RUNNER to use
+    # another one (e.g. a self-hosted Mac: "self-hosted").
+    runs-on: ${{ vars.IOS_RUNNER || 'macos-latest' }}
     timeout-minutes: 90
     env:
       BUNDLE_ID: ${{ secrets.IOS_BUNDLE_ID || 'com.eraascension.game' }}

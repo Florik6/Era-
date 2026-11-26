@@ -4,38 +4,43 @@
 Пять исторических эпох, живой мир с автономными NPC, живые легенды, группировки, задания, боссы, разломы и
 историческое наследие. Игра полностью офлайн: интернет и внешние нейросети не нужны.
 
-> Версия 0.10.0: исправлены вход в разломы, древний алтарь и очищение проклятий, джойстик с неподвижным основанием и редактор интерфейса, новый загрузчик с экраном загрузки и безопасным режимом, совместимая OpenGL-сборка, дорожные приключения, следопытство, места с историями, кинематограф и динамическая музыка. Что сделано и что осталось, см. в [PROGRESS.md](PROGRESS.md) и [NEXT_STEPS.md](NEXT_STEPS.md).
+> Версия 0.11.0 «Visual Ascension»: магический резонанс и катастрофы, «Буря над Чёрным городом», Combat Clash, мокрые дороги, лужи и снег, цвет эпох, исторические эхо, живое оружие, режимы камеры, профиль «Максимум» и отдельные настройки графики, а также сборка под iOS из того же проекта (Xcode-проект готов, IPA пока не собран — см. ниже). Что сделано и что осталось — в [PROGRESS.md](PROGRESS.md) и [NEXT_STEPS.md](NEXT_STEPS.md).
 
 ## Скачать (прямые ссылки)
 
-Репозиторий публичный, ссылки открываются в браузере телефона без входа в GitHub:
+Репозиторий публичный, ссылки открываются в браузере телефона без входа в GitHub.
 
-- **Основная версия (Vulkan):** https://github.com/Florik6/Era-/raw/claude/era-ascension-android-rpg-kf1ila/dist/ERA_Ascension.apk
-- **Совместимая версия (OpenGL ES 3)** — если основная не запускается или закрывается сразу после заставки: https://github.com/Florik6/Era-/raw/claude/era-ascension-android-rpg-kf1ila/dist/ERA_Ascension_GL.apk
-- Папка со всеми файлами: https://github.com/Florik6/Era-/tree/claude/era-ascension-android-rpg-kf1ila/dist
+**Android:**
+- **Основная версия (Vulkan):** https://github.com/Florik6/Era-/raw/claude/era-ascension-android-rpg-kf1ila/builds/android/ERA_Ascension_Android.apk
+- **Совместимая версия (OpenGL ES 3)** — если основная не запускается или закрывается сразу после заставки: https://github.com/Florik6/Era-/raw/claude/era-ascension-android-rpg-kf1ila/builds/android/ERA_Ascension_Android_GL.apk
+- Старые ссылки на `dist/ERA_Ascension.apk` и `dist/ERA_Ascension_GL.apk` тоже работают (там те же файлы).
 
-Обе версии подписаны одним ключом и имеют одно имя пакета: совместимую можно поставить поверх основной (и наоборот), сохранения не пропадут.
+Обе версии подписаны тем же ключом, что и 0.9.2–0.10.x, и имеют одно имя пакета: ставятся поверх прежней версии, сохранения не пропадают.
+
+**iOS:** готового `ERA_Ascension_iOS.ipa` **пока нет**. Собрать IPA можно только на macOS. Облачный конвейер GitHub Actions написан: Xcode-проект он экспортирует, но macOS-машину этому аккаунту GitHub не выдаёт. Для подписанной сборки нужны данные Apple Developer, и добавлять их следует в секреты GitHub, а не в чат. Подробности и варианты — в [reports/IOS_BUILD_REPORT.md](reports/IOS_BUILD_REPORT.md).
 
 ## Готовые файлы
 
 | Файл | Что это |
 |---|---|
-| `dist/ERA_Ascension.apk` | **Основной установочный файл**: release-сборка для всех ARM-телефонов (arm64-v8a + armeabi-v7a), рендер Vulkan (Mobile) |
-| `dist/ERA_Ascension_GL.apk` | Совместимая сборка: то же самое, но рендер OpenGL ES 3 (Compatibility). Для телефонов, где Vulkan работает со сбоями |
-| `dist/ERA_Ascension_Source.zip` | Полный исходный проект Godot (тот же, что в репозитории) |
-| [TEST_REPORT.md](TEST_REPORT.md) | Автотесты и проверки, скриншоты |
-| [BUILD_REPORT.md](BUILD_REPORT.md) | Как собраны APK, проверка подписи и манифеста |
+| `builds/android/ERA_Ascension_Android.apk` | **Основной установочный файл Android**: release-сборка для ARM-телефонов (arm64-v8a + armeabi-v7a), рендер Vulkan (Mobile) |
+| `builds/android/ERA_Ascension_Android_GL.apk` | Совместимая сборка: рендер OpenGL ES 3 (Compatibility) для телефонов, где Vulkan сбоит |
+| `builds/ios/` | Здесь появится `ERA_Ascension_iOS.ipa`, когда его соберёт macOS-конвейер (сейчас его нет) |
+| `exports/ios_xcode/` | Xcode-проект iOS (официальный экспорт Godot 4.7.1) |
+| `dist/ERA_Ascension_Source.zip` | Полный исходный проект Godot |
+| [reports/](reports/) | `ANDROID_BUILD_REPORT.md`, `IOS_BUILD_REPORT.md`, `CROSS_PLATFORM_TEST_REPORT.md` |
+| [TEST_REPORT.md](TEST_REPORT.md), [BUILD_REPORT.md](BUILD_REPORT.md) | История проверок и сборок |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Архитектура подсистем |
 
 ## Установка на телефон
 
-1. Скачайте `ERA_Ascension.apk` по ссылке выше прямо на телефон (или скопируйте файл) — Android 7.0 / API 24 и новее, любой ARM-процессор, 32 или 64 бит.
+1. Скачайте `ERA_Ascension_Android.apk` по ссылке выше прямо на телефон (или скопируйте файл) — Android 7.0 / API 24 и новее, любой ARM-процессор, 32 или 64 бит.
 2. Разрешите установку из неизвестных источников для браузера или файлового менеджера.
 3. Откройте APK и установите. Если Android пишет «Приложение не установлено», удалите старую версию игры (раньше могла стоять debug-сборка с другой подписью) и повторите. Поверх release-версий 0.9.2+ ставится как обновление.
 4. Запускайте «ERA: Восхождение». Сразу появляется заставка, затем экран загрузки с полосой прогресса. Первый запуск может занять до минуты (устройство готовит графику); дальше быстрее.
-5. Если игра закрылась при запуске, при следующем запуске автоматически включится безопасный режим графики. Если и это не помогло — установите `ERA_Ascension_GL.apk`.
+5. Если игра закрылась при запуске, при следующем запуске автоматически включится безопасный режим графики. Если и это не помогло — установите `ERA_Ascension_Android_GL.apk`.
 
-Через ADB: `adb install -r dist/ERA_Ascension.apk`.
+Через ADB: `adb install -r builds/android/ERA_Ascension_Android.apk`.
 
 ## Управление
 

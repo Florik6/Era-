@@ -49,6 +49,8 @@ static func cast(c: Actor, id: String, aim: Vector3) -> bool:
 	else:
 		c.start_action("spell", 0.45, 0.55, {"anim": "cast", "cb": cb})
 		MagicFX.charge(c, sp.school, 0.45 * 0.55, id in BIG_SPELLS)
+		if info.tier == "empowered":
+			_empowered_layer(c, sp.school)
 	c.data.add_school_xp(sp.school, 4.0)
 	if c.is_player:
 		var n := Profile.add_stat("spells")
@@ -73,7 +75,20 @@ static func cast_free(c: Actor, id: String, aim: Vector3, power: float) -> bool:
 	info.tier = tier_for(c, id, sp.school, false)
 	c.start_action("spell", 0.6, 0.6, {"anim": "cast", "cb": func(): _effect(c, id, sp, aim, info)})
 	MagicFX.charge(c, sp.school, 0.36, id in BIG_SPELLS)
+	if info.tier != "normal":
+		_empowered_layer(c, sp.school)
 	return true
+
+## Extra visual layer of an empowered cast: a school rune under the caster
+## and a light pulse (normal casts don't get it; ultimates have their own).
+static func _empowered_layer(c: Actor, school: String) -> void:
+	if MagicFX.lod_far(c.global_position, c):
+		return
+	var col := Combat.element_color(DBSkills.SCHOOLS[school].dtype)
+	MagicFX.ground_rune(c.global_position + Vector3(0, 0.05, 0), MagicFX.rune_style_for(school), col, 1.9, 0.8, 1.2, 1.0)
+	var mg = VFX.mgr()
+	if mg != null:
+		mg.light(c.chest(), col, 2.4, 5.0, 0.45)
 
 ## Magic tier: "ultimate" for the hero's ultimates and a boss's top spells,
 ## "empowered" for school masters (level 6+), elites, bosses and anyone

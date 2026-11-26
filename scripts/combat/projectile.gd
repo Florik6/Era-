@@ -48,6 +48,9 @@ static func spawn(source, pos: Vector3, velocity: Vector3, inf: Dictionary, k: S
 	Game.world.fx_root.add_child(p)
 	p.global_position = pos
 	p._build()
+	if str(inf.get("tier", "normal")) != "normal" and k in MAGIC_KINDS:
+		p.scale = Vector3.ONE * (1.3 if inf.tier == "empowered" else 1.6)
+		p.radius *= 1.15
 	if k in MAGIC_KINDS:
 		p.element = Resonance.element_for_dtype(str(inf.get("dtype", "")))
 		if p.element != "":

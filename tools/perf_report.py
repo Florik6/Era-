@@ -7,7 +7,8 @@ import json
 import sys
 
 PHASES = {"empty": "Пустой город", "walk": "Прогулка по городу", "npcs": "Появились 24 NPC", "battle": "Массовая битва",
-          "magic": "Обмен магией", "explosion": "Крупные взрывы (ультимейты)"}
+          "magic": "Обмен магией", "explosion": "Крупные взрывы (ультимейты)",
+          "resonance": "Резонансы и буря ковенов", "boss": "Бой с боссом в городе (смена фаз)"}
 
 
 def load(p):
@@ -74,5 +75,48 @@ def main():
     print("\n".join(out))
 
 
+def levels(files, out_path="docs/perf/city_bench_0110.md"):
+    """Same scenario at different quality levels (0.11.0): one table per phase."""
+    runs = [load(p) for p in files]
+    names = [p.split("_")[-1].replace(".json", "").upper() for p in files]
+    rows = [
+        ("Физика: шаг (мс, среднее)", ("physics_ms", "avg")),
+        ("Физика: шаг (мс, p95)", ("physics_ms", "p95")),
+        ("Физика существ за кадр (мс)", ("sub_ms", "actor_phys", "avg")),
+        ("ИИ за кадр (мс)", ("sub_ms", "ai", "avg")),
+        ("Вызовы отрисовки (среднее)", ("draw_calls", "avg")),
+        ("Объектов в кадре (среднее)", ("objects", "avg")),
+        ("Излучателей частиц (пик)", ("peak", "particles")),
+        ("Источников света в кадре (пик, все)", ("peak", "lights")),
+        ("Существ (пик)", ("peak", "actors")),
+    ]
+    out = ["# Замер 0.11.0: город, резонанс, босс — низкие и высокие настройки", "",
+           "Сценарий `tests/city_bench.tscn` (8 фаз, столица, seed 777001), динамическое качество включено.",
+           "Среда: Linux-контейнер, программный рендер (llvmpipe, OpenGL), поэтому FPS и время GPU",
+           "**не показательны**. Сравниваются CPU-время, отрисовки, объекты, частицы и свет. На телефонах замер",
+           "**не проводился**.", ""]
+    for ph, title in PHASES.items():
+        out.append("## " + title)
+        out.append("")
+        out.append("| Показатель | " + " | ".join(names) + " |")
+        out.append("|---|" + "---|" * len(names))
+        for label, path in rows:
+            vals = [g(r.get(ph, {}), path) for r in runs]
+            fmt = ["%.0f" % v if ("пик" in label or not isinstance(v, float) or v >= 100) else "%.2f" % v for v in vals]
+            out.append("| %s | %s |" % (label, " | ".join(fmt)))
+        rs = [r.get(ph, {}).get("resonance_stats") for r in runs]
+        if any(rs):
+            out.append("")
+            out.append("Резонанс за фазу: " + "; ".join("%s — реакций %s, катастроф %s, отсечено лимитом %s, перезарядкой %s" % (
+                n, x.get("reactions"), x.get("catastrophes"), x.get("blocked_limit"), x.get("blocked_cd")) for n, x in zip(names, rs) if x))
+        out.append("")
+    with open(out_path, "w") as f:
+        f.write("\n".join(out) + "\n")
+    print("\n".join(out))
+
+
 if __name__ == "__main__":
-    main()
+    if len(sys.argv) > 1 and sys.argv[1] == "--levels":
+        levels(sys.argv[2:])
+    else:
+        main()
