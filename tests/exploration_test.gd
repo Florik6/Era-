@@ -180,5 +180,15 @@ class Harness:
 		await wait(2.0)
 		ck("boss music", mus.state == "boss", mus.state)
 		b.queue_free()
+		# persistence of the new systems
+		SaveSys.save_game()
+		var ws: Dictionary = SaveSys.load_world_state(0)
+		ck("save keeps discoveries, story places, traces, tracking skill, road state", ws.has("discovered") and ws.has("living_pois") and ws.has("traces") and ws.has("tracking") and ws.has("road"), str(ws.keys().filter(func(k): return k in ["discovered", "living_pois", "traces", "tracking", "road"])))
+		var lps: Dictionary = ws.get("living_pois", {})
+		var resolved := 0
+		for k in lps:
+			if int(lps[k].get("stage", 0)) >= 3:
+				resolved += 1
+		ck("resolved story survives the save", resolved >= 1)
 		print("EXPLORATION_DONE pass=%d fail=%d" % [pass_n, fail_n])
 		get_tree().quit()
