@@ -1,8 +1,10 @@
-[07:06:05] boot start, renderer=gl_compatibility, os=iOS, model=x86_64
-[07:06:05] smoke: boot
-[07:06:11] profile + settings ok
-[07:06:12] menu loaded in 0.4s
-[07:06:13] smoke: menu
-[07:07:44] smoke: world
-[07:13:55] main menu ok, fps=1
-[07:15:35] smoke: combat
+[07:44:18] boot start, renderer=gl_compatibility, os=iOS, model=x86_64
+[07:44:18] smoke: boot
+[07:44:22] profile + settings ok
+[07:44:23] menu loaded in 0.4s
+[07:44:23] smoke: menu
+[07:45:47] smoke: world
+[07:53:03] main menu ok, fps=1
+[07:54:34] smoke: combat
+[07:57:56] smoke: save
+[07:57:56] smoke: done ok=true

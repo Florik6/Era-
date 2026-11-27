@@ -2,13 +2,44 @@
 
 Устройство: iPhone 17 Pro / iOS-26-5
 
-**Результат не получен за 6 минут.**
-```
-==> reports/ios_ci/sim_stdout.log <==
-
-==> reports/ios_ci/sim_stderr.log <==
-2026-11-27 07:05:42.624 ERA_Ascension[13817:43417] Warning: Unable to create restoration in progress marker file
-2026-11-27 07:05:55.887 ERA_Ascension[13817:43417] Setting up an OpenGL ES 3.0 context.
-```
+```json
+{
+  "adapter": "Apple Software Renderer",
+  "driver": "opengl3",
+  "enemy_damaged": true,
+  "fps_combat_avg": 1.0,
+  "fps_world_avg": 1.0,
+  "fps_world_min": 1.0,
+  "last_step": "save",
+  "load_ok": true,
+  "menu_reached": true,
+  "menu_s": 5.3,
+  "model": "x86_64",
+  "nodes": 2310,
+  "ok": true,
+  "platform": "iOS",
+  "renderer": "gl_compatibility",
+  "safe_area": [
+    186,
+    0,
+    2250,
+    1146
+  ],
+  "save_exists": true,
+  "save_ok": true,
+  "screen": [
+    2622,
+    1206
+  ],
+  "static_mem_mb": 0.0,
+  "user_dir": "/Users/runner/Library/Developer/CoreSimulator/Devices/6478AFFB-AE17-412A-A1E5-51BCFFD300B6/data/Containers/Data/Application/3768AF7C-806B-4D84-BB28-F5F8D2031DF2/Documents",
+  "version": "0.12.0",
+  "window": [
+    2622,
+    1206
+  ],
+  "world_load_s": 4.1,
+  "world_loaded": true
+}```
 
 Это проверка в симуляторе, а не установка на физический iPhone.

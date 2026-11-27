@@ -2,8 +2,8 @@
 
 | Проверка | Результат |
 |---|---|
-| Размер | ✅  30M (31899721 байт) |
-| SHA-256 | ✅ `040762c58f029d9fe90ae6495ad46da7a0ae0ad0200eb08dc8a49dc7422493c2` |
+| Размер | ✅  30M (31900625 байт) |
+| SHA-256 | ✅ `0e01ae99cba13b457fe2afcd3ecb4b7a4998524d39792551c619d2977d177aa3` |
 | Структура | ✅ Payload/ERA_Ascension.app |
 | Bundle ID | ✅ com.eraascension.game |
 | Имя | ✅ ERA: Восхождение / ERA_Ascension |
