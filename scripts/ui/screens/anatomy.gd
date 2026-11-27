@@ -135,8 +135,34 @@ func _show_zone() -> void:
 				var inj_id: int = int(inj.id)
 				var bt := UITheme.button("Применить: %s (×%d) → %s" % [ItemDB.base(iid).name, pl.data.inv.count(iid), Hardcore.TYPE_NAMES[inj.type].to_lower()], func(): _apply(iid, inj_id), 48, 0)
 				_treat.add_child(bt)
+	# healing magic on the selected zone's injuries (school «Исцеление»)
+	if pl and pl.data:
+		for inj in l:
+			for e in DBAbilities.school_spells("heal"):
+				if not e.id in pl.data.spells or int(e.tier) >= 6:
+					continue
+				var op := ""
+				for f in e.fx:
+					op = str(f.get("hc", op))
+				if op == "" or op == "soothe":
+					continue
+				var eid: String = e.id
+				var inj_id2: int = int(inj.id)
+				var why := AbilityExec.block_reason(pl, eid)
+				var bt2 := UITheme.button("✚ %s → %s%s" % [e.name, Hardcore.TYPE_NAMES[inj.type].to_lower(), "" if why == "" else " (%s)" % why], func(): _cast(eid, inj_id2), 48, 0)
+				bt2.disabled = why != ""
+				_treat.add_child(bt2)
 	t += "\n[color=#9ab]Целители и врачи в городах, медицинская станция дома и отдых тоже лечат.[/color]"
 	_info.text = t
+
+func _cast(spell_id: String, inj_id: int) -> void:
+	var pl = Game.player
+	if pl == null:
+		return
+	var why := AbilityExec.cast_heal_now(pl, spell_id, inj_id)
+	if why != "":
+		show_toast(why, Color(1.0, 0.7, 0.5))
+	refresh()
 
 func _apply(base: String, inj_id: int) -> void:
 	var pl = Game.player

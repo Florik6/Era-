@@ -13,10 +13,10 @@ extends Control
 ##  - Layout editor mode: drag/resize elements; positions are stored as
 ##    fractions of the safe area in Settings.ui_layout.
 
-const ELEMENTS := ["joystick", "attack", "block", "dodge", "skill1", "skill2", "skill3", "interact", "swap", "potion", "companion"]
+const ELEMENTS := ["joystick", "attack", "block", "dodge", "skill1", "skill2", "skill3", "skill4", "skill_page", "interact", "swap", "potion", "companion"]
 const ELEMENT_NAMES := {"joystick": "Джойстик", "attack": "Атака", "block": "Блок", "dodge": "Рывок", "skill1": "Умение 1", "skill2": "Умение 2",
-	"skill3": "Умение 3", "interact": "Взаимодействие", "swap": "Смена оружия", "potion": "Зелье", "companion": "Спутник"}
-const BASE_R := {"attack": 76.0, "skill1": 44.0, "skill2": 44.0, "skill3": 44.0, "dodge": 46.0, "block": 44.0, "interact": 48.0, "swap": 30.0, "potion": 30.0, "companion": 30.0}
+	"skill3": "Умение 3", "skill4": "Умение 4", "skill_page": "Страница умений", "interact": "Взаимодействие", "swap": "Смена оружия", "potion": "Зелье", "companion": "Спутник"}
+const BASE_R := {"attack": 76.0, "skill1": 44.0, "skill2": 44.0, "skill3": 44.0, "skill4": 40.0, "skill_page": 26.0, "dodge": 46.0, "block": 44.0, "interact": 48.0, "swap": 30.0, "potion": 30.0, "companion": 30.0}
 
 var move_vec := Vector2.ZERO
 var aim_vec := Vector2.ZERO
@@ -68,6 +68,8 @@ func default_layout(sz: Vector2) -> Dictionary:
 	for o in [["skill1", 222.0], ["skill2", 254.0], ["skill3", 286.0]]:
 		var a := deg_to_rad(o[1])
 		out[o[0]] = ac + Vector2(cos(a), sin(a)) * 172.0 * bs
+	out["skill4"] = ac + Vector2(-148.0, -237.0) * bs
+	out["skill_page"] = ac + Vector2(-215.0, -205.0) * bs
 	out["dodge"] = ac + Vector2(-172.0, 38.0) * bs
 	out["block"] = ac + Vector2(-282.0, 44.0) * bs
 	out["interact"] = ac + Vector2(-268.0, -112.0) * bs
@@ -306,10 +308,14 @@ func _process(delta: float) -> void:
 		buttons.interact.visible = pl.interact_target != null and is_instance_valid(pl.interact_target)
 		buttons.companion.visible = pl.companion != null and is_instance_valid(pl.companion) and not pl.companion.is_dead
 		# skill buttons exist only for techniques/spells that are actually available
-		var slots: Array = pl.data.auto_slots(pl.weapon_cat()) if pl.data else []
-		for i in 3:
+		var slots: Array = pl.data.active_slots(pl.mastery_cat()) if pl.data else []
+		var any := false
+		for sid in slots:
+			any = any or String(sid) != ""
+		buttons.skill_page.visible = pl.data != null and (any or pl.data.ab_page == 1)
+		for i in 4:
 			var nm := "skill%d" % (i + 1)
-			var vis: bool = i < slots.size() and String(slots[i]) != ""
+			var vis: bool = i < slots.size() and String(slots[i]) != "" and (i < 3 or pl.data.slot_count() >= 4)
 			if not vis and buttons[nm].held:
 				buttons[nm].held = false
 				buttons[nm].finger = -1
@@ -332,7 +338,7 @@ func _draw() -> void:
 	var kp := _joy_knob if engaged else _joy_base
 	draw_circle(kp, _joy_radius * 0.42, _a(Color(1, 1, 1, 0.55 if engaged else 0.35)))
 	draw_arc(kp, _joy_radius * 0.42, 0, TAU, 32, _a(Color(0, 0, 0, 0.35)), 2.0, true)
-	var slots: Array = pl.data.auto_slots(pl.weapon_cat()) if live and pl.data else ["", "", ""]
+	var slots: Array = pl.data.active_slots(pl.mastery_cat()) if live and pl.data else ["", "", "", ""]
 	for b in buttons:
 		var bt: Dictionary = buttons[b]
 		if not bt.visible:
@@ -371,13 +377,18 @@ func _draw() -> void:
 				if live:
 					badge = "%d" % pl.potion_count()
 					enabled = pl.potion_count() > 0
+			"skill_page":
+				icon = "swap"
+				ring = Color(0.7, 0.8, 1.0, 0.9)
+				if live and pl.data:
+					badge = "%d" % (pl.data.ab_page + 1)
 			"companion":
 				icon = "paw"
 				if live:
 					badge = {"follow": "→", "attack": "!", "hold": "■"}.get(pl.companion_mode, "?")
 			_:
 				if not live:
-					icon = ["fire", "lightning", "whirl"][int(b.substr(5)) - 1]
+					icon = ["fire", "lightning", "whirl", "star"][int(b.substr(5)) - 1]
 				else:
 					var idx := int(b.substr(5)) - 1
 					var id: String = slots[idx] if idx < slots.size() else ""
@@ -388,7 +399,13 @@ func _draw() -> void:
 					icon = Icons.for_skill(id)
 					var total: float = spd.get("cd", sk.get("cd", 1.0))
 					cd_frac = pl.cooldown_of(id) / maxf(0.1, total)
-					if not spd.is_empty():
+					var ae: Dictionary = DBAbilities.get_ab(id)
+					if not ae.is_empty():
+						ring = SpellVFX.col(ae) if ae.kind == "spell" else Color(1.0, 0.75, 0.4, 0.9)
+						enabled = pl.mana >= AbilityExec.mana_cost(pl, ae) and pl.stamina >= float(ae.get("stamina", 0.0))
+						if int(ae.get("tier", 0)) >= 5:
+							badge = ["", "", "", "", "", "V", "VI"][int(ae.tier)]
+					elif not spd.is_empty():
 						ring = DBSkills.SCHOOLS[spd.school].color
 						enabled = pl.mana >= spd.mana
 					else:

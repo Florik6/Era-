@@ -957,6 +957,96 @@ def S_catastrophe_boom():
     return np.tanh(1.3 * x)
 
 
+# --- Beasts of the Ages: creatures and caves --------------------------------
+def S_drip():
+    t = T(0.6)
+    f = expsweep(t, 1400, 2600, 0.04)
+    x = 0.7 * tone(t, f) * eperc(t, 0.001, 0.03)
+    x += 0.25 * tone(t, 1900) * eperc(t, 0.002, 0.08) * (t > 0.02)
+    # cave echo: three quieter repeats
+    y = x.copy()
+    for k, g in ((int(0.11 * SR), 0.35), (int(0.23 * SR), 0.18), (int(0.37 * SR), 0.08)):
+        y[k:] += g * x[:len(x) - k]
+    return y
+
+
+def S_cave_wind():
+    t = T(2.2)
+    x = svf(N(len(t)), 260 + 120 * np.sin(TAU * 0.6 * t), 4.0, "bp") * eadsr(t, 2.2, 0.6, 0.3, 0.8, 0.9)
+    x += 0.5 * tone(t, 48 + 3 * np.sin(TAU * 0.3 * t)) * eadsr(t, 2.2, 0.8, 0.3, 0.6, 0.9)
+    return 0.8 * x
+
+
+def S_growl_far():
+    t = T(1.3)
+    f = 62 * (1 + 0.3 * np.sin(TAU * 21 * t)) * (1 + 0.1 * np.sin(np.pi * t / 1.3))
+    x = formant_voice(t, f, FORM_OH) * eadsr(t, 1.0, 0.2, 0.2, 0.8, 0.3)
+    x = ffilt(x, hi=700)
+    y = x.copy()
+    k = int(0.18 * SR)
+    y[k:] += 0.4 * x[:len(x) - k]
+    return 0.6 * y
+
+
+def S_rock_crumble():
+    t = T(1.2)
+    x = np.zeros_like(t)
+    for k in range(14):
+        st = rng.uniform(0, 0.8)
+        f0 = rng.uniform(60, 160)
+        seg = T(0.3)
+        place(x, rng.uniform(0.3, 0.8) * thump(seg, f0, f0 * 0.5, 0.04), int(st * SR))
+    x += 0.5 * ffilt(N(len(t)), lo=200, hi=3000) * eperc(t, 0.01, 0.5)
+    return np.tanh(1.4 * x)
+
+
+def S_slime():
+    t = T(0.55)
+    f = 140 + 90 * np.sin(TAU * 7 * t)
+    x = 0.6 * tone(t, f) * eperc(t, 0.02, 0.2)
+    x += 0.5 * svf(N(len(t)), 500 + 400 * np.sin(TAU * 9 * t), 6.0, "bp") * eperc(t, 0.01, 0.25)
+    return x
+
+
+def S_shriek():
+    t = T(0.9)
+    f = np.interp(t, [0, 0.15, 0.6, 0.9], [900, 1700, 1500, 800]) * (1 + 0.04 * np.sin(TAU * 31 * t))
+    x = formant_voice(t, f, FORM_AH, nh=14) * eadsr(t, 0.7, 0.03, 0.1, 0.8, 0.2)
+    x += 0.2 * ffilt(N(len(t)), lo=2000, hi=8000) * eadsr(t, 0.7, 0.03, 0.1, 0.6, 0.2)
+    return np.tanh(1.6 * x)
+
+
+def S_buzz():
+    t = T(0.9)
+    saw = 2 * ((180 * t + 0.1 * np.sin(TAU * 6 * t)) % 1.0) - 1
+    x = svf(saw, 1600, 2.0, "lp") * eadsr(t, 0.9, 0.08, 0.1, 0.8, 0.3) * (1 + 0.3 * np.sin(TAU * 23 * t))
+    return 0.6 * x
+
+
+def S_wing_flap():
+    t = T(0.8)
+    x = np.zeros_like(t)
+    for k in range(3):
+        place(x, whoosh(0.22, 500, 160, 1.0, 0.7), int(k * 0.24 * SR))
+    return x
+
+
+def S_beast_roar():
+    t = T(1.1)
+    f = 110 * (1 + 0.25 * np.sin(np.pi * t / 1.1)) * (1 + 0.2 * np.sin(TAU * 37 * t))
+    x = formant_voice(t, f, FORM_AH, nh=50) * eadsr(t, 0.8, 0.06, 0.2, 0.85, 0.25)
+    x += 0.5 * ffilt(N(len(t)), lo=200, hi=3500) * eadsr(t, 0.8, 0.06, 0.2, 0.6, 0.25)
+    return np.tanh(1.7 * x)
+
+
+def S_stone_hit():
+    t = T(0.5)
+    x = 0.9 * thump(t, 120, 55, 0.05)
+    x += 0.6 * ffilt(N(len(t)), lo=600, hi=4500) * eperc(t, 0.001, 0.05)
+    x += 0.3 * metal(t, 900, taus=(0.06, 0.04, 0.03, 0.02, 0.02))
+    return np.tanh(1.5 * x)
+
+
 SFX = {
     "parry_ring": S_parry_ring, "impact_heavy": S_impact_heavy, "slash_air": S_slash_air, "ground_crack": S_ground_crack,
     "ultimate_boom": S_ultimate_boom, "elec_crackle": S_elec_crackle, "ice_crack": S_ice_crack, "dark_hum": S_dark_hum,
@@ -979,6 +1069,9 @@ SFX = {
     "ui_open": S_ui_open, "ui_close": S_ui_close, "curse_bind": S_curse_bind,
     "quest_done": S_quest_done, "capture": S_capture, "growl": S_growl, "wolf": S_wolf,
     "mastery_up": S_mastery_up, "achievement": S_achievement, "error": S_error,
+    "drip": S_drip, "cave_wind": S_cave_wind, "growl_far": S_growl_far, "rock_crumble": S_rock_crumble,
+    "slime": S_slime, "shriek": S_shriek, "buzz": S_buzz, "wing_flap": S_wing_flap,
+    "beast_roar": S_beast_roar, "stone_hit": S_stone_hit,
 }
 LOOPS = {"rain_loop": L_rain, "wind_loop": L_wind, "night_loop": L_night, "magic_storm_loop": L_magic_storm}
 

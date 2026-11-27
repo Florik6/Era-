@@ -20,9 +20,9 @@ const SLOTS := ["main", "off", "head", "body", "hands", "legs", "feet", "cloak",
 const SLOT_NAMES := {"main": "Оружие", "off": "Доп. рука", "head": "Шлем", "body": "Броня", "hands": "Перчатки", "legs": "Поножи",
 	"feet": "Обувь", "cloak": "Плащ", "ring": "Кольцо", "amulet": "Амулет", "module": "Модуль/Имплант", "use": "Расходник", "mat": "Материал", "home": "Для дома"}
 const CAT_NAMES := {"sword": "Мечи", "dagger": "Кинжалы", "spear": "Древковое", "heavy": "Тяжёлое оружие", "bow": "Луки и арбалеты",
-	"firearm": "Огнестрельное", "staff": "Посохи и фокусы", "unarmed": "Кулаки"}
+	"firearm": "Огнестрельное", "staff": "Посохи и фокусы", "unarmed": "Кулаки", "energy": "Энергетическое и технологическое"}
 const DTYPE_NAMES := {"slash": "рубящий", "pierce": "колющий", "blunt": "дробящий", "fire": "огонь", "ice": "лёд",
-	"lightning": "молния", "dark": "тьма", "energy": "энергия", "time": "время"}
+	"lightning": "молния", "dark": "тьма", "energy": "энергия", "time": "время", "earth": "земля", "air": "воздух", "light": "свет"}
 
 # ---------------------------------------------------------------- bases
 # Weapons: cat, dmg, spd (attacks/s), range (m), dtype, model, two_h, proj, mag, reload, spread
@@ -136,6 +136,14 @@ const BASES := {
 	"tome_lightning": {"name": "Фолиант Молний", "era": -1, "slot": "use", "effect": "learn_school", "school": "lightning", "stack": true, "value": 120},
 	"tome_dark": {"name": "Фолиант Тьмы", "era": -1, "slot": "use", "effect": "learn_school", "school": "dark", "stack": true, "value": 150},
 	"tome_spacetime": {"name": "Фолиант Пространства", "era": -1, "slot": "use", "effect": "learn_school", "school": "spacetime", "stack": true, "value": 180},
+	"tome_earth": {"name": "Фолиант Земли", "era": -1, "slot": "use", "effect": "learn_school", "school": "earth", "stack": true, "value": 140},
+	"tome_necro": {"name": "Запретный фолиант Некромантии", "era": -1, "slot": "use", "effect": "learn_school", "school": "necro", "stack": true, "value": 220},
+	"tome_heal": {"name": "Фолиант Исцеления", "era": -1, "slot": "use", "effect": "learn_school", "school": "heal", "stack": true, "value": 160},
+	"tome_air": {"name": "Фолиант Воздуха", "era": -1, "slot": "use", "effect": "learn_school", "school": "air", "stack": true, "value": 140},
+	"tome_light": {"name": "Фолиант Света", "era": -1, "slot": "use", "effect": "learn_school", "school": "light", "stack": true, "value": 170},
+	"arcane_treatise": {"name": "Древний трактат", "era": -1, "slot": "use", "effect": "learn_knowledge", "stack": false, "value": 400, "desc": "Знание заклинания высшей ступени."},
+	# cataclysm reagents (ash_crystal … chrono_cell) live in ItemCatalog: the same
+	# materials serve legendary crafting and tier VI spells
 	"companion_whistle": {"name": "Свисток зверолова", "era": -1, "slot": "use", "effect": "companion", "stack": true, "value": 150},
 	"mirror_shard": {"name": "Осколок Зеркала Времени", "era": -1, "slot": "use", "effect": "chrono_double", "stack": true, "value": 200},
 	"chrono_shard": {"name": "Осколок Хроноса", "era": -1, "slot": "mat", "stack": true, "value": 50},
@@ -277,10 +285,13 @@ static func next_uid() -> int:
 static func base(id: String) -> Dictionary:
 	if BASES.has(id):
 		return BASES[id]
-	return ItemCatalog.base(id)      # expansion items (150)
+	var c := ItemCatalog.base(id)      # expansion items (150)
+	if not c.is_empty():
+		return c
+	return BeastItems.base(id)         # Beasts of the Ages: materials, relics, trophies
 
 static func has_base(id: String) -> bool:
-	return BASES.has(id) or ItemCatalog.has(id)
+	return BASES.has(id) or ItemCatalog.has(id) or BeastItems.has(id)
 
 static func roll_rarity(table: String = "normal", luck: float = 0.0, rng: RandomNumberGenerator = null) -> int:
 	var w: Array = TABLES.get(table, TABLES.normal).duplicate()
@@ -424,7 +435,7 @@ static func random_consumable(era_i: int, rng: RandomNumberGenerator = null) -> 
 	if r.randf() < 0.08:
 		pool.append_array(["scroll_purify", "potion_big"])
 	if r.randf() < 0.04:
-		pool.append(["tome_fire", "tome_ice", "tome_lightning", "tome_dark", "tome_spacetime"][r.randi() % 5])
+		pool.append(["tome_fire", "tome_ice", "tome_lightning", "tome_dark", "tome_spacetime", "tome_earth", "tome_heal", "tome_air", "tome_light", "tome_necro"][r.randi() % 10])
 	if r.randf() < 0.02:
 		pool.append("mirror_shard")
 	# expansion medicine and materials of the era that can be found

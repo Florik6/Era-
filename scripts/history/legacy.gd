@@ -85,7 +85,7 @@ static func monument_dialog(world, data: Dictionary) -> void:
 			var bid: String = k.substr(11)
 			var f: Dictionary = Profile.legacy.flags[k]
 			if int(f.get("era", 99)) < era:
-				lines.append("«Здесь, в эпоху «%s», %s сокрушил(а) %s. Ныне на месте его логова — руины и этот памятник»." % [DBEras.era(int(f.era)).name, Profile.char.name, DBActors.BOSSES.get(bid, {}).get("name", bid)])
+				lines.append("«Здесь, в эпоху «%s», %s сокрушил(а) %s. Ныне на месте его логова — руины и этот памятник»." % [DBEras.era(int(f.era)).name, Profile.char.name, DBActors.bget(bid, {}).get("name", bid)])
 	for h in Profile.hall_of_legends:
 		if int(h.get("era", 99)) < era:
 			lines.append("Табличка: «%s %s — легенда эпохи «%s»»." % [h.name, ("«%s»" % h.title) if h.get("title", "") != "" else "", DBEras.era(int(h.era)).name])

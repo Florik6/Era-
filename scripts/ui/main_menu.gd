@@ -4,7 +4,7 @@ extends Node3D
 
 const HAIR_NAMES := ["Лысый", "Короткая", "Длинная", "Хвост", "Ирокез"]
 const BEARD_NAMES := ["Нет", "Щетина", "Борода"]
-const VERSION_TEXT := "ERA: Восхождение · версия 0.10 · одиночная игра"
+const VERSION_TEXT := "ERA: Восхождение · версия 0.14 · одиночная игра"
 
 var bg: MenuBackground
 var ui: UIManager

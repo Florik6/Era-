@@ -69,11 +69,19 @@ class Harness:
 			var vill: Array = w.settlement_npcs.get(target.id, [])
 			var workers: Array = vill.filter(func(v): return is_instance_valid(v) and v.has_meta("job"))
 			ck("villagers get workplaces (forge, stall, …)", workers.size() >= 2, "workers=%d" % workers.size())
-			await wait(12.0)
+			# townsfolk follow their day plan (work, market, a fair in the square,
+			# sleep after a night shift): wait until someone has reached a job spot
 			var at_work := 0
-			for v in workers:
-				if is_instance_valid(v) and v.global_position.distance_to(v.get_meta("job").pos) < 2.0:
-					at_work += 1
+			var waited := 0.0
+			while waited < 30.0:
+				await wait(2.0)
+				waited += 2.0
+				at_work = 0
+				for v in workers:
+					if is_instance_valid(v) and v.global_position.distance_to(v.get_meta("job").pos) < 2.0:
+						at_work += 1
+				if at_work >= 1 and waited >= 12.0:
+					break
 			ck("villagers walk to their workplaces", at_work >= 1, "at_work=%d of %d" % [at_work, workers.size()])
 		var hidden := 0
 		for p in w.gen.pois:

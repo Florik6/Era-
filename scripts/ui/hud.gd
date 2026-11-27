@@ -537,7 +537,7 @@ func _process(delta: float) -> void:
 		boss_box.visible = true
 		boss_bar.max_value = _boss.max_hp
 		boss_bar.value = _boss.hp
-		boss_lbl.text = "%s · фаза %d%s" % [_boss.display_name, _boss.phase + 1, "  [ЩИТ]" if _boss.shielded else ""]
+		boss_lbl.text = "%s · фаза %d%s" % [_boss.display_name, _boss.phase + 1, ("  [ЩИТ %d%%]" % roundi(_boss.shield.ratio() * 100.0)) if _boss.shielded else ("  [щит готовится]" if _boss.shield != null and _boss.shield.state == BossShield.CHARGING else "")]
 		_expanded_t = 0.0
 	else:
 		boss_box.visible = false

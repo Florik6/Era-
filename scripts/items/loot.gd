@@ -64,7 +64,7 @@ func drop_for(victim: Actor, killer) -> void:
 	if victim.elite and randf() < 0.35:
 		spawn_drop(ItemDB.create("chrono_shard", 0, 1), _scatter(p))
 	# spirit essence (curse rituals): restless dead, dark casters and rift-born
-	var dark: bool = DBActors.ENEMIES.get(victim.def_id, {}).get("dtype", "") == "dark" or victim.def_id in ["skeleton", "wraith", "cursed_warrior", "necro_acolyte", "dark_mage", "chrono_anomaly", "spirit"]
+	var dark: bool = DBActors.eget(victim.def_id, {}).get("dtype", "") == "dark" or victim.def_id in ["skeleton", "wraith", "cursed_warrior", "necro_acolyte", "dark_mage", "chrono_anomaly", "spirit"]
 	if randf() < (0.3 if dark else 0.06) + (0.15 if world.dimension != "" else 0.0):
 		spawn_drop(ItemDB.create("spirit_essence", 0, 1), _scatter(p))
 	if victim.kind == "creature" and randf() < 0.3:
@@ -72,7 +72,16 @@ func drop_for(victim: Actor, killer) -> void:
 
 func boss_rewards(boss: Boss) -> void:
 	var p := boss.global_position
+	MagicLore.boss_treatise_drop(p)
 	var era := Profile.current_era
+	# «Beasts of the Ages»: own table (materials, trophy, relic, era legendary)
+	if boss.def.get("beast", false):
+		BeastWorld.boss_loot(boss)
+		spawn_drop(ItemDB.random_for_era(era, boss.level, "boss"), _scatter(p))
+		spawn_drop({}, _scatter(p), false, 120 * (era + 1))
+		for i in 2:
+			spawn_drop(ItemDB.random_consumable(era), _scatter(p))
+		return
 	var reward: String = boss.def.get("reward", "")
 	if reward != "":
 		spawn_drop(ItemDB.create_unique(reward, boss.level), _scatter(p))
@@ -127,6 +136,16 @@ func roll_chest(chest, actor) -> void:
 		items.append(ItemDB.random_consumable(era))
 	if randf() < (0.35 if rich else 0.12):
 		items.append(ItemDB.create("chrono_shard", 0, 1))
+	# ancient dungeons keep lost magical knowledge: a geomancer who can read
+	# it (earth mastery 12) always finds the golem's treatise in the first chest
+	var pd: CharData = actor.data if actor != null and actor.get("is_player") == true else null
+	if world.get("dimension") == "dungeon" and pd != null and pd.school_level("earth") >= 12 and not pd.knowledge.has("tome_e_guardian_golem") and not pd.knowledge.has("know_e_guardian_golem") and not pd.inv.items.any(func(x): return str(x.get("knowledge", "")) == "tome_e_guardian_golem"):
+		items.append(MagicLore.treatise("e_guardian_golem"))
+	elif world.get("dimension") == "dungeon" and randf() < (0.6 if rich else 0.25):
+		var lore_ids := ["e_guardian_golem"]
+		for sch in DBAbilities.SCHOOL_ORDER:
+			lore_ids.append(DBAbilities.school_spells(sch)[8].id)
+		items.append(MagicLore.treatise(lore_ids[0] if randf() < 0.4 else lore_ids[randi() % lore_ids.size()]))
 	var gold := randi_range(5, 25) * (era + 1) * (2 if rich else 1)
 	Audio.play_sfx("chest_open", chest.global_position)
 	if actor and actor is NPC:

@@ -198,10 +198,17 @@ func _generate_for(s: Dictionary) -> Array:
 		out.append(_q("capture", "Захват: %s" % cp.get("name", "точка"), "Захватите контрольную точку, чтобы обезопасить округу.",
 			[_obj("capture", "Захватить «%s»" % cp.get("name", "точку"), 1, {"poi": cp.id, "pos": [cp.pos.x, cp.pos.y]})], {"gold": gmul * 2, "xp": 160 + lvl * 15}, {"giver": s.name}))
 	out.shuffle()
-	return out.slice(0, 4)
+	out = out.slice(0, 4)
+	# monster hunting contracts on real creatures (Beasts of the Ages)
+	if BeastWorld.inst != null and world.gen:
+		out.append_array(BeastWorld.inst.hunt_offers(s, self))
+	return out
 
 func _on_accept(q: Dictionary) -> void:
 	match q.type:
+		"hunt":
+			if BeastWorld.inst != null:
+				BeastWorld.inst.on_hunt_accepted(q)
 		"escort":
 			world.director.start_caravan(q)
 		"defend":
@@ -265,6 +272,8 @@ func _on_killed(victim, killer) -> void:
 		if o.kind == "kill_team" and by_player and victim.team in o.get("team", []):
 			return true
 		if o.kind == "boss" and victim is Boss and victim.boss_id == o.get("boss_id", ""):
+			return true
+		if o.kind == "kill_species" and by_player and str(victim.get_meta("species", "")) == o.get("species", ""):
 			return true
 		return false)
 

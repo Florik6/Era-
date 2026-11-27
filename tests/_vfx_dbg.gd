@@ -46,7 +46,7 @@ func _run() -> void:
 	await get_tree().process_frame
 	await get_tree().process_frame
 	var vm = w.vfx
-	Engine.time_scale = 0.05
+	TimeFX.inst.set_base(0.05)
 	vm.decal(Vector3(-4, 0, 0), "frost", 3.0, 30.0, 0.0)
 	vm.decal(Vector3(-4, 0, 3), "scorch", 3.0, 30.0, 0.0)
 	vm.decal(Vector3(4, 0, 3), "crack", 3.0, 30.0, 0.0)

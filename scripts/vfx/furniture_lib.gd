@@ -92,6 +92,25 @@ static func build(furn: String, era: int, items: Array = [], tier := 1) -> Node3
 			glass.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 			MeshLib.part(n, MeshLib.box(Vector3(1.0, 0.7, 0.5)), glass, Vector3(0, 1.15, 0))
 			_mount(n, items, 0.9, era, 1.15, true)
+		"trophy":
+			# a pedestal with a small effigy of the slain boss (its own body plan and colours)
+			MeshLib.part(n, MeshLib.cyl(0.42, 0.5, 0.5, 8), wood, Vector3(0, 0.25, 0))
+			MeshLib.part(n, MeshLib.box(Vector3(0.5, 0.06, 0.04)), metal, Vector3(0, 0.38, -0.47))
+			var bid := ""
+			for it in items:
+				if it is Dictionary:
+					bid = str(ItemDB.base(str(it.get("base", ""))).get("trophy_of", it.get("trophy_of", "")))
+			if bid == "" and items.size() > 0 and items[0] is String:
+				bid = items[0]
+			var bd: Dictionary = DBBeasts.boss(bid)
+			if not bd.is_empty() and bd.get("rig", "beast") == "beast":
+				var r := BeastRig.new()
+				r.setup({"plan": bd.get("plan", "giant"), "f": bd.get("f", {}), "body": bd.get("body", Color(0.5, 0.5, 0.5)), "accent": bd.get("accent", Color(0.3, 0.3, 0.3)), "glow": bd.get("glow", Color(1, 0.6, 0.2)), "scale": 0.32})
+				r.set_process(false)
+				n.add_child(r)
+				r.position = Vector3(0, 0.5, 0)
+			else:
+				MeshLib.part(n, MeshLib.sphere(0.2, 10, 8), _glow(era), Vector3(0, 0.75, 0))
 		_:
 			MeshLib.part(n, MeshLib.box(Vector3(0.6, 0.6, 0.6)), wood, Vector3(0, 0.3, 0))
 	for mi in n.find_children("*", "MeshInstance3D", true, false):

@@ -161,6 +161,14 @@ func describe(ev: Dictionary) -> String:
 			return "%s сразился(ась) со своим хронодвойником. %s" % [nm(ev, 0), x.get("outcome", "")]
 		"loot_stolen":
 			return "%s похитил(а) «%s» и скрылся(ась)." % [nm(ev, 0), x.get("item", "")]
+		"beast_slain":
+			return "%s сразил(а) чудовище «%s»%s. Об этом будут слагать легенды." % [nm(ev, 0), x.get("boss", nm(ev, 1)), at]
+		"lair_cleared":
+			return "%s разорил(а) логово: %s%s." % [nm(ev, 0), x.get("species", "звери"), at]
+		"rumour":
+			return "%s: %s%s." % [nm(ev, 0), x.get("text", "слухи подтвердились"), at]
+		"dungeon_cleared":
+			return "%s прошёл(ла) подземелье «%s»." % [nm(ev, 0), x.get("dungeon", "")]
 	return ev.type
 
 func for_actor(id: String, limit: int = 60) -> Array:

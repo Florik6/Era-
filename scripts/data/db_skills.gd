@@ -101,6 +101,12 @@ const SCHOOLS := {
 		{"id": "timetrap", "name": "Временная ловушка", "desc": "Ловушка: первый вошедший враг застывает на 4 с.", "lvl": 5, "mana": 25, "cd": 10.0, "dmg": 20.0},
 		{"id": "riftdash", "name": "Пространственный рывок", "desc": "Рывок сквозь врагов, ранящий всех на пути.", "lvl": 7, "mana": 40, "cd": 8.0, "dmg": 50.0},
 	]},
+	# «Ascension of Power» schools: their spells live in DBAbilities (learned with school points)
+	"earth": {"name": "Земля", "color": Color(0.72, 0.58, 0.38), "dtype": "earth", "spells": []},
+	"necro": {"name": "Некромантия", "color": Color(0.45, 0.85, 0.55), "dtype": "dark", "spells": []},
+	"heal": {"name": "Исцеление", "color": Color(1.0, 0.86, 0.45), "dtype": "light", "spells": []},
+	"air": {"name": "Воздух", "color": Color(0.78, 0.95, 0.95), "dtype": "air", "spells": []},
+	"light": {"name": "Свет", "color": Color(1.0, 0.95, 0.7), "dtype": "light", "spells": []},
 }
 
 # Hybrid abilities unlock automatically when two specializations are developed.
@@ -115,10 +121,17 @@ const HYBRIDS := {
 const MELEE_CATS := ["sword", "dagger", "spear", "heavy", "unarmed"]
 const RANGED_CATS := ["bow", "firearm"]
 
+## Weapon tree of a category: the original nodes + the 5 «Ascension» weapon skills.
+static func tree(cat: String) -> Array:
+	return TREES.get(cat, []) + DBAbilities.weapon_skills(cat)
+
 static func node(cat: String, id: String) -> Dictionary:
 	for n in TREES.get(cat, []):
 		if n.id == id:
 			return n
+	var e: Dictionary = DBAbilities.get_ab(id)
+	if e.get("kind", "") == "weapon" and e.cat == cat:
+		return e
 	return {}
 
 static func find_skill(id: String) -> Dictionary:
@@ -130,6 +143,9 @@ static func find_skill(id: String) -> Dictionary:
 				var d: Dictionary = n.duplicate()
 				d.cat = cat
 				return d
+	var e: Dictionary = DBAbilities.get_ab(id)
+	if not e.is_empty() and e.kind != "spell":
+		return e
 	return {}
 
 static func spell(id: String) -> Dictionary:
@@ -139,6 +155,9 @@ static func spell(id: String) -> Dictionary:
 				var d: Dictionary = sp.duplicate()
 				d.school = s
 				return d
+	var e: Dictionary = DBAbilities.get_ab(id)
+	if e.get("kind", "") == "spell":
+		return e
 	return {}
 
 static func is_spell(id: String) -> bool:

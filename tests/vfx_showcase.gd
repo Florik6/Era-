@@ -89,7 +89,7 @@ class Driver:
 		p.apply_status("invuln", 9999.0)
 		for n in get_tree().root.find_children("*", "CanvasLayer", true, false):
 			n.visible = false
-		Engine.time_scale = 0.1
+		TimeFX.inst.set_base(0.1)
 		Game.game_time = floorf(Game.game_time) + 0.45
 		if Game.world.weather:
 			Game.world.weather.set_weather("clear", 9999.0)
@@ -189,6 +189,6 @@ class Driver:
 		VFX.ground_impact(c + Vector3(2, 0, -5.5), 2.5)
 		await wait(0.06)
 		await shot("combat_loot")
-		Engine.time_scale = 1.0
+		TimeFX.inst.set_base(1.0)
 		print("VFX_DONE shots=", shots.size())
 		get_tree().quit()

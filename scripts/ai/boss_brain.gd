@@ -16,7 +16,15 @@ var escape_checked := false
 func _init(boss) -> void:
 	b = boss
 
+var dormant := 0.0          # awakening in its lair: the boss rises, roars, then fights (the hero keeps control)
+
 func tick(delta: float) -> void:
+	if dormant > 0.0:
+		dormant -= delta
+		b.move_input = Vector3.ZERO
+		if b.hp < b.max_hp * 0.97:
+			dormant = 0.0       # hit while waking: it fights at once
+		return
 	for k in ability_cd.keys():
 		ability_cd[k] -= delta
 	global_cd -= delta
@@ -48,7 +56,12 @@ func tick(delta: float) -> void:
 	if global_cd <= 0.0 and _try_ability(d, dir):
 		return
 	var reach: float = b.natural_range + 0.6
-	if d > reach:
+	if b.def.get("caster", false) and d < 6.0 and randf() < 0.7:
+		# a mage repositions: steps back and to the side instead of trading blows
+		b.move_input = (-dir + dir.cross(Vector3.UP) * (1.0 if int(Time.get_ticks_msec() / 2500) % 2 == 0 else -1.0) * 0.7).normalized()
+		if d <= reach and randf() < 0.3:
+			_melee(dir)
+	elif d > reach:
 		b.move_input = dir * (1.25 if b.statuses.has("enrage") else 1.0)
 	else:
 		b.move_input = Vector3.ZERO
@@ -57,8 +70,15 @@ func tick(delta: float) -> void:
 func _pick_target() -> void:
 	var best = null
 	var bd := 34.0
+	# a lair boss is leashed: past the leash it forgets the target and goes home
+	var lr: float = float(b.leash_radius)
+	if lr > 0.0 and Vector2(b.global_position.x - b.arena_center.x, b.global_position.z - b.arena_center.z).length() > lr:
+		target = null
+		return
 	for a in Game.actors_near(b.global_position, 34.0):
 		if a.is_dead or not Game.is_enemy(b, a):
+			continue
+		if lr > 0.0 and Vector2(a.global_position.x - b.arena_center.x, a.global_position.z - b.arena_center.z).length() > lr + 6.0:
 			continue
 		var d: float = a.global_position.distance_to(b.global_position)
 		if a.is_player:
@@ -66,7 +86,7 @@ func _pick_target() -> void:
 		if d < bd:
 			bd = d
 			best = a
-	if best == null and target != null and is_instance_valid(target) and not target.is_dead and target.global_position.distance_to(b.global_position) < 60.0:
+	if best == null and target != null and is_instance_valid(target) and not target.is_dead and target.global_position.distance_to(b.global_position) < 60.0 and lr <= 0.0:
 		return
 	target = best
 
@@ -119,7 +139,7 @@ func _enter_phase(i: int) -> void:
 		away.y = 0
 		pl.knockback = away.normalized() * 8.0
 	VFX.shock(b.global_position, 9.0, Color(1.0, 0.45, 0.3), 0.5)
-	CombatFeel.slowmo(0.4, 0.25)
+	CombatFeel.slowmo(0.4, 0.25, "boss_phase", b)
 	CombatFeel.flash(Color(1.0, 0.5, 0.35), 0.15)
 	_arena_shift(i)
 	if ph.get("enrage", false) or i >= 2:
@@ -134,10 +154,38 @@ func _enter_phase(i: int) -> void:
 		b.base_dmg *= 1.15
 	if ph.get("arena", "") == "break" and Game.world:
 		Game.world.boss_arena_break(b)
-	for ab in b.bonus_abilities:
-		ability_cd[ab] = 2.0
+	if ph.has("speed"):
+		b.base_speed *= float(ph.speed)
+		b.apply_status("phase_fury", 9999.0, {"mods": {"aspd": float(ph.speed) - 1.0}})
+	if ph.get("drop_parts", false):
+		# the armour / shell breaks: plates fall, glowing cracks, faster boss
+		for pn in b.parts.keys():
+			if b.parts[pn] > 0.0:
+				b.parts[pn] = 0.0
+				if b.rig and b.rig.has_method("break_part"):
+					b.rig.break_part(pn)
+		b.stats["armor"] = float(b.stats.get("armor", 0.0)) * 0.5
+	match str(ph.get("arena", "")):
+		"collapse":
+			# parts of the hall come down: new cover and dangerous spots
+			for k in 5:
+				var cp: Vector3 = MagicFX.ground_point(b.arena_center + Vector3(randf_range(-12, 12), 0, randf_range(-12, 12)))
+				VFX.telegraph(cp, 2.2, 0.9 + 0.15 * k, Color(1.0, 0.5, 0.2))
+				_later(0.9 + 0.15 * k, func():
+					VFX.ground_impact(cp, 2.2)
+					Combat.aoe(b, cp, 2.2, {"amount": b.base_dmg * 1.2, "dtype": "blunt", "src": b, "knock": 4.0}, false)
+					StoneStructure.spawn("slab", cp, Vector3.FORWARD, {"life": 60.0, "solid": true, "hp": 260.0, "height": 1.3}))
+		"nest_break":
+			for k in 3:
+				var np: Vector3 = MagicFX.ground_point(b.arena_center + Vector3(randf_range(-10, 10), 0, randf_range(-10, 10)))
+				Zone.create("mud", b, np, 3.0, 30.0, {"amount": 0.0, "status": {"slow": 0.4}}, {"no_res": true})
 	global_cd = 1.6
 	ability_cd.clear()
+	for ab in b.bonus_abilities:
+		ability_cd[ab] = 2.0
+	# the shield follows its own state machine (ends now, cool-down kept)
+	if b.shield != null:
+		b.shield.on_phase()
 
 func _available() -> Array:
 	var ph: Dictionary = b.def.phases[b.phase]
@@ -147,15 +195,70 @@ func _available() -> Array:
 			continue
 		if ability_cd.get(ab, 0.0) > 0.0:
 			continue
+		var sp: Dictionary = b.def.abilities.get(ab, {})
+		if sp.get("type", "") == "shield" and (b.shield == null or not b.shield.can_start()):
+			continue
+		if sp.get("type", "") == "summon" and _adds_alive() >= 4:
+			continue      # a capped number of helpers
 		out.append(ab)
 	return out
+
+func _adds_alive() -> int:
+	var n := 0
+	for a in Game.actors_near(b.global_position, 40.0):
+		if not a.is_dead and a != b and a.team == "boss":
+			n += 1
+	return n
+
+## Situational value of an ability (bosses choose, they do not roll dice).
+func _score(typ: String, spec: Dictionary, d: float) -> float:
+	var hpf: float = b.hp / maxf(1.0, b.max_hp)
+	match typ:
+		"cleave", "spin":
+			return 0.8 if d < 5.5 else 0.0
+		"slam", "nova", "quake":
+			return 0.75 if d < float(spec.get("radius", 5.0)) + 0.5 else 0.15
+		"blink":
+			return 0.85 if d < 4.0 else 0.2
+		"fan", "volley", "beam", "missiles", "strikes", "hook":
+			return 0.65 if d > 4.5 else 0.3
+		"charge":
+			return 0.7 if d > 6.0 else 0.1
+		"summon":
+			return 0.55 if _adds_alive() < 2 else 0.2
+		"slowzone", "mines", "portal":
+			return 0.45
+		"shield":
+			# a shield when pressed, not as a permanent state
+			return 0.85 if hpf < 0.92 and d < 14.0 else 0.0
+		"rock_throw", "breath", "chain", "web", "poison_zone", "roots", "echo_strike":
+			return 0.65 if d > 3.0 else 0.35
+		"leap", "dive", "burrow":
+			return 0.7 if d > 5.0 else 0.2
+		"combo", "tail":
+			return 0.8 if d < 5.0 else 0.0
+		"ceiling", "platforms", "cataclysm_quake", "ages_wrath":
+			return 0.6
+		"armor_up", "parry_stance", "ethereal":
+			return 0.6 if hpf < 0.85 else 0.25
+		"regen":
+			return 0.75 if hpf < 0.6 else 0.0
+		"decoys", "haste", "pull", "bone_wall":
+			return 0.5
+	return 0.4
 
 func _try_ability(d: float, dir: Vector3) -> bool:
 	var av := _available()
 	if av.is_empty():
 		return false
 	av.shuffle()
+	av.sort_custom(func(x, y):
+		var sx := _score(str(b.def.abilities.get(x, {}).get("type", "")), b.def.abilities.get(x, {}), d) + randf() * 0.25
+		var sy := _score(str(b.def.abilities.get(y, {}).get("type", "")), b.def.abilities.get(y, {}), d) + randf() * 0.25
+		return sx > sy)
 	for ab in av:
+		if _score(str(b.def.abilities.get(ab, {}).get("type", "")), b.def.abilities.get(ab, {}), d) <= 0.0:
+			continue
 		var spec: Dictionary = b.def.abilities.get(ab, {})
 		if spec.is_empty():
 			continue
@@ -185,7 +288,11 @@ func _cast(dur: float) -> void:
 	casting = true
 	_later(dur, func(): casting = false)
 
+var used := {}               # "phase:type" -> times (fight log: tests, bestiary hints)
+
 func _do(typ: String, spec: Dictionary, dir: Vector3) -> void:
+	var uk := "%d:%s" % [b.phase, typ]
+	used[uk] = int(used.get(uk, 0)) + 1
 	var col: Color = Combat.element_color(spec.get("dtype", b.natural_dtype))
 	var tpos: Vector3 = target.global_position if target and is_instance_valid(target) else b.global_position + dir * 5.0
 	match typ:
@@ -271,7 +378,10 @@ func _do(typ: String, spec: Dictionary, dir: Vector3) -> void:
 						VFX.explosion(pt, 2.4, col)
 						Audio.play_sfx("explosion", pt, -6.0)
 					Combat.aoe(b, pt, 2.4, _dmg(spec), false))
-		"summon", "shield":
+		"shield":
+			if b.shield != null and b.shield.start(spec):
+				_cast(float(spec.get("charge", 1.5)))
+		"summon":
 			var eid: String = spec.get("enemy", "skeleton")
 			var cnt: int = spec.get("count", 2)
 			b.start_action("skill", 1.0, 0.6, {"anim": "roar" if typ == "summon" else "cast"})
@@ -286,11 +396,6 @@ func _do(typ: String, spec: Dictionary, dir: Vector3) -> void:
 						m.team = "boss"
 						adds.append(m)
 						MagicFX.summon_puff(p2 + Vector3(0, 1, 0), col)
-			if typ == "shield" and not adds.is_empty():
-				b.shielded = true
-				b.shield_adds = adds
-				Events.notify.emit("%s неуязвим, пока живы его стражи!" % b.display_name, Color(0.7, 0.7, 1.0))
-				_watch_shield()
 		"beam":
 			var f3: Vector3 = dir
 			VFX.telegraph(b.global_position, 0.9, 0.8, col, "line", f3, 360.0, 22.0)
@@ -379,20 +484,8 @@ func _do(typ: String, spec: Dictionary, dir: Vector3) -> void:
 					pm.y = Game.world.ground_height(pm)
 				Zone.create("mine", b, pm, 1.2, 20.0, _dmg(spec))
 			Audio.play_sfx("reload", b.global_position)
-
-func _watch_shield() -> void:
-	_later(0.5, func():
-		var alive := false
-		for a in b.shield_adds:
-			if is_instance_valid(a) and not a.is_dead:
-				alive = true
-		if alive:
-			_watch_shield()
-		else:
-			b.shielded = false
-			b.shield_adds = []
-			Events.notify.emit("Щит босса пал!", Color(1.0, 0.85, 0.4))
-			Audio.play_sfx("ice_shatter", b.global_position))
+		_:
+			BossMoves.run(self, typ, spec, dir)
 
 func _escape() -> void:
 	b.times_escaped += 1

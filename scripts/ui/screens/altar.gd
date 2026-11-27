@@ -123,7 +123,7 @@ func _show_selected() -> void:
 		if c.get("release", "") == "boss":
 			var bid: String = c.get("boss_id", "")
 			var bd: bool = Game.world_state.get("bosses", {}).get(bid, {}).get("defeated", false)
-			t += "  Связанный босс: %s — %s\n" % [DBActors.BOSSES.get(bid, {}).get("name", "?"), "[color=#7fdc8a]повержен[/color]" if bd else "жив"]
+			t += "  Связанный босс: %s — %s\n" % [DBActors.bget(bid, {}).get("name", "?"), "[color=#7fdc8a]повержен[/color]" if bd else "жив"]
 	if Curses.is_bound(it):
 		t += "[color=#ff6a5a]Несъёмность: %s[/color]\n" % ("предмет нельзя снять или заменить" if e.equipped and c.get("active", false) else "свяжет владельца при надевании")
 	else:

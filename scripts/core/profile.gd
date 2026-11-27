@@ -53,6 +53,7 @@ var hints_shown := {}         # tip id -> true; "_off" disables tips
 var difficulty := "normal"    # "normal" | "hardcore" (anatomical injuries, see Hardcore)
 var homes := {}               # "era:bid" -> owned house (Housing); kept across eras
 var home_chest := Inventory.new()   # the personal chest shared by all owned houses
+var bestiary := {}            # species/boss id -> {seen, kills, studied, first_day, variants: {}} (Beasts of the Ages)
 
 func _process(delta: float) -> void:
 	if has_character:
@@ -114,7 +115,7 @@ func milestone(key: String, era_i: int = -1) -> void:
 	Events.notify.emit("Веха эпохи: " + era_def.milestones[key], Color(1.0, 0.85, 0.4))
 
 func boss_defeated(boss_id: String) -> void:
-	var b: Dictionary = DBActors.BOSSES.get(boss_id, {})
+	var b: Dictionary = DBActors.bget(boss_id, {})
 	var era_i: int = b.get("era", current_era)
 	if era_i < 0:
 		return
@@ -124,7 +125,11 @@ func boss_defeated(boss_id: String) -> void:
 	milestone("boss", era_i)
 	add_stat("bosses")
 	unlock("boss_slayer")
-	if p.bosses.size() >= DBEras.era(era_i).bosses.size():
+	var era_bosses_done := 0
+	for eb in DBEras.era(era_i).bosses:
+		if eb in p.bosses:
+			era_bosses_done += 1
+	if era_bosses_done >= DBEras.era(era_i).bosses.size():
 		milestone("all_bosses", era_i)
 		unlock("era_bosses")
 
@@ -190,7 +195,7 @@ func to_dict() -> Dictionary:
 		"fallen_legends": fallen_legends, "hall_of_legends": hall_of_legends, "artifacts": artifacts, "witness": witness,
 		"world_seed": world_seed, "arena_best": arena_best, "arena_tokens": arena_tokens, "play_time": play_time,
 		"tutorial_done": tutorial_done, "hints_shown": hints_shown, "difficulty": difficulty,
-		"homes": homes, "home_chest": home_chest.to_dict()}
+		"homes": homes, "home_chest": home_chest.to_dict(), "bestiary": bestiary}
 
 func from_dict(d: Dictionary) -> void:
 	char = CharData.new()
@@ -228,6 +233,7 @@ func from_dict(d: Dictionary) -> void:
 				Inventory._fix(f.item)
 			for it in f.get("items", []):
 				Inventory._fix(it)
+	bestiary = d.get("bestiary", {})
 	home_chest = Inventory.new()
 	home_chest.from_dict(d.get("home_chest", {}))
 	home_chest.capacity = 999

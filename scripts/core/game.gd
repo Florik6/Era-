@@ -24,6 +24,10 @@ func _ready() -> void:
 	get_tree().set_auto_accept_quit(false)
 	get_tree().set_quit_on_go_back(false)
 	_setup_input()
+	var tfx := TimeFX.new()
+	tfx.name = "TimeFX"
+	add_child(tfx)
+	Events.player_died.connect(func(_a = null): TimeFX.inst.clear_all("player_died"))
 
 func _process(delta: float) -> void:
 	if world != null and not get_tree().paused:
@@ -47,36 +51,25 @@ func time_string() -> String:
 	var h := hour()
 	return "День %d, %02d:%02d" % [day() + 1, int(h), int(fmod(h, 1.0) * 60.0)]
 
-var _hit_stop := false
-var _hit_stop_next := 0
+## Brief freeze-frame on heavy hits (adds weight to combat). Goes through
+## TimeFX: ends on the real clock, never cuts a running slow motion short.
+func hit_stop(dur: float = 0.05, source := "hit", owner = null) -> int:
+	if get_tree().paused or TimeFX.inst == null:
+		return 0
+	return TimeFX.inst.request("hitstop", 0.06, dur, source, owner)
 
-## Brief freeze-frame on heavy hits (adds weight to combat).
-func hit_stop(dur: float = 0.05) -> void:
-	if _hit_stop or get_tree().paused or Time.get_ticks_msec() < _hit_stop_next:
-		return
-	_hit_stop = true
-	_hit_stop_next = Time.get_ticks_msec() + 300
-	Engine.time_scale = 0.06
-	get_tree().create_timer(dur, true, false, true).timeout.connect(func():
-		_hit_stop = false
-		Engine.time_scale = 1.0)
-
-var _slow_until := 0
 ## Short dramatic slow-motion (real-time duration). Never pauses input.
-func slow_motion(scale: float, real_dur: float) -> void:
-	if get_tree().paused or real_dur <= 0.0:
-		return
-	_slow_until = Time.get_ticks_msec() + int(real_dur * 1000.0)
-	if not _hit_stop:
-		Engine.time_scale = clampf(scale, 0.1, 1.0)
-	get_tree().create_timer(real_dur, true, false, true).timeout.connect(func():
-		if Time.get_ticks_msec() >= _slow_until - 5 and not _hit_stop:
-			Engine.time_scale = 1.0)
+func slow_motion(scale: float, real_dur: float, source := "cinematic", owner = null) -> int:
+	if get_tree().paused or real_dur <= 0.0 or TimeFX.inst == null:
+		return 0
+	return TimeFX.inst.request("cinematic", scale, real_dur, source, owner)
 
 # ---------------------------------------------------------------- scene flow
 func start(new_mode: String, opts: Dictionary = {}) -> void:
 	mode = new_mode
 	mode_opts = opts
+	if TimeFX.inst:
+		TimeFX.inst.clear_all("scene_change")
 	grid.clear()
 	actors.clear()
 	ui_stack.clear()
@@ -84,6 +77,8 @@ func start(new_mode: String, opts: Dictionary = {}) -> void:
 	get_tree().change_scene_to_file.call_deferred(GAME_SCENE)
 
 func goto_menu() -> void:
+	if TimeFX.inst:
+		TimeFX.inst.clear_all("goto_menu")
 	if world != null and mode == "world":
 		SaveSys.save_game()
 	world = null
@@ -183,6 +178,9 @@ func can_damage(attacker, target) -> bool:
 		return false      # the player's own house is a safe zone
 	if is_enemy(attacker, target):
 		return true
+	# wild animals can be hunted (and hit back once attacked)
+	if target.team == "wildlife" and _team_root(attacker) != null and _team_root(attacker).team in ["player", "monster", "bandit", "summon"]:
+		return not (CityPeace.inst != null and CityPeace.inst.in_peace_zone(target.global_position) and _team_root(attacker).team != "player")
 	var ra = _team_root(attacker)
 	if ra == null or not is_instance_valid(ra) or ra == _team_root(target):
 		return false
@@ -197,7 +195,7 @@ func can_damage(attacker, target) -> bool:
 func _setup_input() -> void:
 	var map := {
 		"move_up": [KEY_W, KEY_UP], "move_down": [KEY_S, KEY_DOWN], "move_left": [KEY_A, KEY_LEFT], "move_right": [KEY_D, KEY_RIGHT],
-		"attack": [KEY_J], "secondary": [KEY_K], "dodge": [KEY_SPACE], "skill1": [KEY_1], "skill2": [KEY_2], "skill3": [KEY_3],
+		"attack": [KEY_J], "secondary": [KEY_K], "dodge": [KEY_SPACE], "skill1": [KEY_1], "skill2": [KEY_2], "skill3": [KEY_3], "skill4": [KEY_4], "skill_page": [KEY_Q],
 		"interact": [KEY_F, KEY_E], "swap": [KEY_TAB, KEY_R], "potion": [KEY_H], "inventory": [KEY_I], "map": [KEY_M],
 		"journal": [KEY_L], "skills": [KEY_O], "pause": [KEY_ESCAPE, KEY_P], "companion": [KEY_C],
 	}

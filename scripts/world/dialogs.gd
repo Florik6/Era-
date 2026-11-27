@@ -10,6 +10,12 @@ func _init(w) -> void:
 	world = w
 
 func open_npc(n) -> void:
+	# special characters (wounded hunter, hunters' guild…) bring their own talk
+	if n.has_meta("talk_cb"):
+		var cb: Callable = n.get_meta("talk_cb")
+		if cb.is_valid():
+			cb.call(n)
+			return
 	if EventDirector2.inst != null and EventDirector2.inst.talk_to(n):
 		return
 	var opts: Array = []
@@ -31,6 +37,10 @@ func open_npc(n) -> void:
 		"healer":
 			_healer_dialog(n)
 			return
+		"mentor":
+			if MagicLore.inst != null:
+				MagicLore.inst.mentor_dialog(n)
+				return
 		"guard":
 			var st: Dictionary = world.factions.settlement_state(n.settlement_id)
 			var owner_f: String = st.get("owner", "")
@@ -140,7 +150,7 @@ func _quest_detail(n, q: Dictionary) -> void:
 func _rumours(n) -> void:
 	var lines: Array = []
 	for ev in Chronicle.recent(40):
-		if ev.type in ["legend_born", "legend_died", "boss_kill", "settlement_captured", "battle", "capture", "item_found", "invasion", "boss_escaped", "loot_stolen"]:
+		if ev.type in ["legend_born", "legend_died", "boss_kill", "settlement_captured", "battle", "capture", "item_found", "invasion", "boss_escaped", "loot_stolen", "beast_slain", "lair_cleared"]:
 			lines.append("· " + ev.text)
 		if lines.size() >= 5:
 			break
@@ -148,6 +158,10 @@ func _rumours(n) -> void:
 	if not lg.is_empty():
 		var l: Dictionary = lg[0]
 		lines.append("· Все говорят о %s «%s». Говорят, его видели возле «%s»." % [l.name, l.title, world.gen.nearest_place(Vector2(l.pos[0], l.pos[1])) if world.gen else "?"])
+	if BeastWorld.inst != null:
+		var rl: String = BeastWorld.inst.rumour_line()
+		if rl != "":
+			lines.append("· " + rl)
 	if world.gen:
 		for p in world.gen.pois:
 			if p.type == "lair" and not Game.world_state.bosses.get(p.data.get("boss_id", ""), {}).get("defeated", false):

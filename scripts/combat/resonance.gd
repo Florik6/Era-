@@ -28,9 +28,21 @@ const PAIRS := {
 	"lightning+space": "node", "space+lightning": "node",
 	"dark+fire": "vortex", "fire+dark": "vortex",
 	"time+time": "instability",
+	# «Ascension of Power» pairs
+	"fire+air": "firestorm", "air+fire": "firestorm",
+	"ice+lightning": "conduct", "lightning+ice": "conduct",
+	"earth+fire": "magma", "fire+earth": "magma",
+	"earth+lightning": "crystal_node", "lightning+earth": "crystal_node",
+	"necro+dark": "harvest", "dark+necro": "harvest",
+	"light+dark": "eclipse", "dark+light": "eclipse",
+	"heal+light": "sanctuary", "light+heal": "sanctuary",
 }
+## time + any other element echoes it (see pair_of)
+const ECHO_ELS := ["fire", "ice", "lightning", "dark", "space", "earth", "air", "light", "necro", "heal"]
 const NAMES := {"steam": "Паровой взрыв", "node": "Электрический узел", "vortex": "Вихрь тёмного пламени",
-	"instability": "Временная нестабильность"}
+	"instability": "Временная нестабильность", "firestorm": "Огненный смерч", "conduct": "Ледяной проводник",
+	"magma": "Лавовое поле", "crystal_node": "Кристаллический разрядник", "harvest": "Жатва душ",
+	"eclipse": "Затмение", "sanctuary": "Святилище", "echo": "Эхо времени"}
 const TIER_K := {"normal": 1.0, "empowered": 1.5, "ultimate": 2.5}
 const WINDOW := 2.6
 const RADIUS := 4.0
@@ -48,7 +60,8 @@ const CATA_CD := 300.0
 ## space-school spells (the rest of "spacetime" is time)
 const SPACE_SPELLS := ["blink", "riftdash"]
 const ZONE_EL := {"fire": "fire", "blizzard": "ice", "electric": "lightning", "dark": "dark",
-	"timeslow": "time", "timetrap": "time", "rift": "space"}
+	"timeslow": "time", "timetrap": "time", "rift": "space", "mud": "earth", "whirl": "air", "wind_throne": "air",
+	"hallowed": "light", "heal": "heal", "liturgy": "necro", "ice_path": "ice", "silence": "dark"}
 
 static var inst: Resonance = null
 
@@ -83,11 +96,27 @@ func _process(delta: float) -> void:
 static func element_for_spell(id: String, dtype: String) -> String:
 	if id in SPACE_SPELLS:
 		return "space"
+	var e: Dictionary = DBAbilities.get_ab(id)
+	if e.get("kind", "") == "spell":
+		match str(e.school):
+			"spacetime": return "space" if e.id in ["t_minor_shift", "t_phase_step", "t_space_push", "t_coord_rupture"] else "time"
+			"necro": return "necro"
+			"heal": return "heal"
+			_: return element_for_dtype(DBSkills.SCHOOLS[e.school].dtype)
 	return element_for_dtype(dtype)
+
+## Reaction of two elements ("" = none). Time echoes any other element.
+static func pair_of(a: String, b: String) -> String:
+	var k := a + "+" + b
+	if PAIRS.has(k):
+		return PAIRS[k]
+	if (a == "time" and b in ECHO_ELS) or (b == "time" and a in ECHO_ELS):
+		return "echo"
+	return ""
 
 static func element_for_dtype(dtype: String) -> String:
 	match dtype:
-		"fire", "ice", "lightning", "dark", "time":
+		"fire", "ice", "lightning", "dark", "time", "earth", "air", "light":
 			return dtype
 		"space", "rift":
 			return "space"
@@ -162,8 +191,7 @@ func _add(im: Dictionary) -> void:
 	for o in imprints:
 		if not _alive(o):
 			continue
-		var key: String = o.el + "+" + im.el
-		if not PAIRS.has(key):
+		if pair_of(o.el, im.el) == "":
 			continue
 		# two static fields of the same caster (e.g. a boss's arena hazards)
 		# don't feed on each other; a caster's own field + own spell still can
@@ -180,7 +208,7 @@ func _add(im: Dictionary) -> void:
 	if best == null:
 		_store(im)
 		return
-	var kind: String = PAIRS[best.el + "+" + im.el]
+	var kind: String = pair_of(best.el, im.el)
 	var a_w := _weighted(best)
 	var b_w := _weighted(im)
 	var k_storm := 0.75 if _magic_storm() else 1.0
@@ -231,6 +259,9 @@ func _react(kind: String, pos: Vector3, power: float, src: Array, owner) -> void
 	stats.by_kind[kind] = int(stats.by_kind.get(kind, 0)) + 1
 	var r := clampf(3.0 + power / 45.0, 3.0, 7.0)
 	var amount := clampf(power * 0.42, 10.0, 220.0)
+	# «Мастер стихий» / «Мастер переплетения» of the caster
+	if owner != null and is_instance_valid(owner) and owner.has_method("hook"):
+		amount *= (1.0 + owner.hook("resonance_bonus")) * (1.0 + owner.hook("weave"))
 	var tiers: Array = [src[0].tier, src[1].tier]
 	last = {"kind": kind, "pos": pos, "power": power, "radius": r, "tiers": tiers, "t": clock,
 		"els": [src[0].el, src[1].el], "owner": owner}
@@ -264,6 +295,51 @@ func _react(kind: String, pos: Vector3, power: float, src: Array, owner) -> void
 			z = Zone.create("instability", owner, pos, r, 6.0, {"amount": amount * 0.05, "dtype": "time"}, {"no_res": true})
 			if z:
 				z.tick = 0.5
+		"firestorm":
+			Audio.play_sfx("fire_cast", pos)
+			z = Zone.create("whirl", owner, pos, r, 5.0, {"amount": amount * 0.1, "dtype": "fire", "status": {"burn": amount * 0.06}}, {"no_res": true, "pull": 2.5, "vel": Vector3(randf_range(-1, 1), 0, randf_range(-1, 1)).normalized() * 1.5})
+			if z:
+				z.tick = 0.35
+		"conduct":
+			Audio.play_sfx("ice_shatter", pos)
+			Audio.play_sfx("lightning", pos, -2.0)
+			for a in Game.actors_near(pos, r + 0.5):
+				if is_instance_valid(a) and not a.is_dead and (owner == null or Game.can_damage(owner, a)):
+					var cold: bool = a.statuses.has("slow") or a.statuses.has("freeze") or a.statuses.has("wet")
+					Combat.deal(owner, a, {"amount": amount * (1.4 if cold else 0.8), "dtype": "lightning", "status": {"stun": 1.2 if cold else 0.5}, "proc": true})
+		"magma":
+			Audio.play_sfx("ground_crack", pos)
+			z = Zone.create("fire", owner, pos, r, 6.0, {"amount": amount * 0.1, "dtype": "fire", "status": {"burn": amount * 0.05, "slow": 0.5}}, {"no_res": true})
+			if z:
+				z.tick = 0.5
+		"crystal_node":
+			Audio.play_sfx("elec_crackle", pos)
+			z = Zone.create("node", owner, pos, 4.0 + r * 0.3, 7.0, {"amount": amount * 0.14, "dtype": "lightning", "status": {"stun": 0.3}}, {"no_res": true, "arcs": 3, "reach": 9.0})
+			if z:
+				z.tick = 0.6
+			StoneStructure.spawn("stone_spike", pos, Vector3.FORWARD, {"life": 7.0, "solid": false, "scale": 1.4})
+		"harvest":
+			Audio.play_sfx("dark_hum", pos)
+			var got := 0.0
+			for t in Combat.aoe(owner, pos + Vector3(0, 0.5, 0), r, {"amount": amount * 0.9, "dtype": "dark", "status": {"weakness": 4.0}, "proc": true}, false):
+				got += amount * 0.15
+			if owner != null and is_instance_valid(owner) and not owner.is_dead:
+				owner.heal(got)
+		"eclipse":
+			Audio.play_sfx("portal_open", pos)
+			Combat.aoe(owner, pos + Vector3(0, 0.5, 0), r, {"amount": amount, "dtype": "light", "status": {"blind": 3.0}, "proc": true}, false)
+		"sanctuary":
+			Audio.play_sfx("heal", pos)
+			z = Zone.create("heal", owner, pos, r, 6.0, {"amount": 0.0, "dtype": "light"}, {"no_res": true, "hps_pct": 0.025})
+		"echo":
+			# the other element strikes again a moment later (no imprint: no chain)
+			var other: Dictionary = src[0] if src[0].el != "time" else src[1]
+			var el: String = other.el
+			var echo_amt := amount * 0.6
+			Audio.play_sfx("time_warp", pos, -2.0)
+			get_tree().create_timer(1.0, false).timeout.connect(func():
+				ResonanceFX.reaction_burst("echo", pos, r * 0.8)
+				Combat.aoe(owner if (owner != null and is_instance_valid(owner)) else null, pos + Vector3(0, 0.5, 0), r * 0.8, {"amount": echo_amt, "dtype": "time" if el in ["heal", "necro"] else el, "proc": true}, false))
 	if z:
 		active.append(z)
 	Events.notify.emit("Резонанс: " + NAMES.get(kind, kind), ResonanceFX.color(kind))

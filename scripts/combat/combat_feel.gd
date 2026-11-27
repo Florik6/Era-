@@ -50,15 +50,17 @@ static func weapon_feel(cat: String) -> Dictionary:
 	return WEAPON_FEEL.get(cat, WEAPON_FEEL.unarmed)
 
 # ------------------------------------------------------------------ spectacle
-static func hitstop(dur: float) -> void:
+## Both go through TimeFX (see time_fx.gd): real-clock expiry, optional
+## owner (the effect ends if that node is freed or dies).
+static func hitstop(dur: float, source := "hit", owner = null) -> void:
 	var m := k("stop")
 	if m > 0.0 and dur > 0.0:
-		Game.hit_stop(dur * m)
+		Game.hit_stop(dur * m, source, owner)
 
-static func slowmo(scale: float, real_dur: float) -> void:
+static func slowmo(scale: float, real_dur: float, source := "cinematic", owner = null) -> void:
 	var m := k("slowmo")
 	if m > 0.0:
-		Game.slow_motion(scale, real_dur * m)
+		Game.slow_motion(scale, real_dur * m, source, owner)
 
 static func cam():
 	return Game.world.cam if Game.world and Game.world.get("cam") != null else null
@@ -116,7 +118,7 @@ static func on_player_hit(att, tgt, dealt: float, info: Dictionary) -> void:
 	var fin: bool = info.get("finisher", false)
 	var stop: float = wf.stop * (1.8 if fin else 1.0) * (1.35 if big else 1.0)
 	if info.get("melee", false) and not info.get("proc", false):
-		hitstop(stop)
+		hitstop(stop, "melee_hit", att)
 	var dir: Vector3 = tgt.global_position - att.global_position
 	dir.y = 0
 	kick(dir.normalized() if dir.length() > 0.01 else Vector3.FORWARD, wf.kick * (1.6 if fin or big else 1.0))
@@ -127,7 +129,7 @@ static func on_player_hit(att, tgt, dealt: float, info: Dictionary) -> void:
 
 ## Successful parry: brief slow-motion, punch-in, bright spark, counter window.
 static func parry_moment(def, src) -> void:
-	slowmo(0.3, 0.22)
+	slowmo(0.3, 0.22, "parry", def)
 	punch(0.12, 0.3)
 	flash(Color(1.0, 0.95, 0.7), 0.18)
 	shake(0.15)

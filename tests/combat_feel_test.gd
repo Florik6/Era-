@@ -157,6 +157,10 @@ class Harness:
 		pl.facing = Vector3(0, 0, -1)
 		var e1 = w.spawner.spawn_enemy(foe_id, pl.global_position + Vector3(0, 0, -3.4), 1)
 		e1.base_speed = 0.0
+		# a passive target: this measures weapon weight, not the NPC's own techniques
+		if e1.get("brain") != null and e1.brain.has_method("shutdown"):
+			e1.brain.shutdown()
+			e1.brain = null
 		e1.max_hp = 99999.0
 		e1.hp = 99999.0
 		await frames(5)
@@ -236,11 +240,11 @@ class Harness:
 		pl.apply_status("invuln", 99999.0)
 		# combat FX off: no slow-mo, no hit-stop
 		Settings.combat_fx = 0
-		Engine.time_scale = 1.0
+		TimeFX.inst.set_base(1.0)
 		CombatFeel.slowmo(0.3, 0.3)
 		CombatFeel.hitstop(0.1)
 		await get_tree().process_frame
-		ck("combat FX «Выкл» disables slow-mo and hit-stop", Engine.time_scale == 1.0 and not Game._hit_stop)
+		ck("combat FX «Выкл» disables slow-mo and hit-stop", Engine.time_scale == 1.0 and TimeFX.inst.active() == 0)
 		Settings.combat_fx = 3
 		ck("combat FX «Эпично» scales effects up", CombatFeel.k("shake") > 1.0 and CombatFeel.k("slowmo") > 1.0)
 		Settings.combat_fx = 2

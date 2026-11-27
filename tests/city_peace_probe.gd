@@ -70,7 +70,7 @@ class H:
 		w._teleport(pl, cp)
 		await wait(2.0)
 		var secs := float(OS.get_environment("PROBE_SECS")) if OS.get_environment("PROBE_SECS") != "" else 120.0
-		Engine.time_scale = float(OS.get_environment("PROBE_SCALE")) if OS.get_environment("PROBE_SCALE") != "" else 2.0
+		TimeFX.inst.set_base(float(OS.get_environment("PROBE_SCALE")) if OS.get_environment("PROBE_SCALE") != "" else 2.0)
 		var t := 0.0
 		var g0 := Game.game_time
 		while t < secs:
@@ -89,7 +89,7 @@ class H:
 			if cps != null and cps.has_method("state_of"):
 				var st: String = cps.state_of(cap.id)
 				peace_states[st] = int(peace_states.get(st, 0)) + 1
-		Engine.time_scale = 1.0
+		TimeFX.inst.set_base(1.0)
 		var res := {"city": cap.get("name", ""), "real_s": secs, "game_hours": snappedf((Game.game_time - g0) * 24.0, 0.01),
 			"hits": hit_n, "kills": kill_n, "fight_share": snappedf(float(fight_goals) / maxf(1.0, samples), 0.001),
 			"hits_by": hits, "kills_by": kills, "events": events, "npc_seen": cats, "peace_states": peace_states}

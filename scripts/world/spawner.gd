@@ -78,7 +78,7 @@ func suitable(pool: Array) -> Array:
 	var prog := era_progress_levels()
 	var out: Array = []
 	for id in pool:
-		var d: Dictionary = DBActors.ENEMIES.get(id, {})
+		var d: Dictionary = DBActors.eget(id, {})
 		if d.get("lvl", 0) <= prog / 2 + 1 and (not d.get("elite", false) or prog >= 3):
 			out.append(id)
 	if out.is_empty():
@@ -103,7 +103,7 @@ func _rand_look(rng: RandomNumberGenerator, female: bool) -> Dictionary:
 
 ## Era enemy from DBActors.ENEMIES (humanoids → NPC with BotBrain, creatures → Monster).
 func spawn_enemy(id: String, pos: Vector3, lvl: int = -1) -> Actor:
-	var d: Dictionary = DBActors.ENEMIES.get(id, {})
+	var d: Dictionary = DBActors.eget(id, {})
 	if d.is_empty():
 		return null
 	if lvl < 0:
@@ -144,7 +144,10 @@ func spawn_enemy(id: String, pos: Vector3, lvl: int = -1) -> Actor:
 			if not sp.is_empty():
 				cd.learn_school(sp.school)
 				cd.schools[sp.school].lvl = maxi(cd.schools[sp.school].lvl, sp.lvl + 1)
+				if DBAbilities.is_new_spell(s) and not s in cd.spells:
+					cd.spells.append(s)
 		cd.auto_learn()
+		_npc_abilities(cd, d, lvl)
 		if randf() < 0.5:
 			cd.inv.add(ItemDB.create("potion_hp", 0, 1))
 		n.data = cd
@@ -171,6 +174,12 @@ func spawn_enemy(id: String, pos: Vector3, lvl: int = -1) -> Actor:
 			hr.setup({"build": "bulky" if d.rig == "troll" else d.rig, "body": d.get("body", Color(0.5, 0.5, 0.5)), "scale": d.get("scale", 1.4),
 				"metal": d.get("metal", false), "hair": 0, "glow": d.get("glow", Color(0, 0, 0, 0))})
 			cr = hr
+		elif d.rig == "beast":
+			var bz := BeastRig.new()
+			bz.setup({"plan": d.get("plan", "quad"), "f": d.get("f", {}), "body": d.get("body", Color(0.5, 0.5, 0.5)), "accent": d.get("accent", Color(0.3, 0.3, 0.3)),
+				"glow": d.get("glow", Color(1.0, 0.6, 0.2)), "metal": d.get("metal", false), "scale": d.get("scale", 1.0)})
+			cr = bz
+			m.brain = CreatureBrain.new(m)
 		else:
 			var c := CreatureRig.new()
 			c.setup({"rig": d.rig, "body": d.get("body", Color(0.5, 0.5, 0.5)), "scale": d.get("scale", 1.0), "metal": d.get("metal", false), "glow": d.get("glow", Color(0.8, 1.0, 1.0))})
@@ -181,10 +190,17 @@ func spawn_enemy(id: String, pos: Vector3, lvl: int = -1) -> Actor:
 		m.base_dmg = d.get("dmg", 10.0)
 		m.natural_dtype = d.get("dtype", "slash")
 		m.natural_range = 1.8 * d.get("scale", 1.0) + (0.6 if d.rig in ["troll", "golem"] else 0.0)
+		if d.get("beast", false):
+			var plan := str(d.get("plan", "quad"))
+			m.natural_range = (2.2 if plan in ["giant", "tree", "drake", "worm"] else 1.7) * float(d.get("scale", 1.0))
 		m.stats = {"armor": 3.0 + lvl * 1.5 + (10.0 if d.get("metal", false) else 0.0)}
 		a = m
 	a.def_id = id
 	a.display_name = d.name
+	if d.get("beast", false):
+		a.set_meta("species", id)
+		var sp: Dictionary = DBCreatures.get_def(id)
+		a.stats["armor"] = float(a.stats.get("armor", 0.0)) + float(sp.get("armor", 0.0))
 	a.team = d.get("team", "monster")
 	a.level = lvl
 	a.elite = d.get("elite", false)
@@ -205,6 +221,29 @@ func spawn_enemy(id: String, pos: Vector3, lvl: int = -1) -> Actor:
 		Audio.play_sfx("mimic", pos)
 		a.knockback = Vector3.ZERO
 	return a
+
+## «Ascension» abilities of an ordinary NPC: class techniques by level and,
+## for casters only, low-tier spells (most people have no magic; archmages
+## are rare named characters created elsewhere).
+func _npc_abilities(cd: CharData, d: Dictionary, lvl: int) -> void:
+	cd.class_pts = lvl
+	cd.auto_learn_abilities(0)
+	var ns: Array = d.get("new_spells", [])
+	if ns.is_empty() and d.get("ai", "") == "caster":
+		for s in cd.schools.keys():
+			for e in DBAbilities.school_spells(s):
+				if int(e.tier) <= (3 if d.get("elite", false) else 2):
+					ns.append(e.id)
+	var max_tier := 3 if d.get("elite", false) or lvl >= 8 else 2
+	for id in ns:
+		var e: Dictionary = DBAbilities.get_ab(id)
+		if e.is_empty() or int(e.tier) > max_tier + 1:
+			continue
+		if not cd.knows_school(e.school):
+			cd.learn_school(e.school)
+		cd.schools[e.school].lvl = maxi(int(cd.schools[e.school].lvl), int(e.slvl) + 2 + lvl / 3)
+		if not id in cd.spells:
+			cd.spells.append(id)
 
 ## A contender: autonomous slither-style competitor with full progression.
 func spawn_bot(rec: Dictionary, pos: Vector3) -> NPC:
@@ -383,7 +422,7 @@ func spawn_soldier(fid: String, unit: String, pos: Vector3, lvl: int, rec: Dicti
 	return n
 
 func spawn_boss(id: String, pos: Vector3, lvl: int = -1, times_escaped: int = 0) -> Boss:
-	var d: Dictionary = DBActors.BOSSES.get(id, {})
+	var d: Dictionary = DBActors.bget(id, {})
 	if d.is_empty():
 		return null
 	if lvl < 0:

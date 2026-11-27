@@ -359,7 +359,7 @@ func _generate_layout() -> void:
 			_add_poi(svc, svc_name, s.pos + Vector2(cos(a0 + PI), sin(a0 + PI)) * sq * 0.75, 0.0, {"settlement": s.id})
 	# boss lairs
 	for bid in e.bosses:
-		var bdef: Dictionary = DBActors.BOSSES.get(bid, {})
+		var bdef: Dictionary = DBActors.bget(bid, {})
 		_place_poi("lair", bdef.get("lair", "Логово"), 350.0, 900.0, 220.0, 30.0, {"boss_id": bid, "name": bdef.get("name", "")}, true)
 	_place_poi("trial", "Суд Хроноса", 180.0, 520.0, 200.0, 28.0, {})
 	for i in rng.randi_range(4, 6):
@@ -376,9 +376,12 @@ func _generate_layout() -> void:
 	var camp_names := ["Лагерь разбойников", "Пиратская стоянка", "Логово банды", "Лагерь наёмников", "Укрытие киберохотников"]
 	for i in rng.randi_range(10, 16):
 		_place_poi("camp", camp_names[era], 160.0, half - 120.0, 110.0, 15.0, {})
-	var dn := ["Катакомбы", "Затопленный погреб", "Заброшенная шахта", "Старый бункер", "Подземный комплекс"]
+	# the era's five «Beasts of the Ages» dungeons (four here, the fifth below:
+	# keeps the placement of everything generated before it unchanged)
+	var bdun: Array = DBBeasts.dungeons_of_era(era)
 	for i in 4:
-		_place_poi("dungeon", dn[era], 200.0, half - 140.0, 160.0, 8.0, {})
+		var bd: Dictionary = bdun[i] if i < bdun.size() else {}
+		_place_poi("dungeon", bd.get("name", "Подземелье"), 200.0, half - 140.0, 160.0, 8.0, {"beast_dungeon": bd.get("id", "")} if not bd.is_empty() else {})
 	for i in 3:
 		_place_poi("altar", "Древний алтарь", 150.0, half - 150.0, 160.0, 8.0, {})
 	_place_poi("mirror", "Зеркало Времени", 250.0, half - 200.0, 200.0, 6.0, {})
@@ -390,6 +393,8 @@ func _generate_layout() -> void:
 		_place_poi("tourney", "Турнирное поле", 120.0, 500.0, 150.0, 26.0, {})
 	for i in 2:
 		_place_poi("shrine", ["Часовня", "Капелла", "Пункт помощи", "Медпункт", "Станция восстановления"][era], 150.0, half - 250.0, 300.0, 6.0, {})
+	if bdun.size() > 4:
+		_place_poi("dungeon", bdun[4].name, 200.0, half - 140.0, 160.0, 8.0, {"beast_dungeon": bdun[4].id})
 	# trails from the road network to points of interest
 	planner.build_trails(pois, TRAIL_POIS)
 	planner.finish(settlements, false)

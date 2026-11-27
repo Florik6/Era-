@@ -130,7 +130,35 @@ Biographies are built only from Chronicle events that reference the record id, s
 - iOS: preset 2 in `export_presets.cfg`, `tools/export_ios.sh`, `tools/verify_ipa.sh`,
   `.github/workflows/ios.yml`.
 
+## 0.13–0.14 additions (Ascension of Power, Time & Shields fix, Beasts of the Ages)
+- **Time** — `TimeFX` (`scripts/core/time_fx.gd`, child of the `Game` autoload) is the only writer of
+  `Engine.time_scale`: requests `{id, kind, scale, source, owner, real-time end}`, kinds hitstop / cinematic,
+  min of requests × `base_scale`, expiry on wall-clock time, owner checks, watchdog, `clear_all()` on death,
+  scene and dimension changes. Tests change speed only via `TimeFX.inst.set_base()`.
+- **Boss shields** — `BossShield` (`scripts/combat/boss_shield.gd`): INACTIVE → CHARGING → ACTIVE → BROKEN /
+  COOLDOWN, a shield-HP pool (absorb, not invulnerability), counter elements, interruptible charge, visual = state.
+- **Abilities** — `DBAbilities` (200 entries) executed by `AbilityExec` (components), `AbilityAI` for NPCs,
+  `Cataclysm`, `StoneStructure`, `MagicLore`, `CityMagic`.
+- **Creatures** — `DBCreatures` (100 species), `BeastRig` (11 body plans + feature flags, breakable parts,
+  `set_glow`), `CreatureBrain` (behaviour types, specials, cries), spawned through `Spawner.spawn_enemy`
+  (`DBActors.eget` falls back to `DBCreatures.enemy_def`; meta `species`).
+- **Bosses** — `DBBeasts` (40 bosses, 25 dungeons) in the `DBActors.BOSSES` format (`DBActors.bget`);
+  `BossBrain` runs them, new move types in `BossMoves.run`; `BossBrain.dormant` (awakening), `used` (fight log),
+  `Boss.leash_radius` (lair bosses never leave their lair).
+- **Dungeons** — `BeastDungeon` (`scripts/world/beast_dungeon.gd`) is a dimension-like node (`center`, `radius`,
+  `floor_y`, `title`, `subtitle`, sky colours, `player_spawn`, `objective_text()`, `target_pos()`,
+  `on_boss_killed()`), entered with `World.enter_dungeon(id)` from the era's dungeon POIs
+  (`poi.data.data.beast_dungeon`). Grid of room modules, seeded main path, per-visit side rooms, BFS validation,
+  lazy room spawns, `SecretWall`, `DungeonTrap`, progress in `Game.world_state.dungeons[id]`.
+- **Living world** — optional subsystem `beasts` = `BeastWorld` (`scripts/sim/beast_world.gd`): ecology with caps,
+  rare variants, lairs, world-boss director, hunting contracts (`QuestSystem` objective `kill_species`),
+  story leads, bestiary (`Profile.bestiary`), boss loot (`Loot.boss_rewards` → `BeastWorld.boss_loot`).
+  State in `Game.world_state.beasts`. Items in `BeastItems` (materials, relics `x_*`, `trophy_<boss>`).
+- **UI** — journal tabs «Бестиарий» / «Боссы»; `Dialogs.open_npc` honours a `talk_cb` meta on special NPCs.
+
 ## Tests
 `tools/check.sh` (compile all), `tests/logic_test.tscn` (67 checks), `tests/world_logic_test.tscn` (122 checks),
+`tests/beasts_test.tscn`, `tests/dungeons_all_test.tscn`, `tests/black_stone_demo_test.tscn`, `tests/time_shield_test.tscn`,
+`tests/beasts_perf_probe.tscn`, `tests/beasts_shots.tscn` (xvfb, `--rendering-driver opengl3`),
 `tests/game_smoke.tscn`, `tests/modes_smoke.tscn`, `tests/world_test.tscn`, `tests/ui_test.tscn` (screenshots; run with
 `VK_ICD_FILENAMES=/opt/lavapipe/lvp_icd.json xvfb-run -a godot --path . --rendering-method mobile --rendering-driver vulkan <scene>`).

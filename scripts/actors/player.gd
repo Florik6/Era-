@@ -61,7 +61,7 @@ func _physics_process(delta: float) -> void:
 		if _aura_t > 0.5:
 			_aura_t = 0.0
 			_tick_auras()
-		var cat := weapon_cat()
+		var cat := mastery_cat()
 		if cat != _last_cat:
 			_last_cat = cat
 			data.auto_slots(cat)
@@ -101,12 +101,16 @@ func _read_input(delta: float) -> void:
 	if Input.is_action_just_pressed("dodge") or (tc != null and tc.consume("dodge")):
 		if dodge(dir if dir.length() > 0.1 else facing):
 			_record("dodge")
-	for i in 3:
-		if Input.is_action_just_pressed("skill%d" % (i + 1)) or (tc != null and tc.consume("skill%d" % (i + 1))):
+	for i in data.slot_count():
+		var act := "skill%d" % (i + 1)
+		if (InputMap.has_action(act) and Input.is_action_just_pressed(act)) or (tc != null and tc.consume(act)):
 			var a2 := aim if manual_aim else auto_aim(dir)
-			var s: Array = data.auto_slots(weapon_cat())
+			var s: Array = data.active_slots(mastery_cat())
 			if use_slot(i, a2):
 				_record("skill", s[i])
+	if (InputMap.has_action("skill_page") and Input.is_action_just_pressed("skill_page")) or (tc != null and tc.consume("skill_page")):
+		data.ab_page = 1 - data.ab_page
+		Events.notify.emit("Страница умений %d" % (data.ab_page + 1), Color(0.7, 0.8, 1.0))
 	if Input.is_action_just_pressed("interact") or (tc != null and tc.consume("interact")):
 		do_interact()
 	if Input.is_action_just_pressed("swap") or (tc != null and tc.consume("swap")):
@@ -155,7 +159,7 @@ func auto_aim(move_dir: Vector3) -> Vector3:
 	return ref
 
 func _record(type: String, id: String = "") -> void:
-	action_buffer.append({"t": Time.get_ticks_msec(), "type": type, "id": id, "cat": weapon_cat()})
+	action_buffer.append({"t": Time.get_ticks_msec(), "type": type, "id": id, "cat": mastery_cat()})
 	if action_buffer.size() > 80:
 		action_buffer.pop_front()
 
@@ -312,11 +316,24 @@ func use_item(item: Dictionary) -> bool:
 			if data.learn_school(b.school):
 				Events.banner.emit("Новая школа магии", DBSkills.SCHOOLS[b.school].name, DBSkills.SCHOOLS[b.school].color)
 				Audio.play_sfx("mastery_up")
-				data.auto_slots(weapon_cat())
+				data.auto_slots(mastery_cat())
 				Profile.milestone("learn_school")
 			else:
 				Events.notify.emit("Эта школа уже изучена", Color(0.8, 0.8, 0.8))
 				ok = false
+		"learn_knowledge":
+			var kk: String = str(item.get("knowledge", ""))
+			if kk == "" or data.knowledge.has(kk):
+				Events.notify.emit("Это знание уже ваше" if kk != "" else "Страницы истлели", Color(0.8, 0.8, 0.8))
+				ok = false
+			else:
+				data.knowledge[kk] = true
+				var sp: Dictionary = DBAbilities.get_ab(kk.trim_prefix("tome_"))
+				Events.banner.emit("Древнее знание", "«%s» — теперь его можно изучить" % sp.get("name", kk), DBAbilities.school_info(str(sp.get("school", ""))).get("color", Color(1.0, 0.85, 0.5)))
+				Audio.play_sfx("mastery_up")
+				Profile.milestone("treatise")
+				data.inv.remove(int(item.uid))
+				return true
 		"chrono_double":
 			if Game.world and Game.world.has_method("spawn_chrono_double"):
 				Game.world.spawn_chrono_double(self)

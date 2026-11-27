@@ -199,6 +199,10 @@ func _type_for(dtype: String, info: Dictionary, src, zone: String, score: float)
 			return "frost"
 		"lightning", "energy":
 			return "shock"
+		"poison":
+			return "stab" if src != null and is_instance_valid(src) and src.has_meta("species") else "magic"
+		"earth":
+			return "fracture" if limb and score >= 1.3 else "bruise"
 	if dtype in MAGIC_TYPES or str(info.get("school", "")) != "":
 		return "magic"
 	return "bruise"
@@ -521,6 +525,192 @@ func apply_medicine(a, base: String, med: Dictionary, target_id := -1) -> bool:
 		Events.notify.emit("%s: %s" % [ItemDB.base(base).get("name", "Лечение"), ", ".join(PackedStringArray(done))], Color(0.6, 1.0, 0.7))
 	_changed()
 	return true
+
+## A venomous bite: the newest open wound becomes poisoned (infection is
+## close — treat it). Never creates a wound by itself.
+func poison_last() -> void:
+	var l := list()
+	if l.is_empty():
+		return
+	var inj: Dictionary = l[l.size() - 1]
+	if not inj.infected and not inj.treated:
+		inj.infect = minf(0.95, float(inj.infect) + 0.5)
+		inj["poisoned"] = true
+		_changed()
+
+## Healing magic (school «Исцеление») on real injuries. Each spell treats
+## one state of one wound — the chosen one (anatomy screen) or the most
+## fitting one — and refuses what it cannot do: a closing spell does not cure
+## infection, tissue restoration does not set bones, a broken bone is not set
+## while it bleeds, heavy infection needs a healer. One spell effect per
+## wound per 6 game hours (no endless healing). Returns {ok, done, reason}.
+const SPELL_GAP_DAYS := 0.25
+
+func spell_op(a, op: String, slvl: int, target_id := -1) -> Dictionary:
+	var l := list()
+	var res := {"ok": false, "done": [], "reason": ""}
+	var order: Array = l.duplicate()
+	order.sort_custom(func(x, y): return int(x.sev) * 10 + int(x.bleed) > int(y.sev) * 10 + int(y.bleed))
+	if target_id >= 0:
+		for inj in l:
+			if int(inj.id) == target_id:
+				order = [inj]
+				break
+	var fresh := func(inj: Dictionary) -> bool:
+		var st: Dictionary = inj.get("spell_t", {})
+		return Game.game_time - float(st.get(op, -99.0)) >= SPELL_GAP_DAYS
+	var mark := func(inj: Dictionary) -> void:
+		var st: Dictionary = inj.get("spell_t", {})
+		st[op] = Game.game_time
+		inj["spell_t"] = st
+	var zn := func(inj: Dictionary) -> String: return ZONE_NAMES.get(inj.zone, inj.zone)
+	match op:
+		"soothe":
+			Profile.char.pain_until = maxf(Profile.char.pain_until, Game.game_time + 0.125)
+			for inj in order:
+				if int(inj.sev) == 1 and inj.type in ["bruise", "shock", "cut"] and fresh.call(inj):
+					inj.heal = float(inj.heal) + 0.3
+					mark.call(inj)
+			res.done.append("боль от лёгких травм утихла на 3 ч")
+		"close_wound":
+			for inj in order:
+				if not inj.type in ["cut", "stab"] or int(inj.sev) > 2:
+					if target_id >= 0:
+						res.reason = "«Закрытие раны» лечит только лёгкие и средние порезы и колотые раны"
+					continue
+				if inj.infected:
+					res.reason = "рана заражена — сначала «Очищающий поток»"
+					continue
+				if not fresh.call(inj):
+					res.reason = "рана уже под действием заклинания"
+					continue
+				inj.bandaged = true
+				inj.bleed = 0
+				inj.treated = true
+				inj.infect = 0.0
+				inj.heal = float(inj.heal) + 0.75
+				mark.call(inj)
+				res.done.append("рана закрыта (%s)" % zn.call(inj))
+				break
+		"hemostasis":
+			var cap := 3 if slvl >= 10 else 2
+			for inj in order:
+				if int(inj.bleed) <= 0 or inj.bandaged:
+					continue
+				if not fresh.call(inj):
+					res.reason = "кровотечение уже под печатью"
+					continue
+				mark.call(inj)
+				if int(inj.bleed) <= cap:
+					inj.bandaged = true
+					res.done.append("кровотечение остановлено (%s)" % zn.call(inj))
+				else:
+					inj.bleed = maxi(1, int(inj.bleed) - 1)
+					inj.clot = 0.0
+					res.done.append("кровотечение ослаблено (%s) — сильное останавливается с мастерства 10" % zn.call(inj))
+				break
+			if res.done.is_empty() and res.reason == "":
+				res.reason = "нет кровотечения"
+		"cleanse":
+			for inj in order:
+				if inj.infected:
+					if int(inj.sev) >= 3:
+						res.reason = "тяжёлое заражение не снимается заклинанием — нужен лекарь"
+						continue
+					if int(inj.sev) == 2 and slvl < 12:
+						res.reason = "заражение средней раны — с мастерства 12"
+						continue
+					inj.infected = false
+					inj.infect = 0.0
+					inj.worsen = 0.0
+					inj.treated = true
+					res.done.append("заражение снято (%s)" % zn.call(inj))
+					break
+				if inj.type == "magic" and fresh.call(inj):
+					inj.sev = int(inj.sev) - 1
+					mark.call(inj)
+					res.done.append("магическое повреждение ослаблено (%s)" % zn.call(inj))
+					break
+				if _is_open(inj) and not inj.treated and float(inj.infect) > 0.0:
+					inj.infect = 0.0
+					inj.treated = true
+					res.done.append("рана очищена (%s)" % zn.call(inj))
+					break
+			if res.done.is_empty() and res.reason == "":
+				res.reason = "нет заражения или проклятия"
+		"tissue":
+			for inj in order:
+				if inj.type == "fracture":
+					res.reason = "перелом сращивает «Костяное единство»"
+					continue
+				if inj.infected:
+					res.reason = "заражённая рана не заживёт — сначала «Очищающий поток»"
+					continue
+				if int(inj.bleed) > 0 and not inj.bandaged:
+					res.reason = "сначала остановите кровотечение"
+					continue
+				if not fresh.call(inj):
+					res.reason = "ткани уже восстанавливаются"
+					continue
+				inj.heal = float(inj.heal) + 0.85
+				if inj.type in ["burn", "frost"]:
+					inj.treated = true
+				mark.call(inj)
+				res.done.append("%s заживает быстрее (%s)" % [TYPE_NAMES.get(inj.type, "травма").to_lower(), zn.call(inj)])
+				break
+		"bone_unity":
+			for inj in order:
+				if inj.type != "fracture":
+					continue
+				if int(inj.bleed) > 0 and not inj.bandaged:
+					res.reason = "перелом кровоточит — сначала «Печать кровостаза»"
+					continue
+				if not fresh.call(inj):
+					res.reason = "кость уже срастается"
+					continue
+				inj.splinted = true
+				inj.treated = true
+				inj.heal = float(inj.heal) + 1.0
+				mark.call(inj)
+				res.done.append("кость срастается (%s)" % zn.call(inj))
+				break
+			if res.done.is_empty() and res.reason == "":
+				res.reason = "нет перелома"
+		"great_regen":
+			for inj in order:
+				if int(inj.sev) < 2:
+					continue
+				if inj.infected and int(inj.sev) >= 3:
+					res.reason = "тяжёлое заражение великая регенерация не лечит"
+					continue
+				if not fresh.call(inj):
+					res.reason = "травма уже под действием регенерации"
+					continue
+				inj.sev = int(inj.sev) - 1
+				inj.bandaged = true
+				inj.treated = true
+				inj.bleed = mini(int(inj.bleed), 0)
+				if inj.type == "fracture":
+					inj.splinted = true
+				mark.call(inj)
+				res.done.append("тяжёлая травма отступает (%s)" % zn.call(inj))
+				break
+		"dawn":
+			for inj in l:
+				if int(inj.bleed) > 0:
+					inj.bandaged = true
+				if int(inj.sev) >= 3 and inj.type == "fracture":
+					inj.splinted = true
+			res.done.append("тяжелораненые стабилизированы")
+	res.ok = not res.done.is_empty()
+	if res.ok:
+		stats.treated += res.done.size()
+		_resolve_heal()
+		_changed()
+		Events.notify.emit("Исцеление: %s" % ", ".join(PackedStringArray(res.done)), Color(1.0, 0.9, 0.5))
+	elif res.reason != "":
+		Events.notify.emit("Исцеление: %s" % res.reason, Color(0.9, 0.8, 0.6))
+	return res
 
 ## Full care. source: "healer" (знахарь / целитель), "doctor" (врач),
 ## "station" (медицинская станция, heal_tier 1–2), "capsule" (футуристическая

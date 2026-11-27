@@ -14,7 +14,7 @@ const ERAS := [
 			"urban": Color(0.48, 0.44, 0.38), "snow": Color(0.92, 0.94, 0.97)},
 		"water": Color(0.18, 0.38, 0.55, 0.78),
 		"style": "medieval", "props": ["tree_oak", "tree_pine", "rock", "bush", "stump", "flowers"],
-		"enemies": ["bandit", "deserter", "mercenary", "wolf", "dark_mage", "knight_renegade", "troll"],
+		"enemies": ["bandit", "deserter", "mercenary", "wolf", "dark_mage", "knight_renegade", "troll", "geomancer", "field_healer"],
 		"night_enemies": ["skeleton", "cursed_warrior", "wraith", "necro_acolyte"],
 		"factions": ["steel_lion", "black_raven", "ash_circle"],
 		"bosses": ["executioner", "archmage", "necro_lord"],

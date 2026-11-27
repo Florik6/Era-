@@ -10,7 +10,12 @@ const ENEMIES := {
 	"mercenary": {"name": "Наёмник", "rig": "humanoid", "weapons": ["sword_steel", "crossbow_light", "axe_battle"], "armor": "chain", "hp": 110, "lvl": 2, "xp": 24, "team": "bandit", "ai": "melee", "cloth": Color(0.55, 0.2, 0.18), "hat": "kettle"},
 	"knight_renegade": {"name": "Рыцарь-отступник", "rig": "humanoid", "weapons": ["sword_steel", "hammer_war"], "offhand": "shield_kite", "armor": "plate", "hp": 170, "lvl": 4, "xp": 45, "team": "bandit", "ai": "melee", "cloth": Color(0.2, 0.2, 0.25), "hat": "greathelm", "elite": true},
 	"dark_mage": {"name": "Враждебный маг", "rig": "humanoid", "weapons": ["staff_oak"], "armor": "robe", "hp": 75, "lvl": 2, "xp": 28, "team": "bandit", "ai": "caster", "spells": ["fireball", "frostbolt"], "cloth": Color(0.25, 0.12, 0.3), "hat": "hood"},
-	"necro_acolyte": {"name": "Некромант", "rig": "humanoid", "weapons": ["staff_oak"], "armor": "robe", "hp": 90, "lvl": 3, "xp": 34, "team": "monster", "ai": "caster", "spells": ["drain", "curse", "summon"], "cloth": Color(0.1, 0.1, 0.12), "hat": "hood"},
+	"necro_acolyte": {"name": "Некромант", "rig": "humanoid", "weapons": ["staff_oak"], "armor": "robe", "hp": 90, "lvl": 3, "xp": 34, "team": "monster", "ai": "caster", "spells": ["drain", "curse"], "cloth": Color(0.1, 0.1, 0.12), "hat": "hood",
+		"new_spells": ["n_bone_spike", "n_wither_curse", "n_grave_hand", "n_raise_servant", "n_bone_shield"]},
+	"geomancer": {"name": "Геомант-отступник", "rig": "humanoid", "weapons": ["staff_oak"], "armor": "robe", "hp": 120, "lvl": 3, "xp": 40, "team": "bandit", "ai": "caster", "cloth": Color(0.42, 0.33, 0.22), "hat": "hood",
+		"new_spells": ["e_stone_shard", "e_earth_jolt", "e_stone_skin", "e_mud_trap", "e_stone_spears", "e_bastion_wall", "e_guardian_golem"]},
+	"field_healer": {"name": "Полевой лекарь", "rig": "humanoid", "weapons": ["staff_oak"], "armor": "robe", "hp": 90, "lvl": 2, "xp": 30, "team": "bandit", "ai": "caster", "cloth": Color(0.85, 0.82, 0.72),
+		"new_spells": ["h_warm_touch", "h_soothing_light", "h_close_wound", "h_hemostasis", "h_cleansing_flow", "g_purify_beam"]},
 	"wolf": {"name": "Волк", "rig": "wolf", "hp": 55, "dmg": 9.0, "lvl": 0, "xp": 10, "team": "monster", "ai": "beast", "speed": 1.35, "body": Color(0.45, 0.42, 0.4), "dtype": "slash"},
 	"troll": {"name": "Пещерный тролль", "rig": "troll", "hp": 320, "dmg": 26.0, "lvl": 5, "xp": 80, "team": "monster", "ai": "beast", "speed": 0.8, "body": Color(0.4, 0.5, 0.35), "dtype": "blunt", "scale": 1.6, "elite": true},
 	"skeleton": {"name": "Скелет", "rig": "humanoid", "weapons": ["sword_iron", "bow_short"], "armor": "bones", "hp": 50, "lvl": 1, "xp": 12, "team": "monster", "ai": "melee", "skeleton": true, "res": {"pierce": 0.4, "blunt": -0.4, "dark": 0.8}},
@@ -47,6 +52,16 @@ const ENEMIES := {
 	"mimic": {"name": "Мимик", "rig": "mimic", "hp": 200, "dmg": 22.0, "lvl": 2, "xp": 60, "team": "monster", "ai": "beast", "body": Color(0.5, 0.35, 0.2), "dtype": "pierce", "speed": 1.1, "elite": true},
 	"skeleton_minion": {"name": "Призванный скелет", "rig": "humanoid", "weapons": ["sword_iron"], "armor": "bones", "hp": 60, "lvl": 0, "xp": 0, "team": "summon", "ai": "melee", "skeleton": true},
 	"spirit": {"name": "Дух жатвы", "rig": "wraith", "hp": 60, "dmg": 14.0, "lvl": 0, "xp": 0, "team": "summon", "ai": "beast", "body": Color(1.0, 0.3, 0.3, 0.6), "dtype": "dark"},
+	"trial_keeper": {"name": "Хранитель испытания", "rig": "humanoid", "weapons": ["staff_oak"], "armor": "robe", "hp": 900, "lvl": 8, "xp": 400, "team": "monster", "ai": "caster", "elite": true, "cloth": Color(0.2, 0.18, 0.3), "hat": "hood", "glow": Color(0.9, 0.8, 1.0)},
+	# «Ascension of Power» summons
+	"ice_guardian": {"name": "Ледяной страж", "rig": "golem", "hp": 260, "dmg": 18.0, "lvl": 0, "xp": 0, "team": "summon", "ai": "caster", "spells": ["i_frost_needle"], "speed": 0.0, "body": Color(0.72, 0.9, 1.0), "glow": Color(0.6, 0.9, 1.0), "scale": 1.3, "dtype": "ice", "res": {"ice": 0.8, "fire": -0.5}},
+	"thunder_guardian": {"name": "Громовой страж", "rig": "golem", "hp": 220, "dmg": 20.0, "lvl": 0, "xp": 0, "team": "summon", "ai": "caster", "spells": ["l_electric_spark"], "speed": 0.0, "body": Color(0.5, 0.58, 0.95), "glow": Color(0.7, 0.8, 1.0), "scale": 1.2, "dtype": "lightning", "res": {"lightning": 0.9}},
+	"stone_golem": {"name": "Каменный голем", "rig": "golem", "hp": 520, "dmg": 32.0, "lvl": 0, "xp": 0, "team": "summon", "ai": "beast", "speed": 0.85, "body": Color(0.5, 0.43, 0.35), "glow": Color(1.0, 0.7, 0.35), "scale": 1.6, "dtype": "blunt", "res": {"slash": 0.4, "pierce": 0.5, "earth": 0.6}},
+	"bone_knight": {"name": "Рыцарь Погребения", "rig": "humanoid", "weapons": ["sword_steel"], "offhand": "shield_kite", "armor": "bones", "hp": 320, "lvl": 1, "xp": 0, "team": "summon", "ai": "melee", "skeleton": true, "glow": Color(0.45, 0.9, 0.55), "res": {"pierce": 0.4, "dark": 0.8}},
+	"light_sentinel": {"name": "Солнечный страж", "rig": "wraith", "hp": 200, "dmg": 20.0, "lvl": 0, "xp": 0, "team": "summon", "ai": "caster", "spells": ["g_purify_beam"], "speed": 0.7, "body": Color(1.0, 0.95, 0.7, 0.7), "dtype": "light"},
+	"decoy_image": {"name": "Иллюзия", "rig": "wraith", "hp": 70, "dmg": 0.0, "lvl": 0, "xp": 0, "team": "summon", "ai": "beast", "speed": 0.0, "body": Color(0.6, 0.5, 0.95, 0.45), "dtype": "dark"},
+	"spectral_warrior": {"name": "Призрачный воин", "rig": "humanoid", "weapons": ["sword_steel"], "armor": "bones", "hp": 180, "lvl": 1, "xp": 0, "team": "summon", "ai": "melee", "skeleton": true, "speed": 1.1, "glow": Color(0.45, 0.95, 0.65)},
+	"bone_warrior": {"name": "Костяной воин", "rig": "humanoid", "weapons": ["axe_battle"], "armor": "bones", "hp": 220, "lvl": 1, "xp": 0, "team": "summon", "ai": "melee", "skeleton": true},
 	"chrono_soldier": {"name": "Хроностраж", "rig": "humanoid", "weapons": ["blade_energy", "pulse_rifle"], "armor": "android", "hp": 260, "lvl": 1, "xp": 70, "team": "monster", "ai": "melee", "robot": true, "glow": Color(0.4, 1.0, 0.9)},
 }
 
@@ -66,15 +81,17 @@ const BOSSES := {
 		"abilities": {"fan": {"type": "fan", "dmg": 0.9, "count": 5, "dtype": "fire", "cd": 3.5}, "blink": {"type": "blink", "cd": 6.0},
 			"nova": {"type": "nova", "dmg": 1.1, "radius": 7.0, "dtype": "ice", "cd": 9.0}, "portal": {"type": "portal", "dimension": "distorted", "cd": 999.0},
 			"strikes": {"type": "strikes", "dmg": 1.2, "count": 6, "dtype": "lightning", "cd": 8.0}, "slowzone": {"type": "slowzone", "cd": 14.0},
-			"volley": {"type": "volley", "dmg": 1.4, "count": 5, "dtype": "fire", "cd": 10.0}, "summon": {"type": "summon", "enemy": "wraith", "count": 2, "cd": 20.0}},
-		"phases": [{"hp": 1.0, "use": ["fan", "blink", "nova"]},
-			{"hp": 0.6, "use": ["portal", "fan", "strikes", "slowzone", "blink"], "msg": "Архимаг разрывает реальность! Вы в Искажённом измерении!"},
-			{"hp": 0.3, "use": ["volley", "strikes", "summon", "blink", "nova"], "msg": "Архимаг призывает души павших учеников!", "enrage": true}],
+			"volley": {"type": "volley", "dmg": 1.4, "count": 5, "dtype": "fire", "cd": 10.0}, "summon": {"type": "summon", "enemy": "wraith", "count": 2, "cd": 20.0},
+			"ward": {"type": "shield", "charge": 1.5, "dur": 6.5, "cd_after": 20.0, "pool": 0.12, "counter": ["ice", "light"], "cd": 4.0}},
+		"caster": true,
+		"phases": [{"hp": 1.0, "use": ["fan", "blink", "nova", "ward"]},
+			{"hp": 0.6, "use": ["portal", "fan", "strikes", "slowzone", "blink", "ward"], "msg": "Архимаг разрывает реальность! Вы в Искажённом измерении!"},
+			{"hp": 0.3, "use": ["volley", "strikes", "summon", "blink", "nova", "ward"], "msg": "Архимаг призывает души павших учеников!", "enrage": true}],
 		"reward": "u_distortion_staff", "lair": "Шпиль Искажения", "lore": "Глава Круга, посмевший остановить время и потерявший душу."},
 	"necro_lord": {"name": "Некромант Забытой Крепости", "era": 0, "rig": "humanoid", "scale": 1.6, "weapon": "staff_oak", "armor": "robe", "hat": "hood",
-		"cloth": Color(0.08, 0.1, 0.08), "glow": Color(0.3, 1.0, 0.4), "hp": 1400, "dmg": 22.0, "lvl": 7, "speed": 0.85, "dtype": "dark",
+		"cloth": Color(0.08, 0.1, 0.08), "glow": Color(0.3, 1.0, 0.4), "hp": 1400, "dmg": 22.0, "lvl": 7, "speed": 0.85, "dtype": "dark", "caster": true,
 		"abilities": {"summon": {"type": "summon", "enemy": "skeleton", "count": 3, "cd": 12.0}, "beam": {"type": "beam", "dmg": 1.3, "dtype": "dark", "cd": 6.0},
-			"nova": {"type": "nova", "dmg": 1.2, "radius": 6.5, "dtype": "dark", "cd": 9.0}, "shield": {"type": "shield", "enemy": "cursed_warrior", "count": 2, "cd": 30.0},
+			"nova": {"type": "nova", "dmg": 1.2, "radius": 6.5, "dtype": "dark", "cd": 9.0}, "shield": {"type": "shield", "enemy": "cursed_warrior", "count": 2, "charge": 1.6, "dur": 7.0, "cd_after": 22.0, "pool": 0.14, "counter": ["light", "fire"], "cd": 4.0},
 			"mines": {"type": "mines", "dmg": 1.3, "count": 6, "dtype": "dark", "cd": 11.0}},
 		"phases": [{"hp": 1.0, "use": ["summon", "beam"]},
 			{"hp": 0.6, "use": ["summon", "beam", "nova", "shield"], "msg": "Некромант укрывается за щитом из душ!"},
@@ -104,7 +121,7 @@ const BOSSES := {
 	"iron_magnate": {"name": "Железный Магнат", "era": 2, "rig": "humanoid", "scale": 1.7, "weapon": "revolver", "armor": "steam_suit", "metal": true,
 		"cloth": Color(0.2, 0.18, 0.15), "hat": "tophat", "hp": 4600, "dmg": 60.0, "lvl": 6, "speed": 0.9, "dtype": "pierce",
 		"abilities": {"fan": {"type": "fan", "dmg": 0.7, "count": 6, "dtype": "pierce", "cd": 2.5}, "summon": {"type": "summon", "enemy": "industrial_guard", "count": 3, "cd": 18.0},
-			"missiles": {"type": "missiles", "dmg": 1.0, "count": 4, "dtype": "fire", "cd": 8.0}, "shield": {"type": "shield", "enemy": "automaton", "count": 2, "cd": 35.0}},
+			"missiles": {"type": "missiles", "dmg": 1.0, "count": 4, "dtype": "fire", "cd": 8.0}, "shield": {"type": "shield", "enemy": "automaton", "count": 2, "charge": 1.8, "dur": 7.0, "cd_after": 24.0, "pool": 0.13, "counter": ["lightning"], "cd": 4.0}},
 		"phases": [{"hp": 1.0, "use": ["fan", "summon"]}, {"hp": 0.6, "use": ["fan", "missiles", "shield"], "msg": "Магнат прячется за своими автоматами!"},
 			{"hp": 0.3, "use": ["fan", "missiles", "summon"], "msg": "Магнат включает форсаж бронекостюма!", "enrage": true}],
 		"reward": "u_magnate_revolver", "lair": "Особняк Магната", "lore": "Владелец всех фабрик Ферроград."},
@@ -152,7 +169,7 @@ const BOSSES := {
 	"synth_emperor": {"name": "Синтетический Император", "era": 4, "rig": "humanoid", "scale": 1.8, "weapon": "plasma_cannon", "armor": "android", "robot": true, "metal": true, "glow": Color(1.0, 0.2, 0.25),
 		"hp": 13000, "dmg": 130.0, "lvl": 7, "speed": 0.9, "dtype": "energy",
 		"abilities": {"beam": {"type": "beam", "dmg": 1.4, "dtype": "energy", "cd": 5.0}, "missiles": {"type": "missiles", "dmg": 1.1, "count": 6, "dtype": "energy", "cd": 7.0},
-			"summon": {"type": "summon", "enemy": "android", "count": 3, "cd": 18.0}, "shield": {"type": "shield", "enemy": "combat_robot", "count": 2, "cd": 30.0}, "nova": {"type": "nova", "dmg": 1.2, "radius": 8.0, "dtype": "energy", "cd": 10.0}},
+			"summon": {"type": "summon", "enemy": "android", "count": 3, "cd": 18.0}, "shield": {"type": "shield", "enemy": "combat_robot", "count": 2, "charge": 1.5, "dur": 8.0, "cd_after": 22.0, "pool": 0.13, "counter": ["lightning", "time"], "cd": 4.0}, "nova": {"type": "nova", "dmg": 1.2, "radius": 8.0, "dtype": "energy", "cd": 10.0}},
 		"phases": [{"hp": 1.0, "use": ["beam", "missiles"]}, {"hp": 0.6, "use": ["beam", "missiles", "shield", "summon"], "msg": "Император вызывает Легион!"},
 			{"hp": 0.3, "use": ["beam", "nova", "missiles", "summon"], "msg": "Император загружает боевое ядро!", "enrage": true}],
 		"reward": "u_emperor_crown", "lair": "Тронный Узел", "lore": "Первый ИИ, объявивший себя правителем."},
@@ -230,3 +247,17 @@ static func backstory(rng: RandomNumberGenerator, female: bool) -> String:
 			.replace("мечтал", "мечтала").replace("увидел", "увидела").replace("поклялся", "поклялась").replace("искал", "искала").replace("услышал", "услышала") \
 			.replace("он ", "она ").replace("его ", "её ").replace("верит", "верит").replace("защищает", "защищает").replace("сыном", "дочерью").replace("учеником", "ученицей")
 	return s.substr(0, 1).to_upper() + s.substr(1)
+
+## Enemy definition by id: the base tables, then the «Beasts of the Ages» species.
+static func eget(id, d = {}) -> Dictionary:
+	if ENEMIES.has(id):
+		return ENEMIES[id]
+	var c: Dictionary = DBCreatures.enemy_def(str(id))
+	return c if not c.is_empty() else d
+
+## Boss definition by id: the base bosses, then the 40 new ones.
+static func bget(id, d = {}) -> Dictionary:
+	if BOSSES.has(id):
+		return BOSSES[id]
+	var b: Dictionary = DBBeasts.boss(str(id))
+	return b if not b.is_empty() else d

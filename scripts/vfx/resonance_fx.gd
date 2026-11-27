@@ -11,6 +11,14 @@ const COL := {
 	"vortex": Color(0.75, 0.25, 0.95),
 	"instability": Color(0.35, 1.0, 0.85),
 	"anomaly": Color(0.85, 0.4, 1.0),
+	"firestorm": Color(1.0, 0.55, 0.2),
+	"conduct": Color(0.7, 0.9, 1.0),
+	"magma": Color(1.0, 0.38, 0.1),
+	"crystal_node": Color(0.85, 0.75, 1.0),
+	"harvest": Color(0.45, 0.9, 0.55),
+	"eclipse": Color(0.95, 0.85, 1.0),
+	"sanctuary": Color(1.0, 0.92, 0.55),
+	"echo": Color(0.45, 1.0, 0.85),
 }
 
 static func mgr():

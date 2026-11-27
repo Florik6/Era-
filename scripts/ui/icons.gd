@@ -15,7 +15,42 @@ const SKILL_ICONS := {
 }
 
 static func for_skill(id: String) -> String:
-	return SKILL_ICONS.get(id, "star")
+	if SKILL_ICONS.has(id):
+		return SKILL_ICONS[id]
+	var e: Dictionary = DBAbilities.get_ab(id)
+	if e.is_empty():
+		return "star"
+	if e.kind == "spell":
+		var sh := str(e.get("vis", {}).get("shape", ""))
+		if sh in ["construct", "raise", "march"]:
+			return "skull" if e.school == "necro" else "quake"
+		if sh in ["crystal_shell", "bone_orbit", "light_dome", "air_dome"]:
+			return "bubble"
+		match str(e.school):
+			"fire": return "meteor" if int(e.tier) >= 5 else "fire"
+			"ice": return "snow" if int(e.tier) >= 5 else "ice"
+			"lightning": return "lightning"
+			"dark": return "dark"
+			"spacetime": return "time"
+			"earth": return "quake" if int(e.tier) >= 3 else "slam"
+			"necro": return "skull"
+			"heal": return "potion"
+			"air": return "whirl"
+			"light": return "star"
+	match str(e.fx[0].c) if not e.fx.is_empty() else "":
+		"melee", "melee_seq":
+			var arc := float(e.fx[0].get("arc", 100.0)) if e.fx[0].c == "melee" else float(e.fx[0].seq[0][2])
+			return "whirl" if arc >= 300.0 else "slash2"
+		"shots", "sky_volley": return "arrows"
+		"move", "behind", "shadow_dance": return "shadowstep"
+		"buff": return "rage"
+		"nova", "blast": return "slam"
+		"cone": return "sweep"
+		"decoy": return "stealth"
+		"debuff": return "aim"
+		"zone": return "spear"
+		"reveal": return "aim"
+	return "star"
 
 static func for_weapon(cat: String) -> String:
 	match cat:

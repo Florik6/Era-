@@ -133,7 +133,7 @@ func _build_visual() -> void:
 		"dungeon":
 			MeshLib.part(self, MeshLib.box(Vector3(4, 2.5, 0.8)), stone, Vector3(0, 1.25, -1.5))
 			MeshLib.part(self, MeshLib.box(Vector3(2.4, 2.0, 0.9)), dark, Vector3(0, 1.0, -1.45))
-			_lbl("Подземелье", 3.6)
+			_lbl(str(data.get("name", "Подземелье")) if beast_dungeon() != "" else "Подземелье", 3.6)
 		"altar":
 			MeshLib.part(self, MeshLib.box(Vector3(2.0, 1.0, 1.2)), stone, Vector3(0, 0.5, 0))
 			MeshLib.part(self, MeshLib.sphere(0.3, 8, 6), MeshLib.glow(Color(0.5, 1.0, 0.8), 2.0), Vector3(0, 1.4, 0))
@@ -201,6 +201,10 @@ func _spawn_ruins_chest() -> void:
 func can_interact(_a) -> bool:
 	return true
 
+## «Beasts of the Ages» dungeon id behind this entrance ("" for the old ones).
+func beast_dungeon() -> String:
+	return str(data.get("data", {}).get("beast_dungeon", ""))
+
 func interact_label() -> String:
 	match type:
 		"trial": return "Суд Хроноса"
@@ -208,7 +212,11 @@ func interact_label() -> String:
 			var why := rift_block_reason()
 			return ("Войти: " + rift_title()) if why == "" else ("Закрыто: " + why)
 		"cp": return "Контрольная точка"
-		"dungeon": return "Спуститься в подземелье"
+		"dungeon":
+			if beast_dungeon() != "":
+				var ds: Dictionary = Game.world_state.get("dungeons", {}).get(beast_dungeon(), {})
+				return "Войти: %s%s" % [DBBeasts.dungeon(beast_dungeon()).get("name", "подземелье"), " (пройдено)" if ds.get("boss_dead", false) else ""]
+			return "Спуститься в подземелье"
 		"altar": return "Использовать алтарь"
 		"mirror": return "Коснуться зеркала"
 		"forge": return "Кузница"
@@ -230,7 +238,11 @@ func interact(a) -> void:
 		"trial": _trial_dialog()
 		"rift": _enter_rift()
 		"cp": _cp_info()
-		"dungeon": world.enter_dimension("dungeon", {"expedition": true, "poi": data.id})
+		"dungeon":
+			if beast_dungeon() != "":
+				world.enter_dungeon(beast_dungeon(), {"poi": data.id})
+			else:
+				world.enter_dimension("dungeon", {"expedition": true, "poi": data.id})
 		"altar": _altar()
 		"mirror": _mirror()
 		"forge", "lab", "workshop", "terminal": Stations.open(world, type, self)

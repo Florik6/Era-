@@ -72,6 +72,21 @@ var _lean := 0.0
 var _pitch := 0.0
 var _prev_yaw := 0.0
 var lod_tier := 0              # 0 near, 1 mid, 2 far (set by PerfLOD)
+# «Ascension of Power»: buff stat changes from statuses, passive skill hooks
+var _buff_mods := {}
+var _hooks := {}
+var _relentless := 0
+var _relentless_t := 0.0
+var _heat := 0.0
+var _overheat_t := 0.0
+var _still_t := 0.0
+var _run_t := 0.0
+var _dodge_chain := 0
+var _last_dodge_ms := 0
+var _resonant_n := 0
+var _anti_charge_cd := 0.0
+var _passive_t := 0.0
+var _last_cast_ms := 0
 var _lod_n := 0
 var _lod_sum := 0.0
 var _lod_dt := 0.0
@@ -174,6 +189,8 @@ func recalc_stats() -> void:
 	else:
 		base_hp = max_hp if stats.is_empty() else stats.get("base_hp", max_hp)
 		s["base_hp"] = base_hp
+	if data:
+		_apply_passives(s)
 	if is_player and Hardcore.active():
 		Hardcore.inst.mods_into(s)      # Hardcore injuries: real stat penalties
 	var ratio := hp / maxf(1.0, max_hp)
@@ -191,8 +208,50 @@ func recalc_stats() -> void:
 		if b.has("mag") and ammo <= 0 and reload_t <= 0.0:
 			ammo = b.mag
 
+## Learned passive class / weapon skills: stat mods and behaviour hooks.
+## Weapon passives work only with their weapon category.
+func _apply_passives(s: Dictionary) -> void:
+	_hooks = {}
+	var mc := mastery_cat()
+	for id in data.passive_ids():
+		var e: Dictionary = DBAbilities.get_ab(id)
+		if e.is_empty() or e.type != "passive":
+			continue
+		if e.kind == "weapon" and e.cat != mc:
+			continue
+		for k in e.get("mods", {}):
+			s[k] = float(s.get(k, 0.0)) + float(e.mods[k])
+		for k in e.get("hooks", {}):
+			_hooks[k] = float(_hooks.get(k, 0.0)) + float(e.hooks[k])
+
 func stat(k: String) -> float:
-	return float(stats.get(k, 0.0))
+	return float(stats.get(k, 0.0)) + float(_buff_mods.get(k, 0.0))
+
+## Passive skill behaviour value (0 when the actor has no such skill).
+func hook(k: String) -> float:
+	return float(_hooks.get(k, 0.0))
+
+## Category used by weapon mastery and skill trees: energy guns (firearms
+## dealing energy damage) have their own tree; otherwise the item category.
+func mastery_cat() -> String:
+	var c := weapon_cat()
+	if c == "firearm" and str(weapon_base().get("proj", "")) in ["pulse", "plasma", "spark"]:
+		return "energy"
+	return c
+
+func _recalc_buffs() -> void:
+	_buff_mods = {}
+	for k in statuses:
+		var md = statuses[k].get("mods")
+		if md is Dictionary:
+			for m in md:
+				_buff_mods[m] = float(_buff_mods.get(m, 0.0)) + float(md[m])
+
+func _no_knock() -> bool:
+	for k in ["steadfast", "banner"]:
+		if statuses.has(k) and statuses[k].get("no_knock", false):
+			return true
+	return false
 
 func weapon() -> Dictionary:
 	if data == null:
@@ -221,16 +280,20 @@ func is_ranged() -> bool:
 	return weapon_cat() in ["bow", "firearm", "staff"]
 
 func mastery_lvl() -> int:
-	return data.mastery_level(weapon_cat()) if data else level
+	return data.mastery_level(mastery_cat()) if data else level
 
 func speed() -> float:
+	if statuses.has("root"):
+		return 0.0
 	var sp := base_speed * (1.0 + stat("speed"))
+	if statuses.has("exhausted"):
+		sp *= 0.7
 	if statuses.has("slow"):
 		sp *= statuses.slow.get("f", 0.5)
 	if statuses.has("haste"):
 		sp *= 1.35
 	if statuses.has("timeslow"):
-		sp *= 0.35
+		sp *= float(statuses.timeslow.get("f", 0.35))
 	if blocking:
 		sp *= 0.45
 	if in_water and not statuses.has("on_ice"):
@@ -291,7 +354,8 @@ func _physics_step(delta: float) -> void:
 	if summon_time > 0.0:
 		summon_time -= delta
 		if summon_time <= 0.0:
-			die(null)
+			# a summon's time ran out: it leaves (no corpse, no kill credit)
+			AbilityExec.despawn(self)
 			return
 	_tick_timers(delta)
 	_tick_statuses(delta)
@@ -336,6 +400,17 @@ func _tick_timers(delta: float) -> void:
 		LegendaryArts.tick(self, delta)
 	if counter_t > 0.0:
 		counter_t -= delta
+	if _heat > 0.0:
+		_heat = maxf(0.0, _heat - 25.0 * delta)
+	if _overheat_t > 0.0:
+		_overheat_t -= delta
+	if _anti_charge_cd > 0.0:
+		_anti_charge_cd -= delta
+	_relentless_t -= delta
+	if _relentless_t <= 0.0:
+		_relentless = 0
+	if data and not _hooks.is_empty():
+		_passive_tick(delta)
 	_regen_t += delta
 	if _regen_t >= 0.5:
 		_regen(_regen_t)
@@ -352,6 +427,56 @@ func _tick_timers(delta: float) -> void:
 		if aggro[k] < now:
 			aggro.erase(k)
 
+## Periodic passive behaviours (stand still / run trackers, surrounded,
+## forest cover, wounded-prey marks, quick halt).
+func _passive_tick(delta: float) -> void:
+	var moving: bool = Vector2(velocity.x, velocity.z).length() > 1.2
+	if moving:
+		_run_t += delta
+		_still_t = 0.0
+	else:
+		if _run_t > 1.2 and hook("quick_aim") > 0.0:
+			apply_status("quick_aim", 1.5, {"mods": {"aspd": hook("quick_aim")}})
+		_run_t = 0.0
+		_still_t += delta
+	_passive_t += delta
+	if _passive_t < 0.5:
+		return
+	_passive_t = 0.0
+	if hook("surrounded") > 0.0:
+		var n := 0
+		for a in Game.actors_near(global_position, 5.0):
+			if a != self and not a.is_dead and Game.is_enemy(self, a):
+				n += 1
+		if n >= 3:
+			apply_status("fortress", 0.8, {"mods": {"armor": 15.0, "taken_pct": -0.1}})
+	if hook("forest") > 0.0 and Game.world and Game.world.has_method("biome_at"):
+		var bm := str(Game.world.biome_at(global_position))
+		if bm.contains("forest") or bm.contains("wood") or bm.contains("taiga"):
+			apply_status("forest_cover", 0.8, {"mods": {"crit": 0.1, "speed": 0.05}})
+	if hook("anti_charge") > 0.0 and _anti_charge_cd <= 0.0 and can_act():
+		for a in Game.actors_near(global_position, 3.6):
+			if a == self or a.is_dead or not Game.can_damage(self, a):
+				continue
+			var to_me: Vector3 = global_position - a.global_position
+			to_me.y = 0
+			var closing: float = Vector3(a.velocity.x, 0, a.velocity.z).dot(to_me.normalized())
+			if closing > 5.0 or a.act.get("name", "") == "charge" or a.statuses.has("dashing"):
+				_anti_charge_cd = 4.0
+				face_dir(-to_me.normalized())
+				if rig:
+					rig.trigger("thrust")
+				var inf := Combat.weapon_info(self, hook("anti_charge"))
+				inf.status = {"stun": 1.0}
+				inf.knock = 5.0
+				Combat.deal(self, a, inf)
+				VFX.text(chest() + Vector3(0, 0.4, 0), "Остановка натиска!", Color(1.0, 0.9, 0.55), 0.9)
+				break
+	if hook("instinct") > 0.0 and is_player:
+		for a in Game.actors_near(global_position, 30.0):
+			if a != self and not a.is_dead and Game.is_enemy(self, a) and a.hp < a.max_hp * 0.4:
+				a.apply_status("tracked", 1.0)
+
 func _regen(dt: float) -> void:
 	var in_combat := combat_t < 5.0
 	if not stats.has("no_regen") and not statuses.has("burn"):
@@ -363,6 +488,10 @@ func _regen(dt: float) -> void:
 	if data and data.has_node("st_flow"):
 		mr *= 1.6
 	if stats.has("no_mana_regen") and not in_combat:
+		mr = 0.0
+	if hook("mana_idle") > 0.0 and Time.get_ticks_msec() - _last_cast_ms > 3000:
+		mr *= 1.0 + hook("mana_idle")
+	if statuses.has("exhausted"):
 		mr = 0.0
 	if Game.world and Game.world.get("director") and Game.world.director != null:
 		mr *= Game.world.director.mods.get("mana_regen", 1.0)
@@ -388,10 +517,21 @@ func _tick_statuses(delta: float) -> void:
 				s.t = 0.0
 		elif k == "regen_buff":
 			hp = minf(max_hp, hp + s.get("hps", 5.0) * delta)
+		if s.has("dot"):
+			s["dacc"] = s.get("dacc", 0.0) + delta
+			if s.dacc >= 0.5:
+				s.dacc = 0.0
+				_apply_raw_damage(float(s.dot) * 0.5, s.get("src"), str(s.get("dtype", "dark")), true)
+		if s.has("hot"):
+			hp = minf(max_hp, hp + float(s.hot) * delta)
 		if s.t <= 0.0:
 			statuses.erase(k)
 			if k == "stealth" and rig:
 				rig.crouch = false
+			if s.has("mods"):
+				_recalc_buffs()
+			if s.has("after"):
+				apply_status(str(s.after), 6.0, {"mods": {"aspd": -0.3}})
 
 func move_style() -> Dictionary:
 	if _mstyle.is_empty():
@@ -515,7 +655,7 @@ func _tick_action(delta: float) -> void:
 	if not can_act():
 		act = {}
 		return
-	var tscale := 0.35 if statuses.has("timeslow") else 1.0
+	var tscale: float = float(statuses.timeslow.get("f", 0.35)) if statuses.has("timeslow") else 1.0
 	act.t += delta * tscale
 	if not act.done and act.t >= act.dur * act.impact:
 		act.done = true
@@ -554,8 +694,11 @@ func attack(aim: Vector3 = Vector3.ZERO) -> bool:
 	var cat := weapon_cat()
 	var interval := attack_interval()
 	attack_cd = interval
-	if statuses.has("stealth") and cat != "dagger":
+	if statuses.has("stealth") and cat != "dagger" and not (cat == "bow" and hook("silent_shot") > 0.0):
 		statuses.erase("stealth")
+	if _overheat_t > 0.0 and mastery_cat() == "energy":
+		attack_cd = 0.1
+		return false
 	match cat:
 		"bow":
 			start_action("shoot", interval * 0.85, 0.55, {"anim": "shoot"})
@@ -727,11 +870,21 @@ func parry_window() -> float:
 	var w := 0.22
 	if data and data.has_node("sw_parry"):
 		w += 0.15
-	return w
+	return w + hook("parry_window")
 
 func dodge(dir: Vector3) -> bool:
-	if not can_act() or dodge_cd > 0.0 or stamina < 18.0:
+	if not can_act() or stamina < 18.0:
 		return false
+	if dodge_cd > 0.0:
+		# «Цепочка теней»: extra dashes right after a dash
+		if hook("dodge_chain") > 0.0 and _dodge_chain < int(hook("dodge_chain")) and Time.get_ticks_msec() - _last_dodge_ms < 1200 and stamina >= 33.0 and dodge_t <= 0.0:
+			_dodge_chain += 1
+			stamina -= 15.0
+			dodge_cd = 0.0
+		else:
+			return false
+	else:
+		_dodge_chain = 0
 	dir.y = 0
 	if dir.length() < 0.1:
 		dir = facing
@@ -744,6 +897,16 @@ func dodge(dir: Vector3) -> bool:
 	if data and data.has_node("dg_evasion"):
 		cd *= 0.6
 		dodge_total *= 1.1
+	if hook("dodge_master") > 0.0:
+		cd *= 1.0 - hook("dodge_master")
+		dodge_total *= 1.12
+	if statuses.has("storm_wings"):
+		cd *= 1.0 - float(statuses.storm_wings.get("dodge_cd", 0.4))
+	_last_dodge_ms = Time.get_ticks_msec()
+	if hook("falcon") > 0.0:
+		apply_status("falcon", 2.0, {"mods": {"aspd": hook("falcon")}})
+	if hook("dodge_strike") > 0.0:
+		apply_status("dodge_strike", 1.2)
 	dodge_t = dodge_total
 	dodge_cd = cd
 	stamina -= 18.0
@@ -797,7 +960,7 @@ func invulnerable() -> bool:
 func use_slot(i: int, aim: Vector3 = Vector3.ZERO) -> bool:
 	if data == null or not can_act():
 		return false
-	var s: Array = data.auto_slots(weapon_cat())
+	var s: Array = data.active_slots(mastery_cat())
 	if i >= s.size() or s[i] == "":
 		return false
 	return use_ability(s[i], aim)
@@ -809,8 +972,14 @@ func use_ability(id: String, aim: Vector3 = Vector3.ZERO) -> bool:
 		face_dir(aim)
 	combat_t = 0.0
 	var ok := false
+	if statuses.has("silenced"):
+		if is_player:
+			Events.notify.emit("Безмолвие: умения недоступны", Color(0.7, 0.5, 1.0))
+		return false
 	if id.begins_with("art_"):
 		ok = LegendaryArts.use(self, id, aim)
+	elif DBAbilities.has(id):
+		ok = AbilityExec.use(self, id, aim)
 	elif DBSkills.is_spell(id):
 		ok = Spells.cast(self, id, aim)
 	else:
@@ -833,9 +1002,24 @@ func apply_status(id: String, dur: float, params: Dictionary = {}) -> void:
 		return
 	if kind == "boss" and id in ["stun", "freeze", "fear", "stasis"]:
 		dur *= 0.35
+	if id == "silenced" and kind == "boss":
+		return          # bosses are never fully silenced (spells only slow them)
+	if kind == "boss" and id in ["timeslow", "stasis"] and get("def") is Dictionary and get("def").get("time_immune", false):
+		VFX.text(chest(), "Неподвластен времени", Color(0.5, 1.0, 0.9), 0.8)
+		return
+	# a mage holding a spell: high-focus casts are not broken, a steady focus often holds
+	if id == "stun" and not act.is_empty() and act.name == "spell":
+		if act.data.get("steady", false):
+			return
+		if hook("cast_steady") > 0.0 and randf() < hook("cast_steady"):
+			VFX.text(chest(), "Концентрация", Color(0.7, 0.8, 1.0), 0.8)
+			return
 	var s := params.duplicate()
 	s.t = maxf(dur, statuses.get(id, {}).get("t", 0.0))
+	var had_mods: bool = statuses.has(id) and statuses[id].has("mods")
 	statuses[id] = s
+	if s.has("mods") or had_mods:
+		_recalc_buffs()
 	if id == "freeze" and statuses.has("burn"):
 		statuses.erase("burn")
 	if id == "burn" and statuses.has("freeze"):
@@ -850,7 +1034,19 @@ func take_damage(info: Dictionary) -> float:
 		VFX.text(chest(), "Уклонение", Color(0.8, 0.8, 1.0))
 		if dodge_t > 0.0 and data != null:
 			LegendaryArts.on_dodge(self, src)
+			if hook("retribution") > 0.0:
+				apply_status("retribution", 3.0)
+			if hook("last_blade") > 0.0:
+				apply_status("last_blade", 2.5)
 		return 0.0
+	# deflection (staff spin, air shield, wind throne): projectiles bounce off
+	if statuses.has("deflect") and info.get("proj", "") != "":
+		var dfl: Dictionary = statuses.deflect
+		var weak_cap: float = float(dfl.get("weak", 0.0))
+		if dfl.get("all", false) or (weak_cap > 0.0 and info.get("school", "") == "" and float(info.get("amount", 0.0)) <= weak_cap * (1.0 + 0.05 * level)):
+			VFX.text(chest(), "Отражено", Color(0.85, 1.0, 1.0))
+			VFX.burst(chest(), Color(0.85, 1.0, 1.0), 8, 0.2)
+			return 0.0
 	var amount: float = info.get("amount", 0.0)
 	var from_dir := Vector3.ZERO
 	if src and is_instance_valid(src):
@@ -873,7 +1069,18 @@ func take_damage(info: Dictionary) -> float:
 		if data != null:
 			LegendaryArts.on_block(self, amount * bv)
 		amount *= 1.0 - bv
-		stamina -= 10.0 + info.get("amount", 0.0) * 0.15
+		var st_cost: float = 10.0 + info.get("amount", 0.0) * 0.15
+		if hook("low_hp_block") > 0.0 and hp < max_hp * 0.35:
+			st_cost *= 1.0 - hook("low_hp_block")
+		if src and is_instance_valid(src) and src.has_method("hook"):
+			st_cost += src.hook("guard_break")
+			if src.hook("anti_armor") > 0.0 and src.weapon_cat() == "heavy":
+				st_cost *= 2.0
+		stamina -= st_cost
+		if hook("block_counter") > 0.0:
+			apply_status("counter_ready", 2.5)
+		if hook("block_stamina") > 0.0:
+			stamina = minf(max_stamina, stamina + hook("block_stamina"))
 		if stamina <= 0.0:
 			stamina = 0.0
 			blocking = false
@@ -884,7 +1091,7 @@ func take_damage(info: Dictionary) -> float:
 		amount *= 0.6
 	# shield
 	if shield_hp > 0.0:
-		var absorbed := minf(shield_hp, amount)
+		var absorbed := minf(shield_hp, amount * (1.0 - float(info.get("shield_pen", 0.0))))
 		shield_hp -= absorbed
 		amount -= absorbed
 		if shield_hp <= 0.0:
@@ -897,7 +1104,7 @@ func take_damage(info: Dictionary) -> float:
 		src._apply_raw_damage(dealt * 0.25, self, "pierce", true)
 	if dealt > 0.0 and not is_dead:
 		var kb: float = info.get("knock", 0.0)
-		if kb > 0.0 and from_dir.length() > 0.1 and kind != "boss":
+		if kb > 0.0 and from_dir.length() > 0.1 and kind != "boss" and not _no_knock():
 			# heavier bodies (big scale) are pushed less
 			knockback = -from_dir * kb / maxf(1.0, _scale())
 		# finishers stagger and can briefly launch lighter foes off their feet
@@ -905,7 +1112,7 @@ func take_damage(info: Dictionary) -> float:
 			act = {}
 			apply_status("stun", 0.35)
 			var la: float = info.get("launch", 0.0)
-			if la > 0.0 and _scale() <= 1.3 and is_on_floor():
+			if la > 0.0 and _scale() <= 1.3 and is_on_floor() and not _no_knock():
 				velocity.y = la
 		for st in info.get("status", {}):
 			var sv = info.status[st]
@@ -913,10 +1120,16 @@ func take_damage(info: Dictionary) -> float:
 				apply_status("burn", 4.0, {"dps": float(sv), "src": src})
 			elif st == "slow":
 				apply_status("slow", 2.5, {"f": float(sv)})
+			elif st in ["bleed", "decay"]:
+				apply_status(st, 5.0, {"dot": float(sv), "dtype": "slash" if st == "bleed" else "dark", "src": src})
+			elif st == "weakness":
+				apply_status("weakness", float(sv), {"mods": {"dmg_pct": -0.25}})
+			elif st == "suppressed":
+				apply_status("suppressed", float(sv), {"mods": {"dmg_pct": -0.2, "speed": -0.35}})
 			else:
 				apply_status(st, float(sv))
 		var heavy_hit: bool = dealt > max_hp * 0.18 or info.get("crit", false) or info.get("knock", 0.0) >= 5.0
-		VFX.hit_fx(chest() + from_dir * radius(), -from_dir, info.get("dtype", "slash"), heavy_hit, DBActors.ENEMIES.get(def_id, {}).get("metal", false) or stat("armor") > 20.0)
+		VFX.hit_fx(chest() + from_dir * radius(), -from_dir, info.get("dtype", "slash"), heavy_hit, DBActors.eget(def_id, {}).get("metal", false) or stat("armor") > 20.0)
 		if rig and (kind != "boss" or dealt > max_hp * 0.03):
 			rig.on_hit(-from_dir, heavy_hit)
 			if act.get("name", "") == "melee" and dealt > max_hp * 0.12 and kind == "humanoid" and not statuses.has("unstoppable"):
@@ -941,6 +1154,14 @@ func _parry(src, info: Dictionary = {}) -> void:
 		riposte = true
 	if data != null:
 		LegendaryArts.on_parry(self, src)
+	# «Перехват клинка»: an instant counter-strike after a parry
+	if hook("parry_counter") > 0.0 and src and is_instance_valid(src) and src is Actor:
+		var mult := hook("parry_counter")
+		get_tree().create_timer(0.12, false).timeout.connect(func():
+			if is_instance_valid(self) and not is_dead:
+				if rig:
+					rig.trigger("thrust")
+				Combat.melee(self, weapon_range() + 0.3, 90.0, Combat.weapon_info(self, mult)))
 	if is_player:
 		CombatFeel.parry_moment(self, src)
 	block_t = 999.0
@@ -1006,10 +1227,17 @@ func die(killer) -> void:
 	hp = 0.0
 	act = {}
 	blocking = false
+	# «Печать души»: the sealer drinks back a quarter of its mana
+	var seal: Dictionary = statuses.get("soul_seal", {})
+	var sealer = seal.get("caster")
+	if sealer != null and is_instance_valid(sealer) and not sealer.is_dead:
+		sealer.mana = minf(sealer.max_mana, sealer.mana + sealer.max_mana * 0.25)
+		VFX.beam(chest(), sealer.chest(), Color(0.45, 0.9, 0.6), 0.4, 0.1)
 	statuses.clear()
 	if rig:
 		rig.dead = true
 	collision_layer = 0
+	AbilityExec.note_death(global_position)
 	Audio.play_sfx("death_monster" if kind == "creature" else "death", global_position, -2.0)
 	# credit the top damage dealer if the killing blow was environmental
 	if killer == null or not is_instance_valid(killer):

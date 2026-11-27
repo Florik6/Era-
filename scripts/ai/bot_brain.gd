@@ -779,8 +779,20 @@ func _combat(delta: float) -> void:
 		strafe_t = randf_range(0.8, 2.0)
 		strafe = -strafe
 	var t_ranged: bool = t.is_ranged() if t.has_method("is_ranged") else false
-	if ranged:
-		var want_cover: bool = (p.caution > 0.55 or DBActors.ENEMIES.get(n.def_id, {}).get("cover", false) or lost_to_ranged >= 2) and t_ranged
+	var pref: Vector2 = AbilityAI.preferred_range(n) if n.data else Vector2.ZERO
+	if pref.y > 0.0 and ranged:
+		# healers and summoners keep their distance (behind the line)
+		if d < pref.x:
+			_steer(-dir, delta, 0.9)
+		elif d > pref.y:
+			_steer(dir, delta, 0.8)
+		else:
+			_steer(dir.cross(Vector3.UP) * strafe, delta, 0.5)
+		# casters keep a mana reserve for their spells (the staff bolt costs mana too)
+		if d <= r and _has_los(t, delta) and not AbilityAI.is_healer(n) and (n.weapon_cat() != "staff" or n.mana > n.max_mana * 0.45):
+			n.attack(dir)
+	elif ranged:
+		var want_cover: bool = (p.caution > 0.55 or DBActors.eget(n.def_id, {}).get("cover", false) or lost_to_ranged >= 2) and t_ranged
 		if want_cover:
 			cover_t -= delta
 			if cover_t <= 0.0:
@@ -815,9 +827,12 @@ func _combat(delta: float) -> void:
 	# dodge incoming heavy actions
 	if d < 6.0 and t.act.get("name", "") in ["skill", "spell"] and randf() < 0.03 + p.caution * 0.04:
 		n.dodge(dir.cross(Vector3.UP) * strafe)
+	# «Ascension» abilities: scored by the real situation (see AbilityAI)
+	if randf() < 0.15 and n.data and n.act.is_empty() and AbilityAI.act(n, t, d, dir):
+		return
 	# skills & spells
 	if randf() < 0.12 and n.data and n.act.is_empty():
-		var slots: Array = n.data.auto_slots(n.weapon_cat())
+		var slots: Array = n.data.active_slots(n.mastery_cat())
 		for i in 3:
 			var id: String = slots[i]
 			if id == "" or n.skill_cd.has(id):

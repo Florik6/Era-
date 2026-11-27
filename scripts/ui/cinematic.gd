@@ -165,7 +165,8 @@ func _process(delta_scaled: float) -> void:
 func _on_boss(b) -> void:
 	if b == null or not is_instance_valid(b):
 		return
-	var lore: String = String(DBActors.BOSSES.get(b.get("boss_id"), {}).get("lore", "")) if b.get("boss_id") != null else ""
+	var bdef: Dictionary = DBActors.bget(b.get("boss_id"), {}) if b.get("boss_id") != null else {}
+	var lore: String = String(bdef.get("lore", bdef.get("desc", "")))
 	play("boss", b.display_name, lore, "cine_boss_" + String(b.get("boss_id") if b.get("boss_id") != null else "x"), b.global_position + Vector3(0, 2.0, 0))
 
 func _on_item(a, it: Dictionary) -> void:

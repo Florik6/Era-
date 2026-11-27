@@ -14,9 +14,14 @@ const PAL := {
 	"energy": [Color(0.86, 0.97, 1.0), Color(0.3, 0.85, 1.0), Color(0.1, 0.3, 0.75), Color(0.6, 0.95, 1.0)],
 	"earth": [Color(0.85, 0.78, 0.65), Color(0.6, 0.5, 0.38), Color(0.3, 0.25, 0.2), Color(1.0, 0.85, 0.6)],
 	"phys": [Color(1.0, 0.97, 0.9), Color(1.0, 0.85, 0.6), Color(0.5, 0.45, 0.4), Color(1.0, 0.9, 0.7)],
+	"necro": [Color(0.8, 1.0, 0.85), Color(0.45, 0.85, 0.55), Color(0.1, 0.25, 0.12), Color(0.7, 0.95, 0.75)],
+	"heal": [Color(1.0, 0.98, 0.85), Color(1.0, 0.85, 0.45), Color(0.6, 0.4, 0.1), Color(1.0, 0.92, 0.65)],
+	"air": [Color(0.96, 1.0, 1.0), Color(0.78, 0.95, 0.95), Color(0.4, 0.6, 0.65), Color(0.9, 1.0, 1.0)],
+	"light": [Color(1.0, 1.0, 0.92), Color(1.0, 0.93, 0.6), Color(0.7, 0.55, 0.2), Color(1.0, 0.97, 0.8)],
 }
 ## Rune-circle styles of the "rune" shader.
-const RUNE := {"sigil": 0, "clock": 1, "summon": 2, "fire": 3, "frost": 4, "stars": 5, "rift": 6, "storm": 7}
+const RUNE := {"sigil": 0, "clock": 1, "summon": 2, "fire": 3, "frost": 4, "stars": 5, "rift": 6, "storm": 7,
+	"stone": 8, "bone": 9, "lotus": 10, "wind": 11, "sun": 12}
 
 static var _shaders := {}
 static var _smats := {}
@@ -154,6 +159,43 @@ void fragment() {
 		float sp = fract((a + d * 5.0 - t * 2.0) * 3.0 / (2.0 * PI));
 		v += (1.0 - smoothstep(0.0, 0.18, abs(sp - 0.5))) * smoothstep(0.1, 0.4, d) * (1.0 - smoothstep(0.8, 1.0, d));
 		v += ring(d, 0.95, 0.04) + (1.0 - smoothstep(0.0, 0.25, d)) * 0.8;
+	} else if (style == 8) {
+		v += ring(d, 0.94, 0.045) + ring(d, 0.7, 0.03) * 0.8;
+		for (int i = 0; i < 6; i++) {
+			float g0 = t * 0.25 + float(i) * PI / 3.0;
+			float g1 = g0 + PI / 3.0;
+			v += seg(p, vec2(cos(g0), sin(g0)) * 0.7, vec2(cos(g1), sin(g1)) * 0.7, 0.045);
+			v += seg(p, vec2(cos(g0), sin(g0)) * 0.2, vec2(cos(g0), sin(g0)) * 0.7, 0.02) * 0.7;
+		}
+		for (int i = 0; i < 4; i++) {
+			float g0 = -t * 0.4 + float(i) * PI / 2.0;
+			float g1 = g0 + PI / 2.0;
+			v += seg(p, vec2(cos(g0), sin(g0)) * 0.3, vec2(cos(g1), sin(g1)) * 0.3, 0.035);
+		}
+	} else if (style == 9) {
+		v += ring(d, 0.93, 0.03) + ring(d, 0.86, 0.015) * 0.6;
+		v += pow(abs(cos(a * 8.0 - t * 0.5)), 60.0) * step(0.35, d) * step(d, 0.84) * 1.2;
+		for (int i = 0; i < 12; i++) {
+			float g = t * 0.6 + float(i) * PI / 6.0;
+			v += 1.0 - smoothstep(0.0, 0.05, length(p - vec2(cos(g), sin(g)) * 0.89));
+		}
+		v += ring(d, 0.25, 0.04) + (1.0 - smoothstep(0.0, 0.1, d)) * 0.6;
+	} else if (style == 10) {
+		float pet = 0.55 + 0.33 * abs(cos(a * 4.0 + t * 0.4));
+		v += (1.0 - smoothstep(0.0, 0.05, abs(d - pet))) * 0.9;
+		float pet2 = 0.35 + 0.22 * abs(cos(a * 4.0 + PI * 0.25 - t * 0.4));
+		v += (1.0 - smoothstep(0.0, 0.04, abs(d - pet2))) * 0.7;
+		v += ring(d, 0.95, 0.03) + (1.0 - smoothstep(0.0, 0.18, d)) * 0.5;
+	} else if (style == 11) {
+		for (int i = 0; i < 4; i++) {
+			float sp = fract((a - log(d + 0.05) * 1.6 + t * 2.0 + float(i) * PI * 0.5) / (2.0 * PI));
+			v += (1.0 - smoothstep(0.0, 0.05, abs(sp - 0.5))) * smoothstep(0.15, 0.4, d) * (1.0 - smoothstep(0.85, 1.0, d)) * 0.7;
+		}
+		v += ring(d, 0.95, 0.025) * 0.8;
+	} else if (style == 12) {
+		v += pow(abs(cos(a * 8.0 + t * 0.5)), 24.0) * step(0.4, d) * (1.0 - smoothstep(0.85, 0.98, d)) * 1.1;
+		v += ring(d, 0.38, 0.04) + ring(d, 0.95, 0.03) + ring(d, 0.62, 0.015) * 0.5;
+		v += (1.0 - smoothstep(0.0, 0.3, d)) * 0.5;
 	} else {
 		v += ring(d, 0.93, 0.03);
 		for (int i = 0; i < 3; i++) {
@@ -800,7 +842,12 @@ static func rune_style_for(sch: String) -> String:
 		"ice": return "frost"
 		"lightning": return "storm"
 		"dark": return "sigil"
-		"time": return "clock"
+		"time", "spacetime": return "clock"
+		"earth": return "stone"
+		"necro": return "bone"
+		"heal": return "lotus"
+		"air": return "wind"
+		"light": return "sun"
 	return "summon"
 
 # ============================================================ phase 1: charge

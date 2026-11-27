@@ -17,3 +17,5 @@ export_credentials.cfg
 android/*.keystore
 *.jks
 android/release_pass.txt
+# Claude Code personal settings
+.claude/settings.local.json

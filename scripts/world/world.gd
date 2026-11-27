@@ -109,7 +109,8 @@ func _ready() -> void:
 			["city_peace", "res://scripts/world/city_peace.gd"], ["city_life", "res://scripts/world/city_life.gd"],
 			["city_economy", "res://scripts/world/city_economy.gd"], ["events2", "res://scripts/sim/event_director2.gd"],
 			["hardcore", "res://scripts/sim/hardcore.gd"], ["housing", "res://scripts/world/housing.gd"],
-			["civic", "res://scripts/sim/civic_legends.gd"]]:
+			["civic", "res://scripts/sim/civic_legends.gd"], ["magic_lore", "res://scripts/sim/magic_lore.gd"],
+			["beasts", "res://scripts/sim/beast_world.gd"]]:
 		if not spec[0] in DISABLED_SUBSYSTEMS:
 			_attach_optional(spec[0], spec[1])
 	cam = GameCamera.new()
@@ -440,6 +441,9 @@ func map_markers(minimap: bool = false) -> Array:
 		if p.type == "lair" and Game.world_state.bosses.get(p.data.get("boss_id", ""), {}).get("defeated", false):
 			col = Color(0.4, 0.4, 0.4)
 		out.append({"pos": p.pos, "kind": p.type, "name": nm, "color": col})
+	var bw = sys("beasts")
+	if bw != null:
+		out.append_array(bw.map_markers())
 	if director:
 		for ev in director.active_events():
 			if ev.has("pos"):
@@ -732,6 +736,8 @@ func _nearest_respawn() -> Vector3:
 func enter_dimension(kind: String, opts: Dictionary = {}) -> void:
 	if dimension != "":
 		return
+	if TimeFX.inst:
+		TimeFX.inst.clear_all("enter_dimension")
 	dim_return = opts.get("return_pos", player.global_position)
 	var d := Dimension.new()
 	add_child(d)
@@ -757,6 +763,31 @@ func enter_dimension(kind: String, opts: Dictionary = {}) -> void:
 	if not Events.item_picked.is_connected(_track_rift_pick):
 		Events.item_picked.connect(_track_rift_pick)
 
+## «Beasts of the Ages»: one of the 25 generated dungeons (a dimension-like
+## region far from the world; progress is kept in world_state.dungeons).
+func enter_dungeon(id: String, opts: Dictionary = {}) -> BeastDungeon:
+	if dimension != "" or DBBeasts.dungeon(id).is_empty():
+		return null
+	if TimeFX.inst:
+		TimeFX.inst.clear_all("enter_dungeon")
+	dim_return = opts.get("return_pos", player.global_position)
+	var d := BeastDungeon.new()
+	add_child(d)
+	d.build_dungeon(id, DIM_OFFSET, opts)
+	dim_node = d
+	dimension = "beast_" + id
+	_rift_picked.clear()
+	_apply_dim_env(d)
+	var tp: Vector3 = d.player_spawn
+	_teleport(player, tp)
+	if player.companion and is_instance_valid(player.companion):
+		_teleport(player.companion, tp + Vector3(1.5, 0, 0))
+	Audio.play_sfx("portal_enter")
+	Audio.play_music("tension")
+	Events.dimension_entered.emit(dimension)
+	Events.banner.emit(d.title, "Логово: " + d.subtitle, Color(0.95, 0.75, 0.5))
+	return d
+
 func _track_rift_pick(a, it: Dictionary) -> void:
 	if a == player and dimension != "":
 		_rift_picked.append(it.uid)
@@ -772,6 +803,8 @@ func _lose_rift_loot() -> String:
 func leave_dimension(success: bool = true) -> void:
 	if dim_node == null or mode != "world":
 		return
+	if TimeFX.inst:
+		TimeFX.inst.clear_all("leave_dimension")
 	var kind := dimension
 	dimension = ""
 	_rift_picked.clear()

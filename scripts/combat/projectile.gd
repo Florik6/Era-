@@ -167,6 +167,7 @@ func _physics_process(delta: float) -> void:
 			hit_ids[a.actor_id] = true
 			var inf := info.duplicate()
 			inf.hit_pos = closest       # the real point of impact along the flight path
+			inf.proj = kind             # deflection (staff spin, air shield) reads this
 			Combat.deal(src if (src != null and is_instance_valid(src)) else null, a, inf)
 			if kind in ["arrow", "bolt"] and VFX.mgr() != null and randf() < 0.6:
 				VFX.mgr().stuck_arrow(closest, vel, 0.7 if kind == "arrow" else 0.45, a)

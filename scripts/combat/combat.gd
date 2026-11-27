@@ -3,6 +3,8 @@ class_name Combat
 ## damage, ranged weapon firing, on-hit / on-kill effects, procs.
 
 const PHYSICAL := ["slash", "pierce", "blunt"]
+## Elemental damage that is still partly physical: armour counts at half.
+const HALF_PHYSICAL := ["earth", "air"]
 
 static func space() -> PhysicsDirectSpaceState3D:
 	if Game.world:
@@ -27,7 +29,7 @@ static func weapon_info(att: Actor, mult: float = 1.0) -> Dictionary:
 	if not w.is_empty():
 		base = ItemDB.stat(w, "dmg")
 		dtype = b.get("dtype", "slash")
-		cat = b.get("cat", "sword")
+		cat = att.mastery_cat()
 	elif att.data and att.kind == "humanoid":
 		base = 5.0 + att.level * 1.5
 		dtype = "blunt"
@@ -84,8 +86,10 @@ static func deal(att, tgt, info: Dictionary) -> float:
 				if att.data.school_level(info.school) >= 3:
 					amt *= 1.1
 			amt *= 1.0 + 0.03 * (att.level - 1)
+			amt *= _passive_mult(att, tgt, info)
 		else:
 			amt *= 1.0 + 0.09 * (att.level - 1)
+			amt *= 1.0 + att.stat("dmg_pct")
 		if att.statuses.has("curse"):
 			amt *= 0.7
 		if att.statuses.has("mutation") and att.statuses.mutation.get("good", true):
@@ -94,7 +98,7 @@ static func deal(att, tgt, info: Dictionary) -> float:
 		var cc: float = att.stat("crit") if att.data else 0.05
 		if randf() < cc:
 			crit = true
-			amt *= 1.8
+			amt *= 1.8 + att.hook("crit_dmg")
 		# backstab
 		var to_att: Vector3 = att.global_position - tgt.global_position
 		to_att.y = 0
@@ -104,7 +108,11 @@ static func deal(att, tgt, info: Dictionary) -> float:
 			else:
 				amt *= 1.15
 		if att.statuses.has("stealth"):
-			amt *= 2.5
+			amt *= 3.5 if att.hook("ambush") > 0.0 else 2.5
+			if att.hook("ambush") > 0.0 and info.get("melee", false) and tgt.kind != "boss":
+				info.status = info.get("status", {}).duplicate()
+				info.status["stun"] = 1.0
+			att.set_meta("stealth_hit_ms", Time.get_ticks_msec())
 			att.statuses.erase("stealth")
 			if att.rig:
 				att.rig.crouch = false
@@ -122,18 +130,40 @@ static func deal(att, tgt, info: Dictionary) -> float:
 		amt *= 1.25
 	if tgt.statuses.has("vulnerable"):
 		amt *= 1.4      # opened up by a perfect parry
+	amt *= maxf(0.1, 1.0 + tgt.stat("taken_pct"))
+	for sk in tgt.statuses:
+		var sd: Dictionary = tgt.statuses[sk]
+		if sd.has("vuln"):
+			amt *= 1.0 + float(sd.vuln.get(dtype_of(info), 0.0))
+		if sd.has("vuln_school") and info.get("school", "") != "":
+			amt *= 1.0 + float(sd.vuln_school.get(info.school, 0.0))
+	if dtype_of(info) == "light" and is_undead(tgt):
+		amt *= 1.5
 	if tgt.statuses.has("res_down") and info.get("dtype", "") in ["fire", "ice", "lightning", "dark", "time", "energy"]:
 		amt *= 1.3      # «Полярный залп» weakened its magic defence
 	if dtype == "lightning" and tgt.statuses.has("wet"):
 		amt *= 1.6
-	if dtype in PHYSICAL:
-		var armor: float = tgt.stat("armor") if tgt.data else tgt.stats.get("armor", 0.0)
+	if dtype in PHYSICAL or dtype in HALF_PHYSICAL:
+		var armor: float = tgt.stat("armor")
+		armor *= maxf(0.0, 1.0 + tgt.stat("armor_pct"))
 		if tgt.statuses.has("armor_break"):
 			armor *= 0.7
+		if att != null and is_instance_valid(att) and att.data != null:
+			if not info.get("melee", false):
+				armor *= 1.0 - att.hook("armor_pen")
+			elif att.weapon_cat() == "heavy":
+				armor *= 1.0 - att.hook("anti_armor")
+		if dtype in HALF_PHYSICAL:
+			armor *= 0.5
 		amt *= 60.0 / (60.0 + maxf(0.0, armor))
 	var res: float = tgt.resist.get(dtype, 0.0)
 	if tgt.data:
 		res += tgt.stat("res_" + dtype)
+	else:
+		res += float(tgt._buff_mods.get("res_" + dtype, 0.0))
+	if dtype == "energy" and att != null and is_instance_valid(att) and att.hook("phase_tune") > 0.0 and res > 0.0:
+		res *= 1.0 - att.hook("phase_tune")
+		info.shield_pen = att.hook("phase_tune")
 	amt *= 1.0 - clampf(res, -1.0, 0.85)
 	if info.get("crit_force", false) and not crit:
 		crit = true
@@ -143,11 +173,76 @@ static func deal(att, tgt, info: Dictionary) -> float:
 	if att != null and is_instance_valid(att) and info.get("src") == null:
 		info.src = att      # spells and zones: the target learns who hurt it (aggro, kill credit)
 	var dealt: float = tgt.take_damage(info)
+	# venomous creatures poison what they bite (Hardcore: the wound turns septic faster)
+	if dealt > 0.0 and att != null and is_instance_valid(att) and info.get("melee", false) and att.has_meta("species"):
+		if "poison" in DBCreatures.get_def(str(att.get_meta("species"))).get("abil", []):
+			tgt.apply_status("decay", 5.0, {"dot": att.base_dmg * 0.25, "dtype": "poison", "src": att})
+			if tgt.is_player and Hardcore.active():
+				Hardcore.inst.poison_last()
 	if dealt > 0.0 and att != null and is_instance_valid(att):
 		_on_hit(att, tgt, dealt, info)
 		if att.is_player and not info.get("proc", false):
 			CombatFeel.on_player_hit(att, tgt, dealt, info)
 	return dealt
+
+static func dtype_of(info: Dictionary) -> String:
+	return str(info.get("dtype", "slash"))
+
+static func is_undead(t) -> bool:
+	if t == null or not is_instance_valid(t):
+		return false
+	var d: Dictionary = DBActors.eget(t.def_id, {})
+	if d.get("skeleton", false) or d.get("undead", false):
+		return true
+	var id := str(t.def_id)
+	return id.contains("skeleton") or id.contains("wraith") or id.contains("lich") or id.contains("zombie") or id.contains("ghost")
+
+## «Ascension» passive skills of the attacker that change a hit.
+static func _passive_mult(att: Actor, tgt, info: Dictionary) -> float:
+	var m := 1.0
+	var melee: bool = info.get("melee", false)
+	var proc: bool = info.get("proc", false)
+	if att.hook("relentless") > 0.0 and melee and not proc:
+		m *= 1.0 + att.hook("relentless") * att._relentless
+		att._relentless = mini(5, att._relentless + 1)
+		att._relentless_t = 2.0
+	if melee and att.statuses.has("counter_ready"):
+		m *= 1.0 + att.hook("block_counter")
+		att.statuses.erase("counter_ready")
+	if melee and att.statuses.has("dodge_strike"):
+		m *= 1.0 + att.hook("dodge_strike")
+		att.statuses.erase("dodge_strike")
+	if not proc and att.statuses.has("last_blade"):
+		m *= 1.0 + att.hook("last_blade")
+		att.statuses.erase("last_blade")
+	if not melee and not proc and att.statuses.has("retribution"):
+		m *= 2.0
+		att.statuses.erase("retribution")
+	if tgt.statuses.has("hidden_mark") and str(tgt.statuses.hidden_mark.get("by", "")) == att.actor_id and not proc:
+		m *= 1.6
+		tgt.statuses.erase("hidden_mark")
+		info.status = info.get("status", {}).duplicate()
+		info.status["bleed"] = 6.0 + att.level * 0.8
+	if att.hook("big_game") > 0.0 and (tgt.kind == "boss" or tgt._scale() >= 1.45 or tgt.max_hp >= 900.0):
+		m *= 1.0 + att.hook("big_game")
+	if att.hook("high_ground") > 0.0 and not melee and att.global_position.y - tgt.global_position.y >= 1.5:
+		m *= 1.0 + att.hook("high_ground")
+	if att.hook("instinct") > 0.0 and tgt.hp < tgt.max_hp * 0.4:
+		m *= 1.0 + att.hook("instinct")
+	if att.hook("precise") > 0.0:
+		for k in ["vulnerable", "marked", "stun", "hidden_mark", "radiant", "tracked"]:
+			if tgt.statuses.has(k):
+				m *= 1.0 + att.hook("precise")
+				break
+	if att.hook("steady") > 0.0 and not melee and att._still_t >= 0.6:
+		m *= 1.0 + att.hook("steady")
+	if att.hook("switch") > 0.0 and not melee and not proc:
+		var last := str(att.get_meta("last_tgt", ""))
+		if last != "" and last != tgt.actor_id and Time.get_ticks_msec() - int(att.get_meta("last_tgt_ms", 0)) < 3000:
+			m *= 1.0 + att.hook("switch")
+		att.set_meta("last_tgt", tgt.actor_id)
+		att.set_meta("last_tgt_ms", Time.get_ticks_msec())
+	return m
 
 static func _on_hit(att: Actor, tgt: Actor, dealt: float, info: Dictionary) -> void:
 	if att.data == null:
@@ -235,10 +330,13 @@ static func melee(att: Actor, rng: float, arc_deg: float, info: Dictionary, max_
 				continue
 		if not line_of_sight(origin, t.chest()):
 			continue
+		if att.statuses.has("blind") and randf() < 0.5:
+			VFX.text(t.chest(), "Промах", Color(0.85, 0.85, 0.85), 0.8)
+			continue
 		var inf := info.duplicate()
 		inf.hit_pos = strike_point(att, t, anim)
 		var dealt := deal(att, t, inf)
-		hits.append({"target": t, "dmg": dealt, "metal_hit": DBActors.ENEMIES.get(t.def_id, {}).get("metal", false)})
+		hits.append({"target": t, "dmg": dealt, "metal_hit": DBActors.eget(t.def_id, {}).get("metal", false)})
 	_hit_destructibles(att, att.global_position, rng + 0.6, arc_deg, info)
 	return hits
 
@@ -250,7 +348,12 @@ static func melee(att: Actor, rng: float, arc_deg: float, info: Dictionary, max_
 static func strike_point(att: Actor, t, anim: String) -> Vector3:
 	var s: float = att._scale()
 	var h: float
-	var rk: String = str(DBActors.ENEMIES.get(att.def_id, {}).get("rig", "humanoid")) if att.get("def_id") != null else "humanoid"
+	var edef: Dictionary = DBActors.eget(att.def_id, {}) if att.get("def_id") != null else {}
+	var rk: String = str(edef.get("rig", "humanoid"))
+	if rk == "beast":
+		# Beasts of the Ages: the body plan decides where the blow lands
+		rk = {"quad": "wolf", "arach": "spider", "insect": "spider", "worm": "spider", "blob": "blob", "flyer": "wraith", "orb": "wraith",
+			"giant": "troll", "tree": "troll", "construct": "golem", "drake": "troll"}.get(str(edef.get("plan", "quad")), "wolf")
 	if rk in ["wolf", "spider", "blob", "mimic"]:
 		h = 0.45 * s                                       # low beasts bite and grab the legs
 	elif rk in ["wraith", "drone"]:
@@ -349,6 +452,31 @@ static func fire_weapon(att: Actor) -> void:
 		if att.data.has_node("fa_steady"):
 			spread *= 0.5
 		spread *= maxf(0.3, 1.0 - 0.025 * att.mastery_lvl())
+		spread *= maxf(0.2, 1.0 - att.hook("recoil_ctrl"))
+		if att._still_t >= 0.6:
+			spread *= maxf(0.2, 1.0 - att.hook("true_string")) * (0.5 if att.hook("steady") > 0.0 else 1.0)
+		elif att.hook("move_shot") <= 0.0 and Vector2(att.velocity.x, att.velocity.z).length() > 1.5:
+			spread *= 1.6       # shooting on the run scatters (unless trained)
+		if att.statuses.has("blind"):
+			spread *= 3.0
+		# energy weapons heat up; «Тепловой контроль» halves it, «Синхронизация» stops it
+		if att.mastery_cat() == "energy":
+			var no_heat := false
+			for sk in att.statuses:
+				if att.statuses[sk].get("no_heat", false):
+					no_heat = true
+			if not no_heat:
+				att._heat += 9.0 * (1.0 - att.hook("heat_ctrl"))
+				if att._heat >= 100.0:
+					att._heat = 0.0
+					att._overheat_t = 2.0
+					if att.is_player:
+						Events.notify.emit("Перегрев!", Color(1.0, 0.6, 0.3))
+			if att.hook("resonant") > 0.0:
+				att._resonant_n += 1
+				if att._resonant_n >= 5:
+					att._resonant_n = 0
+					info.resonant = true
 	var pellets: int = b.get("pellets", 1)
 	var kind: String = b.get("proj", "arrow")
 	var spd := 38.0
@@ -369,6 +497,10 @@ static func fire_weapon(att: Actor) -> void:
 		var ang := deg_to_rad(randf_range(-spread, spread) * (0.5 if pellets == 1 else 1.0))
 		var dir := att.facing.rotated(Vector3.UP, ang)
 		var opts := {"pierce": pierce, "range": range_m, "splash": b.get("splash", 0.0), "homing": b.get("homing", 0.0)}
+		if info.get("resonant", false) and i == 0:
+			opts.on_end = func(pos: Vector3):
+				VFX.explosion(pos, 2.0, Color(0.4, 0.9, 1.0))
+				aoe(att if is_instance_valid(att) else null, pos, 2.0, {"amount": info.amount * 0.6, "dtype": "energy", "proc": true})
 		if att._has_ability("explosive"):
 			opts.splash = maxf(opts.splash, 2.5)
 		Projectile.spawn(att, muzzle, dir * spd, info.duplicate(), kind, opts)
@@ -407,6 +539,9 @@ static func element_color(dtype: String) -> Color:
 		"dark": return Color(0.65, 0.25, 0.9)
 		"time": return Color(0.4, 1.0, 0.85)
 		"energy": return Color(0.3, 0.85, 1.0)
+		"earth": return Color(0.72, 0.58, 0.38)
+		"air": return Color(0.8, 0.96, 0.96)
+		"light": return Color(1.0, 0.93, 0.6)
 	return Color(1.0, 0.95, 0.8)
 
 # ---------------------------------------------------------------- kills
@@ -419,8 +554,10 @@ static func on_kill(killer, victim) -> void:
 	if not (k is Actor) or k.data == null:
 		return
 	k.data.kills += 1
+	if k.hook("silent_kill") > 0.0 and Time.get_ticks_msec() - int(k.get_meta("stealth_hit_ms", 0)) < 400:
+		k.apply_status("stealth", k.hook("silent_kill"))
 	k.gain_xp(int(victim.xp_value() * 0.35))
-	var cat: String = k.weapon_cat()
+	var cat: String = k.mastery_cat()
 	k.gain_mastery(cat, 8.0 + victim.level * 1.5)
 	var w: Dictionary = k.weapon()
 	if w.get("ability", "") == "nova_kill":

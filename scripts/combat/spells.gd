@@ -11,6 +11,8 @@ const BIG_SPELLS := ["meteor", "storm", "blizzard", "nova", "summon", "freeze", 
 const ULTIMATES := ["meteor", "blizzard", "storm", "nova", "riftdash"]
 
 static func cast(c: Actor, id: String, aim: Vector3) -> bool:
+	if DBAbilities.is_new_spell(id):
+		return AbilityExec.use(c, id, aim)
 	var sp := DBSkills.spell(id)
 	if sp.is_empty() or c.data == null or not c.data.knows_school(sp.school):
 		return false
@@ -62,6 +64,8 @@ static func cast(c: Actor, id: String, aim: Vector3) -> bool:
 
 ## Monster/boss casting: no mana or school requirements.
 static func cast_free(c: Actor, id: String, aim: Vector3, power: float) -> bool:
+	if DBAbilities.is_new_spell(id):
+		return AbilityExec.cast_free(c, id, aim, power)
 	var sp := DBSkills.spell(id)
 	if sp.is_empty() or c.skill_cd.has(id) or c.busy():
 		return false
