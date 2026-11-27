@@ -111,6 +111,8 @@ func _buy(it: Dictionary, price: int) -> void:
 	if ok:
 		Audio.play_sfx("coin")
 		show_toast("Куплено: " + ItemDB.display_name(it))
+		if CivicLegends.inst != null and args.get("npc") != null and is_instance_valid(args.npc):
+			CivicLegends.inst.on_trade(args.npc, price)       # real business → the merchant's career
 	else:
 		Audio.play_sfx("error")
 		show_toast("Не хватает золота или места", UITheme.BAD)
@@ -126,4 +128,6 @@ func _sell(it: Dictionary, price: int) -> void:
 		cb.call(it)
 	Audio.play_sfx("coin")
 	show_toast("Продано за %d" % price)
+	if CivicLegends.inst != null and args.get("npc") != null and is_instance_valid(args.npc):
+		CivicLegends.inst.on_trade(args.npc, price)
 	refresh()

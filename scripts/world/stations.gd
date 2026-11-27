@@ -47,6 +47,8 @@ static func _forge(world) -> void:
 					item.upg = item.get("upg", 0) + 1
 					world.player.refresh_gear()
 					Audio.play_sfx("hit_metal")
+					if CivicLegends.inst != null:
+						CivicLegends.inst.on_craft(item)
 					return true
 				return false})
 	recipes.append({"name": "Переплавить руду в шестерни", "desc": "3 руды → 1 шестерня", "cost": {"iron_ore": 3}, "gold": 5, "cb": func():

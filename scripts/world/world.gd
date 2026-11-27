@@ -108,7 +108,8 @@ func _ready() -> void:
 			["resonance", "res://scripts/combat/resonance.gd"], ["echoes", "res://scripts/world/echoes.gd"],
 			["city_peace", "res://scripts/world/city_peace.gd"], ["city_life", "res://scripts/world/city_life.gd"],
 			["city_economy", "res://scripts/world/city_economy.gd"], ["events2", "res://scripts/sim/event_director2.gd"],
-			["hardcore", "res://scripts/sim/hardcore.gd"], ["housing", "res://scripts/world/housing.gd"]]:
+			["hardcore", "res://scripts/sim/hardcore.gd"], ["housing", "res://scripts/world/housing.gd"],
+			["civic", "res://scripts/sim/civic_legends.gd"]]:
 		if not spec[0] in DISABLED_SUBSYSTEMS:
 			_attach_optional(spec[0], spec[1])
 	cam = GameCamera.new()

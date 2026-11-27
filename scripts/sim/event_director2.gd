@@ -216,6 +216,8 @@ func finish(e: Dictionary, result: String, ok: bool) -> void:
 					CityEconomy.inst.deliver(e.sid, c, v, tpl.name)
 				else:
 					CityEconomy.inst.cut_supply(e.sid, c, 0.5, -v, tpl.name)
+	if CivicLegends.inst != null:
+		CivicLegends.inst.on_event_done(e, ok)
 	var h: Dictionary = history.get(tpl.id, {})
 	if h.has("results"):
 		h.results.append({"t": Game.game_time, "result": result, "ok": ok})
@@ -422,6 +424,33 @@ func _reward(e: Dictionary) -> void:
 		var it := ItemDB.create(rid, 0, pl.level)
 		pl.data.inv.add(it)
 		Events.notify.emit("Получено: %s" % ItemDB.base(rid).get("name", rid), Color(0.7, 1.0, 0.7))
+	_medical_share(e)
+
+## Peaceful events look after the hero too: townsfolk share era medicine
+## (more when the hero is wounded in Hardcore) and point to the town healer.
+func _medical_share(e: Dictionary) -> void:
+	var tpl: Dictionary = e.tpl
+	if not String(tpl.get("cat", "")) in ["social", "economic", "explore", "atmos"]:
+		return
+	var pl = world.player
+	var hc = world.sys("hardcore")
+	var hurt: bool = hc != null and hc.enabled() and not hc.list().is_empty()
+	var med_cut: bool = tpl.get("cut", []).size() > 0 and String(tpl.cut[0]) == "medicine"
+	if not (hurt or med_cut or String(tpl.cat) == "social"):
+		return
+	var meds: Array = ItemCatalog.ids_by("medicine", Profile.current_era)
+	if meds.is_empty():
+		return
+	var mid: String = meds[absi(hash(String(tpl.id))) % meds.size()]
+	var it := ItemDB.create(mid, 0, 1)
+	it.qty = 2 if hurt else 1
+	if pl.data.inv.add(it):
+		Events.notify.emit("Вам дали: %s ×%d" % [ItemDB.base(mid).name, int(it.qty)], Color(0.6, 1.0, 0.7))
+	if hurt:
+		for n in world.settlement_npcs.get(String(e.get("sid", "")), []):
+			if is_instance_valid(n) and n.get("role") == "healer":
+				Events.notify.emit("«Покажитесь лекарю — %s принимает на площади»" % n.display_name, Color(0.7, 0.95, 0.85))
+				break
 
 func _talk(n, text: String, options: Array = []) -> void:
 	world.ui.open("dialog", {"title": n.display_name, "text": text, "options": options if not options.is_empty() else [{"text": "Хорошо", "cb": func(): pass}]})
@@ -993,7 +1022,39 @@ func _talk_visitor(e: Dictionary, n) -> void:
 		if e.tpl.has("reward_gold") and not e.data.get("paid", false):
 			e.data.paid = true
 			_reward(e)
-		_talk(n, "«%s»" % e.tpl.desc)
+		var opts: Array = []
+		# travellers in the tavern bring news from the roads: a real follow-up task
+		if String(e.tpl.get("where", "")) == "inn" and not e.data.get("lead_given", false):
+			opts.append({"text": "Расспросить о новостях с дорог", "cb": func(): _traveller_lead(e, n)})
+		opts.append({"text": "Хорошо", "cb": func(): pass})
+		_talk(n, "«%s»" % e.tpl.desc, opts)
+
+## A traveller tells about a merchant who never came back from the road; the
+## hero gets a real search task (the era's search scenario: a giver in town,
+## tracks beyond the outskirts, the missing person to find and bring home).
+func _traveller_lead(e: Dictionary, n) -> Dictionary:
+	e.data.lead_given = true
+	var base_t := {}
+	for t in DBEvents.of_era(Profile.current_era):
+		if String(t.arch) == "search":
+			base_t = t
+			break
+	if base_t.is_empty():
+		return {}
+	var tpl: Dictionary = base_t.duplicate(true)
+	tpl.id = String(base_t.id) + "_lead"
+	tpl.name = "Пропавший торговец"
+	tpl.desc = "Путник рассказал о торговце, не вернувшемся с дороги. Жена ждёт вестей."
+	tpl.npc = "Жена пропавшего торговца"
+	tpl.target = "person"
+	tpl.reward_gold = 60 + 40 * Profile.current_era
+	tpl.hours = [0, 24]      # a lead can be followed at any hour
+	var res: Dictionary = start(tpl, {}, true)
+	if not res.has("refused"):
+		Chronicle.record("event2", [world.player], {"pos_v3": e.pos, "text": "%s узнал(а) от путника о пропавшем торговце." % Profile.char.name})
+		_talk(n, "«Купец вышел из соседнего поселения три дня назад и пропал. Его жена ждёт на площади — следы ведут за город»")
+		Events.notify.emit("Новое задание: «Пропавший торговец»", Color(1.0, 0.85, 0.4))
+	return res
 
 func _timeout_visitor(e: Dictionary) -> void:
 	finish(e, "гость отправился дальше", true)

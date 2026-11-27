@@ -162,6 +162,8 @@ func end_attack(sid: String, outcome: String) -> void:
 		return
 	_set_state(c, "recovery", outcome)
 	Chronicle.record("city_recovery", [], {"pos_v3": c.pos, "place": c.name, "extra": {"outcome": outcome}})
+	if CivicLegends.inst != null:
+		CivicLegends.inst.on_attack_end(sid, outcome)      # defenders get their real deeds
 
 func _set_state(c: Dictionary, st: String, reason: String) -> void:
 	if c.state == st:

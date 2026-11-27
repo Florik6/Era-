@@ -44,6 +44,8 @@ func open_npc(n) -> void:
 			opts.append({"text": "Торговец организации", "cb": func(): world.factions.open_vendor(n.faction_id)})
 		_:
 			text = _villager_line(n)
+	if n.has_meta("civic_id"):
+		opts.append({"text": "Расспросить о жизни", "cb": func(): _civic_story(n), "close": true})
 	var qs: Array = world.quests.offers_for(n)
 	if not qs.is_empty() and n.role in ["villager", "trader", "guard"]:
 		opts.push_front({"text": "Задания (%d)" % qs.size(), "cb": func(): _quest_list(n)})
@@ -78,7 +80,9 @@ func _healer_dialog(n) -> void:
 					return
 				pl.data.gold -= price
 				hc.treat_all(src)
-				pl.heal(pl.max_hp * 0.3)})
+				pl.heal(pl.max_hp * 0.3)
+				if CivicLegends.inst != null:
+					CivicLegends.inst.on_heal(n)})
 			if era == 4:
 				var cp := price * 3
 				opts.append({"text": "Медицинская капсула — полное восстановление (%d)" % cp, "cb": func():
@@ -99,6 +103,18 @@ func _healer_dialog(n) -> void:
 	opts.append({"text": "Купить лекарства", "cb": func(): open_trade(n)})
 	opts.append({"text": "Уйти", "cb": func(): pass})
 	world.ui.open("dialog", {"title": n.display_name, "text": text, "portrait_color": Color(0.6, 0.9, 0.7), "options": opts})
+
+## A townsperson's real life story: rank and the Chronicle entries of their deeds.
+func _civic_story(n) -> void:
+	var cl = CivicLegends.inst
+	var rec: Dictionary = cl.record_of(n) if cl else {}
+	if rec.is_empty():
+		return
+	var bio: Dictionary = world.legends.biography(rec)
+	var lines: Array = bio.get("chronicle", [])
+	var t := "[b]%s[/b] — %s%s\n\n%s" % [rec.name, cl.rank_name(rec), " · живая легенда" if rec.legend else "",
+		"\n".join(lines.slice(-6)) if not lines.is_empty() else "«Пока рассказать нечего — обычная жизнь, обычная работа»."]
+	world.ui.open("dialog", {"title": rec.name, "text": t, "options": [{"text": "Назад", "cb": func(): open_npc(n)}]})
 
 func _villager_line(n) -> String:
 	var lines := ["«Времена неспокойные. На дорогах опять шалят»", "«Говорят, в руинах видели странный свет»", "«Хорошо, что стража рядом»",
@@ -184,7 +200,7 @@ func open_trade(n) -> void:
 		mi.qty = 4
 		items.append(mi)
 	world.ui.open("trade", {"title": "Торговец: " + n.display_name, "items": items, "price_mult": mult, "sell": true, "sell_mult": 0.35,
-		"buy_cb": func(it): return world.factions.buy(it, mult)})
+		"npc": n, "buy_cb": func(it): return world.factions.buy(it, mult)})
 
 func _legend_dialog(n) -> void:
 	var r: Dictionary = n.record

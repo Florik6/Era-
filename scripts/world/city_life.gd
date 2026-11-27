@@ -203,6 +203,8 @@ func assign(n) -> void:
 		elif t.has.get("inn", false) and not taken.has("bard"):
 			prof = "bard"
 	n.set_meta("prof", prof)
+	if CivicLegends.inst != null:
+		CivicLegends.inst.adopt(n, prof)      # persistent identity + peaceful career
 	if not t.homes.is_empty():
 		n.set_meta("home_bid", t.homes[absi(hash(n.actor_id)) % t.homes.size()])
 

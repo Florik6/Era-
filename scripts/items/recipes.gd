@@ -90,6 +90,8 @@ static func for_station(world, station: String) -> Array:
 				if not pd.inv.add(it):
 					world.loot.spawn_drop(it, world.player.global_position + Vector3(1, 0, 0))
 				Profile.add_stat("crafted")
+				if CivicLegends.inst != null and station in ["forge", "workshop"]:
+					CivicLegends.inst.on_craft(it)        # the town smith's real work → biography
 				Audio.play_sfx("hit_metal" if station == "forge" else "pickup")
 				return true})
 	if station == "forge":
