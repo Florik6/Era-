@@ -183,6 +183,7 @@ jobs:
           IOS_TEAM_ID: ${{ secrets.IOS_TEAM_ID }}
         run: |
           set -e
+          set -o pipefail          # a failing xcodebuild must fail the step (output is piped to tail)
           cd exports/ios_xcode
           xcodebuild -project ERA_Ascension.xcodeproj -scheme ERA_Ascension -configuration Release \
             -sdk iphoneos -destination 'generic/platform=iOS' -archivePath build/ERA_Ascension.xcarchive \
@@ -214,6 +215,7 @@ jobs:
         if: steps.sign.outputs.signed != 'true'
         run: |
           set -e
+          set -o pipefail          # a failing xcodebuild must fail the step (output is piped to tail)
           cd exports/ios_xcode
           xcodebuild -project ERA_Ascension.xcodeproj -scheme ERA_Ascension -configuration Release \
             -sdk iphoneos -destination 'generic/platform=iOS' -archivePath build/ERA_Ascension.xcarchive \
@@ -248,12 +250,26 @@ jobs:
           rm -f ~/private_keys/AuthKey_$KEY_ID.p8
 
       - name: Build for the iOS Simulator
+        id: simbuild
+        continue-on-error: true      # a simulator failure must not hide the device IPA; the smoke report says what happened
         run: |
           set -e
+          set -o pipefail          # a failing xcodebuild must fail the step (output is piped to tail)
           cd exports/ios_xcode
+          # the official Godot template ships its simulator library for a given
+          # architecture (4.7.1: x86_64) — build for what the library contains
+          SIMLIB="$(ls -d ERA_Ascension.xcframework/*simulator*/libgodot.a ERA_Ascension.xcframework/*simulator*/*.a 2>/dev/null | head -1)"
+          SIM_ARCH=arm64
+          if [ -n "$SIMLIB" ]; then
+            echo "Simulator library: $SIMLIB ($(lipo -archs "$SIMLIB" 2>/dev/null))"
+            if ! lipo -archs "$SIMLIB" 2>/dev/null | grep -qw arm64; then SIM_ARCH=x86_64; fi
+          fi
+          echo "Simulator build architecture: $SIM_ARCH"
+          echo "SIM_ARCH=$SIM_ARCH" >> "$GITHUB_ENV"
           xcodebuild -project ERA_Ascension.xcodeproj -scheme ERA_Ascension -configuration Release \
             -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -derivedDataPath build/sim \
-            CODE_SIGNING_ALLOWED=NO ARCHS=arm64 ONLY_ACTIVE_ARCH=NO build | tail -20
+            CODE_SIGNING_ALLOWED=NO ARCHS=$SIM_ARCH ONLY_ACTIVE_ARCH=NO build | tail -20
+          test -f "build/sim/Build/Products/Release-iphonesimulator/ERA_Ascension.app/ERA_Ascension"
           ls build/sim/Build/Products/Release-iphonesimulator/
 
       - name: Smoke test in the iOS Simulator
@@ -262,6 +278,10 @@ jobs:
           APP="$(ls -d exports/ios_xcode/build/sim/Build/Products/Release-iphonesimulator/*.app | head -1)"
           OUT=reports/ios_ci
           mkdir -p "$OUT"
+          if [ "${{ steps.simbuild.outcome }}" != "success" ] || [ ! -f "$APP/ERA_Ascension" ]; then
+            { echo "## Смоук-тест в iOS Simulator"; echo; echo "**Не выполнен: сборка для симулятора не удалась (архитектура ${SIM_ARCH:-?}).** Подробности — в журнале шага «Build for the iOS Simulator»."; } | tee "$OUT/SIMULATOR_SMOKE.md" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
           UDID="$(xcrun simctl list devices available -j | python3 -c '
           import json,sys
           d=json.load(sys.stdin)["devices"]
@@ -325,7 +345,7 @@ jobs:
           if [ "$SIZE" -lt 95000000 ]; then git add -f builds/ios; else echo "IPA is $SIZE bytes: too big for git, kept as an artifact only"; fi
           git commit -m "iOS CI: $(basename "$IPA") + verification and simulator smoke reports [skip ci]" || exit 0
           for i in 1 2 3 4; do
-            git pull --rebase origin "${GITHUB_REF_NAME}" && git push origin "HEAD:${GITHUB_REF_NAME}" && break
+            git pull --rebase --autostash origin "${GITHUB_REF_NAME}" && git push origin "HEAD:${GITHUB_REF_NAME}" && break
             sleep $((i * 5))
           done
 

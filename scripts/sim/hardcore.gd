@@ -450,10 +450,17 @@ func apply_medicine(a, base: String, med: Dictionary, target_id := -1) -> bool:
 	# each procedure treats ONE wound per item (the targeted / worst one)
 	if int(med.get("bleed", 0)) > 0:
 		for inj in order:
-			if int(inj.bleed) > 0 and not inj.bandaged and int(inj.bleed) <= int(med.bleed):
+			if int(inj.bleed) <= 0 or inj.bandaged:
+				continue
+			if int(inj.bleed) <= int(med.bleed):
 				inj.bandaged = true
 				done.append("кровотечение остановлено (%s)" % ZONE_NAMES[inj.zone])
-				break
+			else:
+				# too weak to stop it: a tight dressing still slows the bleeding
+				inj.bleed = maxi(1, int(inj.bleed) - int(med.bleed))
+				inj.clot = 0.0
+				done.append("кровотечение ослаблено (%s) — нужна повязка сильнее или лекарь" % ZONE_NAMES[inj.zone])
+			break
 	if int(med.get("infection", 0)) > 0:
 		var lvl: int = int(med.infection)
 		for inj in order:

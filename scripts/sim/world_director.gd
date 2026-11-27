@@ -782,6 +782,19 @@ func _tick_raid(e: Dictionary) -> void:
 
 # ---------------------------------------------------------------- faction battles near the player
 func start_battle(att: String, def_f: String, kind: String, target_id: String, pos: Vector3) -> void:
+	# organised faction battles are fought outside a peaceful town (a control
+	# point inside the walls is contested on the approach); only a real siege
+	# (the town in the "attack" state) brings the battle into the streets
+	if CityPeace.inst != null:
+		var c = CityPeace.inst.city_at(pos)
+		if c != null and c.state != "attack":
+			var dir: Vector3 = pos - c.pos
+			dir.y = 0.0
+			if dir.length() < 1.0:
+				dir = Vector3(1, 0, 0)
+			pos = c.pos + dir.normalized() * (float(c.r) + CityPeace.MARGIN + 25.0)
+			pos.y = world.ground_height(pos)
+			CityPeace.inst.stats.spawns_blocked += 1
 	var e := _ev("battle", pos, 180.0, {"att": att, "def": def_f, "kind": kind, "target": target_id, "a": [], "d": []})
 	e.name = "Битва: %s против %s" % [DBEras.faction(att).name, DBEras.faction(def_f).get("name", "защитников")]
 	var lvl: int = world.spawner.level_near_player(0)

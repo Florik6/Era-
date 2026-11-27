@@ -44,6 +44,8 @@ func setup(w) -> void:
 	world = w
 	inst = self
 	var saved: Dictionary = Game.world_state.get("city_peace", {})
+	if w.get("gen") == null:
+		return          # arena / trials / chrono-dungeon: no towns
 	for s in w.gen.settlements:
 		var sv: Dictionary = saved.get(s.id, {})
 		cities[s.id] = {"id": s.id, "name": s.get("name", ""), "pos": Vector3(s.pos.x, 0, s.pos.y), "r": float(s.get("radius", 40.0)),

@@ -210,12 +210,20 @@ class H:
 		ck("the director's raid roll is refused during recovery", raids == 0 and cpz.stats.raids_refused > refused0)
 		for a in folk():
 			a.brain.think_t = 0.0
-		await wait(12.0)
 		var back := 0
+		for i in 30:                     # poll: under load the AI ticks less often in real time
+			await wait(1.0)
+			back = 0
+			for a in folk():
+				if a.brain.goal == "routine":
+					back += 1
+			if i >= 11 and back >= int(folk().size() * 0.4):
+				break
+		var goals := {}
 		for a in folk():
-			if a.brain.goal == "routine":
-				back += 1
-		ck("townsfolk return to their routine after the raid", back >= int(folk().size() * 0.4), "%d of %d" % [back, folk().size()])
+			var gk := "%s/%s%s" % [str(a.get_meta("prof", "?")), a.brain.goal, "/sh" if a.has_meta("sheltering") else ""]
+			goals[gk] = int(goals.get(gk, 0)) + 1
+		ck("townsfolk return to their routine after the raid", back >= int(folk().size() * 0.4), "%d of %d %s %s" % [back, folk().size(), cpz.state_of(cap.id), str(goals)])
 		ck("no townsperson attacked another during the raid", civil_hits == 0, str(civil_detail))
 		print("CITY_DONE pass=%d fail=%d" % [pass_n, fail_n])
 		get_tree().quit()

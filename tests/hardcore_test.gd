@@ -140,11 +140,13 @@ class H:
 		hc.list().clear()
 		pl.hp = pl.max_hp
 		pl.recalc_stats()
+		right = pl.facing.cross(Vector3.UP).normalized()       # the hero may have turned meanwhile
 		var ra := pl.global_position + Vector3(0, 1.25, 0) + right * 0.32
 		Combat.deal(foe, pl, {"amount": pl.max_hp * 0.25, "dtype": "slash", "melee": true, "hit_pos": ra})
 		var cut: Dictionary = hc.worst("arm_r")
 		ck("a sword blow on the right arm makes a bleeding cut", cut.get("type", "") == "cut" and int(cut.get("bleed", 0)) >= 1, str(cut))
 		pl.hp = pl.max_hp
+		right = pl.facing.cross(Vector3.UP).normalized()
 		Combat.deal(foe, pl, {"amount": pl.max_hp * 0.35, "dtype": "blunt", "melee": true, "knock": 8.0, "hit_pos": pl.global_position + Vector3(0, 0.45, 0) + right * 0.1})
 		var fr: Dictionary = hc.worst("leg_r")
 		ck("a heavy blunt blow on the leg breaks it", fr.get("type", "") == "fracture", str(fr))
@@ -176,7 +178,7 @@ class H:
 		var lin := ItemDB.create("linen_bandage", 0, 1)
 		pl.data.inv.add(lin)
 		var did_lin: bool = hc.apply_medicine(pl, "linen_bandage", ItemDB.base("linen_bandage").med, int(heavy.id))
-		ck("a linen bandage cannot stop heavy bleeding", not heavy.bandaged)
+		ck("a linen bandage cannot stop heavy bleeding, only slows it", not heavy.bandaged and int(heavy.bleed) == 2)
 		var hem: bool = hc.apply_medicine(pl, "hemostatic_dressing", ItemDB.base("hemostatic_dressing").med, int(heavy.id))
 		ck("a hemostatic dressing stops it", hem and heavy.bandaged and hc.bleeding() < 3)
 		var spl: bool = hc.apply_medicine(pl, "miner_medkit", ItemDB.base("miner_medkit").med, int(fr.id))

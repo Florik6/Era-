@@ -302,8 +302,9 @@ func plan(n) -> Dictionary:
 				if n.has_meta("job") and (blk % 3) != 2:
 					act = "job"
 				else:
+					# shopping; when every counter is busy — a bench or a chat on the square
 					act = "shop"
-					kinds = ["shop_customer"]
+					kinds = ["shop_customer", "bench", "chat"]
 			else:
 				act = _leisure(n, blk)
 	if kinds.is_empty():

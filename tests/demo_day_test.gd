@@ -267,26 +267,27 @@ class H:
 		pl.equip_item(armor)
 		ck("the hero changes equipment", pl.data.inv.equipped("body").get("uid", -1) == armor.uid)
 		var gz := ItemDB.create("gauze_bandage", 0, 1)
-		gz.qty = 2
+		gz.qty = 3
 		pl.data.inv.add(gz)
 		var cln := ItemDB.create("cleansing_tincture", 0, 1)
 		pl.data.inv.add(cln)
-		for it in [gz, cln]:
-			pl.use_item(it)
+		for i in 2:
+			pl.use_item(gz)              # the first dressing may only slow a heavy bleed
+		pl.use_item(cln)
 		var leg_ok := true
 		for inj in hc.list():
 			if (int(inj.bleed) > 0 and not inj.bandaged) or (Hardcore._is_open(inj) and not inj.treated):
 				leg_ok = false
 		ck("Hardcore: the wounds are dressed at home", leg_ok)
-		var sev_before := 0
+		var sev_before := 0.0
 		for inj in hc.list():
-			sev_before += int(inj.sev)
+			sev_before += float(inj.sev) - float(inj.heal)
 		var gt_sleep := Game.game_time
 		hs.sleep(hs.sale[sid].bid)
-		var sev_after := 0
+		var sev_after := 0.0
 		for inj in hc.list():
-			sev_after += int(inj.sev)
-		ck("the hero rests until morning and recovers", Game.game_time > gt_sleep and Game.game_time - gt_sleep < 1.0 and absf(fposmod(Game.game_time, 1.0) * 24.0 - 7.0) < 0.05 and sev_after < sev_before, "sev %d → %d" % [sev_before, sev_after])
+			sev_after += float(inj.sev) - float(inj.heal)
+		ck("the hero rests until morning and recovers", Game.game_time > gt_sleep and Game.game_time - gt_sleep < 1.0 and absf(fposmod(Game.game_time, 1.0) * 24.0 - 7.0) < 0.05 and sev_after < sev_before - 0.3, "wound burden %.2f → %.2f" % [sev_before, sev_after])
 		ck("progress is saved", SaveSys.has_save())
 		var saved_gold: int = Profile.char.gold
 		SaveSys.load_profile()
