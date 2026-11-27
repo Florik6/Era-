@@ -433,6 +433,26 @@ static func random_consumable(era_i: int, rng: RandomNumberGenerator = null) -> 
 			pool.append(k)
 	return create(pool[r.randi() % pool.size()], 0, 1, r)
 
+## Russian agreement of an adjective prefix («Морозный») with the head noun of
+## an item name: feminine «Морозная кираса», neuter «Морозное копьё», plural
+## «Морозные сапоги». The prefixes are hard-stem adjectives ending in -ый/-ий/-ой.
+static func agree(adj: String, noun: String) -> String:
+	var n := noun.to_lower()
+	if adj.length() < 3 or n.length() < 2:
+		return adj
+	var stem := adj.substr(0, adj.length() - 2)
+	var last := stem.substr(stem.length() - 1)
+	var hush := last in ["ж", "ш", "ч", "щ"]
+	var velar := last in ["к", "г", "х"]
+	var end := n.substr(n.length() - 1)
+	if end in ["и", "ы"]:                       # сапоги, поножи, наручи, перчатки
+		return stem + ("ие" if hush or velar else "ые")
+	if end in ["а", "я"]:                       # кираса, рапира, броня
+		return stem + "ая"
+	if end in ["о", "е", "ё"]:                  # копьё, ружьё
+		return stem + ("ее" if hush else "ое")
+	return adj
+
 static func _gen_name(item: Dictionary, b: Dictionary, r: RandomNumberGenerator) -> String:
 	if item.rarity == 0:
 		return b.name
@@ -447,7 +467,7 @@ static func _gen_name(item: Dictionary, b: Dictionary, r: RandomNumberGenerator)
 				suffix = m.suffix
 	var nm: String = b.name
 	if prefix != "" and r.randf() < 0.8:
-		nm = prefix + " " + nm.substr(0, 1).to_lower() + nm.substr(1)
+		nm = agree(prefix, nm.get_slice(" ", 0)) + " " + nm.substr(0, 1).to_lower() + nm.substr(1)
 	if suffix != "" and item.rarity >= 2:
 		nm += " " + suffix
 	if item.rarity >= 4:

@@ -319,7 +319,10 @@ func plan(n) -> Dictionary:
 				kinds = ["shop_customer", "bench"]
 			"home":
 				kinds = ["home_bed"]
-	var out := {"act": act, "until": (blk + 1) * BLOCK, "spot_id": ""}
+	# plans expire at the block boundary plus a per-person offset (up to 15 % of
+	# a block), so a whole town never re-plans in the same frame
+	var jitter := float(absi(hash(n.actor_id)) % 100) / 100.0 * BLOCK * 0.15
+	var out := {"act": act, "until": (blk + 1) * BLOCK + jitter, "spot_id": ""}
 	if act == "patrol":
 		out.patrol = t.patrol
 		stats.patrols += 1

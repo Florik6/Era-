@@ -1,9 +1,12 @@
 # builds/ios
 
-Здесь должен лежать `ERA_Ascension_iOS.ipa`. **Сейчас файла нет.**
+`ERA_Ascension_iOS_unsigned.ipa` — сборка 0.12.0 (15), собрана в GitHub Actions на macOS (Xcode 26.6) из
+официального Xcode-проекта Godot 4.7.1. SHA-256 — в `SHA256SUMS.txt`, проверка структуры —
+`reports/ios_ci/IPA_VERIFICATION.md`.
 
-IPA собирается только на macOS. Workflow `.github/workflows/ios.yml` положит сюда файл и отчёты проверки,
-когда его macOS-задача сможет запуститься. До сих пор аккаунту GitHub не выдавалась macOS-машина.
-Без секретов подписи появится `ERA_Ascension_iOS_unsigned.ipa`: такой файл нельзя установить на произвольный iPhone.
+**Файл не подписан.** Установить его на произвольный iPhone нельзя. Варианты:
+- переподписать своим Apple ID (AltStore, Sideloadly) или открыть Xcode-проект на своём Mac и запустить на своём iPhone;
+- добавить секреты подписи в GitHub (см. `reports/IOS_BUILD_REPORT.md`, раздел 4) — тогда workflow соберёт подписанный `ERA_Ascension_iOS.ipa`.
 
-Статус, причины и варианты — в `reports/IOS_BUILD_REPORT.md`.
+В iOS Simulator игра запускалась (меню, мир, бой), полный смоук-тест не успел завершиться — подробности в
+`reports/ios_ci/SIMULATOR_SMOKE.md` и `reports/IOS_BUILD_REPORT.md`. На физическом iPhone не проверялась.

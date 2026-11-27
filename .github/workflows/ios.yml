@@ -300,7 +300,9 @@ jobs:
           xcrun simctl install "$UDID" "$APP"
           xcrun simctl launch --stdout="$PWD/$OUT/sim_stdout.log" --stderr="$PWD/$OUT/sim_stderr.log" "$UDID" "$BUNDLE_ID" --smoke-test
           RES=""
-          for i in $(seq 1 120); do
+          # the simulator build is x86_64 under Rosetta with software GL (~1 fps):
+          # give the self-test up to 25 minutes
+          for i in $(seq 1 500); do
             sleep 3
             DATA="$(xcrun simctl get_app_container "$UDID" "$BUNDLE_ID" data 2>/dev/null)"
             RES="$(find "$DATA" -name smoke_result.json 2>/dev/null | head -1)"
@@ -317,7 +319,7 @@ jobs:
             echo
             echo "Устройство: $(cat $OUT/simulator_device.txt)"
             echo
-            if [ -n "$RES" ]; then echo '```json'; cat "$OUT/smoke_result.json"; echo '```'; else echo "**Результат не получен за 6 минут.**"; echo '```'; tail -40 "$OUT/sim_stdout.log" "$OUT/sim_stderr.log"; echo '```'; fi
+            if [ -n "$RES" ]; then echo '```json'; cat "$OUT/smoke_result.json"; echo '```'; else echo "**Результат не получен за 25 минут.**"; echo; echo "Журнал запуска игры (boot.log):"; echo '```'; cat "$OUT/boot.log" 2>/dev/null; tail -20 "$OUT/sim_stdout.log" "$OUT/sim_stderr.log"; echo '```'; fi
             echo
             echo "Это проверка в симуляторе, а не установка на физический iPhone."
           } | tee "$OUT/SIMULATOR_SMOKE.md" >> "$GITHUB_STEP_SUMMARY"

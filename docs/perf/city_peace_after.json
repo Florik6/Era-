@@ -1,0 +1,51 @@
+{
+  "city": "Крепость Дальнегорье",
+  "events": {
+    "caravan": 1,
+    "invasion": 1,
+    "magic_storm": 1,
+    "rift_open": 1
+  },
+  "fight_share": 0.03,
+  "game_hours": 10.06,
+  "hits": 76,
+  "hits_by": {
+    "bot/bot -> enemy/bandit": 18,
+    "creature/monster -> guard/neutral": 1,
+    "creature/monster -> soldier/f_steel_lion": 1,
+    "creature/monster -> villager/neutral": 2,
+    "enemy/bandit -> bot/bot": 1,
+    "enemy/bandit -> trader/neutral": 3,
+    "env -> soldier/f_steel_lion": 2,
+    "env -> trader/neutral": 8,
+    "env -> villager/neutral": 6,
+    "guard/neutral -> creature/monster": 6,
+    "guard/neutral -> enemy/bandit": 17,
+    "soldier/f_steel_lion -> creature/monster": 10,
+    "soldier/f_steel_lion -> enemy/bandit": 1
+  },
+  "kills": 8,
+  "kills_by": {
+    "bot/bot x enemy/bandit": 1,
+    "guard/neutral x creature/monster": 1,
+    "guard/neutral x enemy/bandit": 2,
+    "soldier/f_steel_lion x creature/monster": 3,
+    "soldier/f_steel_lion x enemy/bandit": 1
+  },
+  "npc_seen": {
+    "bot/bot": 697,
+    "creature/monster": 24,
+    "enemy/bandit": 28,
+    "guard/neutral": 519,
+    "healer/neutral": 150,
+    "soldier/f_steel_lion": 506,
+    "trader/neutral": 363,
+    "villager/neutral": 1308
+  },
+  "peace_states": {
+    "alarm": 48,
+    "peaceful": 73,
+    "tense": 29
+  },
+  "real_s": 150.0
+}

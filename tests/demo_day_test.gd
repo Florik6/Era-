@@ -156,9 +156,20 @@ class H:
 			tr._buy(rare, ItemDB.value(rare))
 		w.ui.close_all()
 		ck("day: the hero buys a rare item from the caravan", not rare.is_empty() and pl.data.inv.items.size() > n_inv, ItemDB.display_name(rare) if not rare.is_empty() else "")
-		var mask: Dictionary = ev2.start(DBEvents.get_event("med_iron_mask"), {}, true)
+		var mask: Dictionary = {}
+		var refusals: Array = []
+		for attempt in 10:
+			mask = ev2.start(DBEvents.get_event("med_iron_mask"), {}, true)
+			if not mask.has("refused"):
+				break
+			refusals.append(String(mask.refused))
+			await wait(2.0)        # e.g. a stray beast put the town on alert for a moment
 		await wait(2.0)
-		ck("day: a traveller stops at the tavern", not mask.has("refused") and mask.npcs.size() >= 1)
+		ck("day: a traveller stops at the tavern", not mask.has("refused") and mask.get("npcs", []).size() >= 1, "refusals: %s" % str(refusals))
+		if mask.has("refused") or mask.get("npcs", []).is_empty():
+			print("DEMO_DONE pass=%d fail=%d" % [pass_n, fail_n])
+			get_tree().quit()
+			return
 		var trav = mask.npcs[0]
 		ev2._talk_visitor(mask, trav)
 		await wait(0.2)

@@ -1144,6 +1144,9 @@ func _mercy_spare(e: Dictionary) -> void:
 	var n = e.data.npc
 	if not is_instance_valid(n):
 		return
+	if n.is_dead:
+		finish(e, "died")          # someone else finished them before the hero decided
+		return
 	var rec: Dictionary = world.legends.new_record(n.display_name, {"archetype": "opportunist", "level": n.level, "pos": [n.global_position.x, n.global_position.z]})
 	rec.data = n.data.to_dict()
 	rec.backstory = "Бывший разбойник, которого пощадили на дороге."
@@ -1154,7 +1157,8 @@ func _mercy_spare(e: Dictionary) -> void:
 	unfreeze(n)
 	world.sim.active[rec.id] = n
 	Chronicle.record("mercy", [player(), n], {"pos_v3": n.global_position})
-	n.brain.on_spared(player())
+	if n.brain != null and n.brain.has_method("on_spared"):
+		n.brain.on_spared(player())
 	Profile.unlock("mercy")
 	Events.notify.emit("%s запомнит вашу милость." % n.display_name, Color(0.8, 1.0, 0.8))
 	finish(e, "spared")
