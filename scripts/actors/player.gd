@@ -14,6 +14,7 @@ var companion_mode := "follow"     # follow | attack | hold
 var scripted_move := Vector3.ZERO  # tests / cutscenes override joystick input
 var dimension := ""
 var _attack_hold_t := 0.0
+var _reload_hold := -1.0   # touch: holding «Перезарядка» on an energy weapon switches the boosted shot
 var _step_t := 0.0
 var _aura_t := 0.0
 var _last_cat := ""
@@ -37,6 +38,12 @@ func _ready() -> void:
 	hp = max_hp
 	mana = max_mana
 	stamina = max_stamina
+	ManaSys.restore_saved(self)      # a load / new scene keeps the mana the hero had
+
+func _exit_tree() -> void:
+	if not is_dead:
+		ManaSys.store(self)
+	super._exit_tree()
 
 func recalc_stats() -> void:
 	super.recalc_stats()
@@ -115,8 +122,28 @@ func _read_input(delta: float) -> void:
 		do_interact()
 	if Input.is_action_just_pressed("swap") or (tc != null and tc.consume("swap")):
 		swap_weapon()
+	if InputMap.has_action("reload") and Input.is_action_just_pressed("reload"):
+		reload()
+	if InputMap.has_action("boost") and Input.is_action_just_pressed("boost"):
+		toggle_boost()
+	if tc != null:
+		var rl_press: bool = tc.consume("reload")
+		if not Ammo.is_energy(weapon_base()):
+			_reload_hold = -1.0
+			if rl_press:
+				reload()
+		elif tc.is_held("reload"):
+			_reload_hold = maxf(_reload_hold, 0.0) + delta
+			if _reload_hold >= 0.5 and _reload_hold - delta < 0.5:
+				toggle_boost()
+		elif _reload_hold >= 0.0:
+			if _reload_hold < 0.5:
+				reload()
+			_reload_hold = -1.0
 	if Input.is_action_just_pressed("potion") or (tc != null and tc.consume("potion")):
 		quick_potion()
+	if (InputMap.has_action("mana_potion") and Input.is_action_just_pressed("mana_potion")) or (tc != null and tc.consume("mana_potion")):
+		quick_mana_potion()
 	if Input.is_action_just_pressed("companion") or (tc != null and tc.consume("companion")):
 		cycle_companion()
 	if Input.is_action_just_pressed("inventory"):
@@ -216,6 +243,8 @@ func _ritual_lock() -> bool:
 func equip_item(item: Dictionary) -> Dictionary:
 	if _ritual_lock():
 		return {"ok": false, "msg": "Нельзя менять снаряжение во время ритуала."}
+	if ItemDB.base(item.base).get("slot", "") in ["main", "off"]:
+		Ammo.cancel_reload(self, "смена оружия")
 	var res: Dictionary = data.inv.equip_item(item)
 	if res.ok:
 		Audio.play_sfx("pickup", global_position, -4.0)
@@ -273,6 +302,16 @@ func use_item(item: Dictionary) -> bool:
 	var b := ItemDB.base(item.base)
 	if b.get("slot", "") in ItemDB.SLOTS:
 		return equip_item(item).ok
+	if b.get("slot", "") == "ammo":
+		# loading a special ammo: what is in the magazine goes back to the reserve
+		var why := Ammo.select_kind(self, item.base)
+		if why != "":
+			Events.notify.emit("%s: %s" % [b.name, why], Color(1.0, 0.7, 0.4))
+			return false
+		Events.notify.emit("Заряжено: %s" % b.name, Color(0.8, 0.95, 1.0))
+		if Ammo.has_mag(weapon_base()):
+			reload()
+		return true
 	var eff: String = b.get("effect", "")
 	var ok := true
 	match eff:
@@ -291,11 +330,17 @@ func use_item(item: Dictionary) -> bool:
 			VFX.burst(chest(), Color(0.4, 1.0, 0.4), 12, 0.3)
 			Audio.play_sfx("heal", global_position)
 		"mana":
-			mana = minf(max_mana, mana + max_mana * b.power)
-			Audio.play_sfx("heal", global_position)
+			var why := ManaSys.drink(self, item.base)
+			if why != "":
+				Events.notify.emit("%s: %s" % [b.name, why], Color(0.7, 0.8, 1.0))
+				return false
 		"heal_full":
+			if potion_mana_cd > 0.0:
+				Events.notify.emit("%s: подождите %.0f с" % [b.name, ceilf(potion_mana_cd)], Color(0.7, 0.8, 1.0))
+				return false
 			hp = max_hp
 			mana = max_mana
+			potion_mana_cd = ManaSys.POTION_CD
 			Audio.play_sfx("heal", global_position)
 		"mutation":
 			var good := randf() < 0.75
@@ -392,6 +437,7 @@ func throw_bomb(base_id: String) -> void:
 		Projectile.spawn(self, chest() + facing * 0.5, (target - global_position).normalized() * 16.0 + Vector3(0, 4, 0), info, "magic", {"range": 12.0, "splash": 3.5, "color": Color(1.0, 0.6, 0.2)})})
 
 func swap_weapon() -> void:
+	Ammo.cancel_reload(self, "смена оружия")
 	var cur := weapon()
 	var cur_cat := weapon_cat()
 	var best := {}
@@ -416,7 +462,10 @@ func swap_weapon() -> void:
 		Events.notify.emit(r.msg, Color(1, 0.4, 0.4))
 
 func quick_potion() -> void:
-	var order := ["potion_hp", "potion_big"] if hp < max_hp * 0.95 else ["potion_mana"]
+	if hp >= max_hp * 0.95:
+		quick_mana_potion()
+		return
+	var order := ["potion_hp", "potion_big"]
 	for b in order:
 		for it in data.inv.items:
 			if it.base == b:
@@ -431,6 +480,39 @@ func cycle_companion() -> void:
 	companion_mode = modes[(modes.find(companion_mode) + 1) % modes.size()]
 	var names := {"follow": "За мной", "attack": "Атаковать", "hold": "Стоять"}
 	Events.notify.emit("Спутник: " + names[companion_mode], Color(0.6, 0.9, 1.0))
+
+## Energy weapons: normal shot (1 unit) ↔ boosted shot (5 units, ×4).
+func toggle_boost() -> void:
+	var why := Ammo.toggle_boost(self)
+	if why != "":
+		Events.notify.emit(why, Color(0.8, 0.8, 0.8))
+		return
+	if Ammo.boost_on(self):
+		Events.notify.emit("Усиленный выстрел: %d ед. заряда, урон ×%d" % [Ammo.BOOST_COST, int(Ammo.BOOST_MULT)], Color(0.45, 0.85, 1.0))
+	else:
+		Events.notify.emit("Обычный выстрел: 1 ед. заряда", Color(0.8, 0.9, 1.0))
+	Audio.play_sfx("ui_click", global_position, -4.0)
+
+## Quick mana potion (HUD button): the smallest one that does the job.
+func quick_mana_potion() -> void:
+	var need := max_mana - mana
+	var order := ["potion_mana_small", "potion_mana", "potion_mana_big", "potion_mana_elixir"]
+	if need > max_mana * 0.45:
+		order = ["potion_mana_big", "potion_mana", "potion_mana_elixir", "potion_mana_small"]
+	elif need > max_mana * 0.25:
+		order = ["potion_mana", "potion_mana_big", "potion_mana_small", "potion_mana_elixir"]
+	for bid in order:
+		for it in data.inv.items:
+			if it.base == bid:
+				use_item(it)
+				return
+	Events.notify.emit("Нет зелий маны", Color(0.7, 0.8, 1.0))
+
+func mana_potion_count() -> int:
+	var n := 0
+	for bid in ManaSys.POTIONS:
+		n += data.inv.count(bid)
+	return n
 
 func potion_count() -> int:
 	return data.inv.count("potion_hp") + data.inv.count("potion_big")

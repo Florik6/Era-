@@ -131,6 +131,14 @@ static func draw(ci: CanvasItem, kind: String, c: Vector2, s: float, col: Color 
 		"potion":
 			_poly(ci, [Vector2(-0.15, -0.8), Vector2(0.15, -0.8), Vector2(0.15, -0.35), Vector2(0.55, 0.15), Vector2(0.45, 0.75), Vector2(-0.45, 0.75), Vector2(-0.55, 0.15), Vector2(-0.15, -0.35)], c, s, col)
 			_poly(ci, [Vector2(-0.48, 0.2), Vector2(0.48, 0.2), Vector2(0.42, 0.7), Vector2(-0.42, 0.7)], c, s, Color(0.95, 0.2, 0.25))
+		"potion_mana":
+			_poly(ci, [Vector2(-0.15, -0.8), Vector2(0.15, -0.8), Vector2(0.15, -0.35), Vector2(0.55, 0.15), Vector2(0.45, 0.75), Vector2(-0.45, 0.75), Vector2(-0.55, 0.15), Vector2(-0.15, -0.35)], c, s, col)
+			_poly(ci, [Vector2(-0.48, 0.2), Vector2(0.48, 0.2), Vector2(0.42, 0.7), Vector2(-0.42, 0.7)], c, s, Color(0.25, 0.45, 1.0))
+		"reload":
+			# a magazine with a circular arrow around it
+			_poly(ci, [Vector2(-0.2, -0.45), Vector2(0.2, -0.45), Vector2(0.28, 0.45), Vector2(-0.12, 0.45)], c, s, col)
+			ci.draw_arc(c, s * 0.78, PI * 1.2, PI * 2.6, 16, col, w)
+			_poly(ci, [Vector2(-0.95, -0.3), Vector2(-0.45, -0.55), Vector2(-0.5, 0.0)], c, s, col)
 		"paw":
 			ci.draw_circle(c + Vector2(0, 0.25) * s, s * 0.35, col)
 			for v in [Vector2(-0.45, -0.25), Vector2(-0.15, -0.55), Vector2(0.15, -0.55), Vector2(0.45, -0.25)]:

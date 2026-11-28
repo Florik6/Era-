@@ -13,10 +13,10 @@ extends Control
 ##  - Layout editor mode: drag/resize elements; positions are stored as
 ##    fractions of the safe area in Settings.ui_layout.
 
-const ELEMENTS := ["joystick", "attack", "block", "dodge", "skill1", "skill2", "skill3", "skill4", "skill_page", "interact", "swap", "potion", "companion"]
+const ELEMENTS := ["joystick", "attack", "block", "dodge", "skill1", "skill2", "skill3", "skill4", "skill_page", "interact", "swap", "potion", "companion", "reload", "mana_potion"]
 const ELEMENT_NAMES := {"joystick": "Джойстик", "attack": "Атака", "block": "Блок", "dodge": "Рывок", "skill1": "Умение 1", "skill2": "Умение 2",
-	"skill3": "Умение 3", "skill4": "Умение 4", "skill_page": "Страница умений", "interact": "Взаимодействие", "swap": "Смена оружия", "potion": "Зелье", "companion": "Спутник"}
-const BASE_R := {"attack": 76.0, "skill1": 44.0, "skill2": 44.0, "skill3": 44.0, "skill4": 40.0, "skill_page": 26.0, "dodge": 46.0, "block": 44.0, "interact": 48.0, "swap": 30.0, "potion": 30.0, "companion": 30.0}
+	"skill3": "Умение 3", "skill4": "Умение 4", "skill_page": "Страница умений", "interact": "Взаимодействие", "swap": "Смена оружия", "potion": "Зелье", "companion": "Спутник", "reload": "Перезарядка", "mana_potion": "Зелье маны"}
+const BASE_R := {"attack": 76.0, "skill1": 44.0, "skill2": 44.0, "skill3": 44.0, "skill4": 40.0, "skill_page": 26.0, "dodge": 46.0, "block": 44.0, "interact": 48.0, "swap": 30.0, "potion": 30.0, "companion": 30.0, "reload": 30.0, "mana_potion": 30.0}
 
 var move_vec := Vector2.ZERO
 var aim_vec := Vector2.ZERO
@@ -77,6 +77,8 @@ func default_layout(sz: Vector2) -> Dictionary:
 	out["swap"] = Vector2(safe.end.x - 36.0 * bs, small_y)
 	out["potion"] = Vector2(safe.end.x - 104.0 * bs, small_y)
 	out["companion"] = Vector2(safe.end.x - 172.0 * bs, small_y)
+	out["mana_potion"] = ac + Vector2(-111.0, -317.0) * bs
+	out["reload"] = ac + Vector2(96.0, -100.0) * bs
 	return out
 
 func _layout() -> void:
@@ -307,6 +309,8 @@ func _process(delta: float) -> void:
 	if pl and is_instance_valid(pl):
 		buttons.interact.visible = pl.interact_target != null and is_instance_valid(pl.interact_target)
 		buttons.companion.visible = pl.companion != null and is_instance_valid(pl.companion) and not pl.companion.is_dead
+		buttons.reload.visible = Ammo.has_mag(pl.weapon_base())
+		buttons.mana_potion.visible = pl.max_mana >= 60.0 or pl.mana_potion_count() > 0
 		# skill buttons exist only for techniques/spells that are actually available
 		var slots: Array = pl.data.active_slots(pl.mastery_cat()) if pl.data else []
 		var any := false
@@ -358,8 +362,9 @@ func _draw() -> void:
 				ring = Color(1.0, 0.55, 0.35, 0.95)
 				if live:
 					var wb: Dictionary = pl.weapon_base()
-					if wb.has("mag"):
+					if Ammo.uses_ammo(wb):
 						badge = "…" if pl.reload_t > 0.0 else "%d" % pl.ammo
+						enabled = pl.reload_t > 0.0 or Ammo.can_fire(pl, Ammo.shot_cost(pl))
 			"block":
 				icon = "shield"
 			"dodge":
@@ -371,6 +376,23 @@ func _draw() -> void:
 				ring = Color(0.5, 1.0, 0.6, 0.95)
 			"swap":
 				icon = "swap"
+			"reload":
+				icon = "reload"
+				ring = Color(1.0, 0.85, 0.4, 0.95) if not (live and Ammo.boost_on(pl)) else Color(0.4, 0.85, 1.0, 0.95)
+				if live:
+					badge = "%d" % Ammo.reserve(pl)
+					if pl.reload_t > 0.0:
+						cd_frac = pl.reload_t / maxf(0.05, pl.reload_total)
+					enabled = pl.reload_t > 0.0 or (pl.ammo < int(pl.weapon_base().get("mag", 0)) and Ammo.reserve(pl) > 0)
+			"mana_potion":
+				icon = "potion_mana"
+				ring = Color(0.35, 0.55, 1.0, 0.9)
+				icol = Color(0.6, 0.75, 1.0, 0.95)
+				if live:
+					badge = "%d" % pl.mana_potion_count()
+					enabled = pl.mana_potion_count() > 0 and pl.potion_mana_cd <= 0.0
+					if pl.potion_mana_cd > 0.0:
+						cd_frac = pl.potion_mana_cd / ManaSys.POTION_CD
 			"potion":
 				icon = "potion"
 				ring = Color(1.0, 0.35, 0.35, 0.9)

@@ -109,7 +109,7 @@ const BASES := {
 	"module_scanner": {"name": "Сканер аномалий", "era": 3, "slot": "module", "detect": 1.0, "crit": 0.04, "model": "module", "value": 250},
 	# ===== Era 4 — Future
 	"blade_energy": {"name": "Энергоклинок", "era": 4, "slot": "main", "cat": "sword", "dmg": 75.0, "spd": 1.9, "range": 2.7, "dtype": "energy", "model": "energy_blade", "value": 450},
-	"pulse_rifle": {"name": "Импульсная винтовка", "era": 4, "slot": "main", "cat": "firearm", "dmg": 55.0, "spd": 5.0, "range": 34.0, "dtype": "energy", "model": "pulse_rifle", "two_h": true, "proj": "pulse", "mag": 40, "reload": 1.8, "spread": 2.0, "value": 500},
+	"pulse_rifle": {"name": "Импульсная винтовка", "era": 4, "slot": "main", "cat": "firearm", "dmg": 55.0, "spd": 5.0, "range": 34.0, "dtype": "energy", "model": "pulse_rifle", "two_h": true, "proj": "pulse", "mag": 30, "reload": 1.8, "spread": 2.0, "value": 500},
 	"plasma_cannon": {"name": "Плазменная пушка", "era": 4, "slot": "main", "cat": "firearm", "dmg": 140.0, "spd": 0.7, "range": 28.0, "dtype": "fire", "model": "plasma_cannon", "two_h": true, "proj": "plasma", "mag": 4, "reload": 2.6, "spread": 1.0, "splash": 3.0, "value": 600},
 	"smart_gun": {"name": "Разумный пистолет", "era": 4, "slot": "main", "cat": "firearm", "dmg": 50.0, "spd": 3.5, "range": 28.0, "dtype": "energy", "model": "smart_gun", "proj": "pulse", "mag": 20, "reload": 1.5, "spread": 1.0, "homing": 1.0, "value": 520},
 	"staff_chrono": {"name": "Хроноскипетр", "era": 4, "slot": "main", "cat": "staff", "dmg": 66.0, "spd": 1.6, "range": 26.0, "dtype": "time", "model": "staff_chrono", "two_h": true, "proj": "magic", "mana": 90, "value": 520},
@@ -123,7 +123,10 @@ const BASES := {
 	"boots_grav": {"name": "Гравиботинки", "era": 4, "slot": "feet", "armor": 12.0, "speed": 0.08, "model": "boots", "value": 300},
 	# ===== Consumables / materials (all eras)
 	"potion_hp": {"name": "Зелье здоровья", "era": -1, "slot": "use", "effect": "heal", "power": 0.4, "stack": true, "value": 15},
-	"potion_mana": {"name": "Зелье маны", "era": -1, "slot": "use", "effect": "mana", "power": 0.5, "stack": true, "value": 15},
+	"potion_mana_small": {"name": "Малое зелье маны", "era": -1, "slot": "use", "effect": "mana", "power": 0.1, "stack": true, "value": 10, "desc": "+25 маны и 10% запаса. Общая перезарядка зелий маны 8 с."},
+	"potion_mana": {"name": "Зелье маны", "era": -1, "slot": "use", "effect": "mana", "power": 0.2, "stack": true, "value": 25, "desc": "+45 маны и 20% запаса. Общая перезарядка зелий маны 8 с."},
+	"potion_mana_big": {"name": "Большое зелье маны", "era": -1, "slot": "use", "effect": "mana", "power": 0.35, "stack": true, "value": 60, "desc": "+80 маны и 35% запаса. Общая перезарядка зелий маны 8 с."},
+	"potion_mana_elixir": {"name": "Редкий магический эликсир", "era": -1, "slot": "use", "effect": "mana", "power": 0.25, "stack": true, "value": 160, "desc": "+60 маны и 25% запаса; 30 с восстановление маны +80% (в пределах общего лимита бонусов)."},
 	"potion_big": {"name": "Великое зелье", "era": -1, "slot": "use", "effect": "heal_full", "power": 1.0, "stack": true, "value": 60},
 	"elixir_mutation": {"name": "Эликсир мутации", "era": 1, "slot": "use", "effect": "mutation", "stack": true, "value": 50},
 	"scroll_identify": {"name": "Свиток распознавания", "era": -1, "slot": "use", "effect": "identify", "stack": true, "value": 20},
@@ -164,7 +167,7 @@ const CLASS_KITS := {
 	"warrior": ["sword_iron", "shield_wood", "armor_leather", "potion_hp", "potion_hp"],
 	"archer": ["bow_short", "armor_leather", "helm_hood", "potion_hp", "potion_hp"],
 	"rogue": ["dagger_iron", "armor_leather", "helm_hood", "potion_hp", "scroll_identify"],
-	"mage": ["staff_oak", "robe_mage", "potion_mana", "potion_mana", "potion_hp"],
+	"mage": ["staff_oak", "robe_mage", "potion_mana", "potion_mana", "potion_mana_small", "potion_mana_small", "potion_hp"],
 }
 
 # ---------------------------------------------------------------- modifiers
@@ -288,10 +291,12 @@ static func base(id: String) -> Dictionary:
 	var c := ItemCatalog.base(id)      # expansion items (150)
 	if not c.is_empty():
 		return c
+	if Ammo.has(id):
+		return Ammo.base(id)               # Ammo & Mana overhaul: ammunition
 	return BeastItems.base(id)         # Beasts of the Ages: materials, relics, trophies
 
 static func has_base(id: String) -> bool:
-	return BASES.has(id) or ItemCatalog.has(id) or BeastItems.has(id)
+	return BASES.has(id) or ItemCatalog.has(id) or BeastItems.has(id) or Ammo.has(id)
 
 static func roll_rarity(table: String = "normal", luck: float = 0.0, rng: RandomNumberGenerator = null) -> int:
 	var w: Array = TABLES.get(table, TABLES.normal).duplicate()
@@ -425,7 +430,7 @@ static func random_consumable(era_i: int, rng: RandomNumberGenerator = null) -> 
 	var r := rng if rng else RandomNumberGenerator.new()
 	if rng == null:
 		r.randomize()
-	var pool := ["potion_hp", "potion_hp", "potion_hp", "potion_mana", "potion_mana", "scroll_identify", "herbs", "iron_ore", "purify_salt"]
+	var pool := ["potion_hp", "potion_hp", "potion_hp", "potion_mana_small", "potion_mana_small", "potion_mana", "scroll_identify", "herbs", "iron_ore", "purify_salt"]
 	if era_i >= 1:
 		pool.append_array(["bomb_flask", "elixir_mutation", "gears"])
 	if era_i >= 2:
@@ -433,7 +438,9 @@ static func random_consumable(era_i: int, rng: RandomNumberGenerator = null) -> 
 	if era_i >= 3:
 		pool.append_array(["grenade", "circuits"])
 	if r.randf() < 0.08:
-		pool.append_array(["scroll_purify", "potion_big"])
+		pool.append_array(["scroll_purify", "potion_big", "potion_mana_big"])
+	if r.randf() < 0.025:
+		pool.append("potion_mana_elixir")
 	if r.randf() < 0.04:
 		pool.append(["tome_fire", "tome_ice", "tome_lightning", "tome_dark", "tome_spacetime", "tome_earth", "tome_heal", "tome_air", "tome_light", "tome_necro"][r.randi() % 10])
 	if r.randf() < 0.02:
@@ -538,6 +545,18 @@ static func describe(item: Dictionary) -> String:
 		t += "%s · урон [b]%.0f[/b] (%s) · %.1f уд/с · дальность %.0f м\n" % [CAT_NAMES.get(b.cat, ""), stat(item, "dmg"), DTYPE_NAMES.get(b.get("dtype", ""), ""), b.get("spd", 1.0), b.get("range", 2.0)]
 		if b.has("mag"):
 			t += "Магазин: %d · перезарядка %.1f с\n" % [b.mag, b.reload]
+		if Ammo.uses_ammo(b):
+			var ak := Ammo.kind_of(item)
+			var ln := "Боеприпасы: %s" % Ammo.base(ak).get("name", ak)
+			if Ammo.has_mag(b) and item.has("mag_cur"):
+				ln += " · заряжено %d/%d" % [int(item.mag_cur), int(b.mag)]
+			if Ammo.is_energy(b):
+				ln += " · усиленный выстрел: %d ед., ×%d" % [Ammo.BOOST_COST, int(Ammo.BOOST_MULT)]
+			t += "[color=#ffdd88]%s[/color]\n" % ln
+	if b.get("group", "") == "ammo":
+		t += "[color=#ffdd88]Для оружия: %s[/color]\n" % Ammo.FAMILY_WEAPONS.get(str(b.get("family", "")), "")
+		if str(b.get("desc", "")) != "":
+			t += "[color=#cccccc]%s[/color]\n" % b.desc
 	var labels := {"armor": "Броня", "hp": "Здоровье", "mana": "Мана", "spell": "Сила магии", "block": "Блок", "crit": "Крит. шанс",
 		"speed": "Скорость", "aspd": "Скорость атаки", "dmg_pct": "Урон", "lifesteal": "Вампиризм", "fire_dmg": "Урон огнём",
 		"ice_dmg": "Урон льдом", "lightning_dmg": "Урон молнией", "regen": "Регенерация", "luck": "Удача", "res_fire": "Сопр. огню",
@@ -567,11 +586,14 @@ static func describe(item: Dictionary) -> String:
 			if c.get("bound", false):
 				t += "[color=#cc3333]Несъёмный. %s[/color]\n" % RELEASE_METHODS.get(c.release, "")
 	if b.has("effect"):
-		var eff := {"heal": "Восстанавливает 40% здоровья.", "mana": "Восстанавливает 50% маны.", "heal_full": "Полностью восстанавливает здоровье и ману.",
+		var eff := {"heal": "Восстанавливает 40% здоровья.", "mana": "Восстанавливает 50% маны.", "heal_full": "Полностью восстанавливает здоровье и ману (общая перезарядка с зельями маны).",
 			"identify": "Раскрывает скрытые свойства предмета.", "purify": "Снимает проклятие очищением.", "release_any": "Разрывает любую связь проклятого предмета.",
 			"bomb": "Бросок: взрыв по площади.", "learn_school": "Открывает школу магии.", "mutation": "Мощное, но нестабильное усиление.",
 			"chrono_double": "Призывает вашего хронодвойника для поединка.", "companion": "Призывает боевого спутника эпохи."}
-		t += "[color=#cccccc]%s[/color]\n" % eff.get(b.effect, "")
+		var etext: String = eff.get(b.effect, "")
+		if b.effect == "mana" and str(b.get("desc", "")) != "":
+			etext = str(b.desc)
+		t += "[color=#cccccc]%s[/color]\n" % etext
 	if item.get("lore", "") != "":
 		t += "[i][color=#bbaa88]%s[/color][/i]\n" % item.lore
 	for h in item.get("history", []):

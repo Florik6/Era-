@@ -27,6 +27,7 @@ var ab_page := 0           # prepared page shown on the HUD (0 / 1)
 var saved_sets := {}       # name -> {cat: {"0": [...], "1": [...]}}
 var favorites: Array = []
 var pain_until := 0.0      # game time until which pain relief halves injury penalties
+var vitals := {}           # saved mana state: {mana, max_mana, delay, potion_cd, surge_t, surge_k}
 
 func setup_class(cid: String) -> void:
 	class_id = cid
@@ -471,7 +472,7 @@ func to_dict() -> Dictionary:
 		"gold": gold, "mastery": mastery, "schools": schools, "slots": slots, "inv": inv.to_dict(), "kills": kills,
 		"fame": fame, "companion": companion, "injuries": injuries, "pain_until": pain_until,
 		"class_pts": class_pts, "class_skills": class_skills, "spells": spells, "knowledge": knowledge, "ab_page": ab_page,
-		"saved_sets": saved_sets, "favorites": favorites}
+		"saved_sets": saved_sets, "favorites": favorites, "vitals": vitals}
 
 func from_dict(d: Dictionary) -> void:
 	name = d.get("name", name)
@@ -512,6 +513,7 @@ func from_dict(d: Dictionary) -> void:
 	ab_page = int(d.get("ab_page", 0))
 	saved_sets = d.get("saved_sets", {})
 	favorites = d.get("favorites", [])
+	vitals = d.get("vitals", {})
 	for sch in schools:
 		if not schools[sch].has("pts"):
 			schools[sch].pts = int(schools[sch].lvl)

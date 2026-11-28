@@ -22,11 +22,13 @@ static func cast(c: Actor, id: String, aim: Vector3) -> bool:
 	if c.data.school_level(sp.school) >= 6:
 		cost *= 0.85
 	if c.mana < cost:
+		ManaSys.refused(c)
 		if c.is_player:
 			Events.notify.emit("Недостаточно маны", Color(0.5, 0.6, 1.0))
 			Audio.play_sfx("error")
 		return false
-	c.mana -= cost
+	c.mana = maxf(0.0, c.mana - cost)
+	ManaSys.on_spent(c, cost, 4 if id in BIG_SPELLS else 1)
 	c.skill_cd[id] = sp.cd
 	if aim.length() < 0.01:
 		aim = c.facing

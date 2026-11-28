@@ -667,7 +667,9 @@ class H:
 			types.append(inj.type)
 			if inj.type in ["cut", "stab"]:
 				cuts += 1
-		ck("Hardcore: claws and teeth cut", cuts >= 1, "dealt=%s types=%s" % [str(dealt_w), str(types)])
+		ck("Hardcore: claws and teeth cut", cuts >= 1, "dealt=%s types=%s wolf=%s team=%s can=%s dead=%s house=%s" % [str(dealt_w), str(types), str(wolf != null and is_instance_valid(wolf)),
+			str(wolf.team) if wolf != null and is_instance_valid(wolf) else "-", str(Game.can_damage(wolf, pl)) if wolf != null and is_instance_valid(wolf) else "-",
+			str(wolf.is_dead) if wolf != null and is_instance_valid(wolf) else "-", str(Housing.blocks(wolf, pl)) if wolf != null and is_instance_valid(wolf) else "-"])
 		# real AI attacks: a wolf bites low, a giant strikes from above
 		Profile.char.injuries.clear()
 		var before_ids := {}

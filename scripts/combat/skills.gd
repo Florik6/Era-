@@ -1,6 +1,9 @@
 class_name Skills
 ## Active weapon techniques from the mastery trees.
 
+## Rounds the old ranged techniques shoot (paid up front, all or nothing).
+const AMMO := {"bw_aimed": 1, "bw_rapid": 3, "bw_special": 5, "fa_burst": 5, "fa_special": 3}
+
 static func use(a: Actor, id: String, aim: Vector3) -> bool:
 	var n := DBSkills.find_skill(id)
 	if n.is_empty() or a.data == null or not a.data.has_node(id):
@@ -8,11 +11,23 @@ static func use(a: Actor, id: String, aim: Vector3) -> bool:
 	var st: float = n.get("stamina", 0.0)
 	var mn: float = n.get("mana", 0.0)
 	if a.stamina < st or a.mana < mn:
+		if a.mana < mn:
+			ManaSys.refused(a)
 		if a.is_player:
 			Events.notify.emit("Недостаточно выносливости" if a.stamina < st else "Недостаточно маны", Color(0.9, 0.8, 0.4))
 		return false
+	var rounds := int(AMMO.get(id, 0)) if Ammo.uses_ammo(a.weapon_base()) else 0
+	if rounds > 0 and not Ammo.can_fire(a, rounds):
+		if a.is_player:
+			Events.notify.emit("%s: нужно %d боеприпасов" % [n.get("name", id), rounds], Color(1.0, 0.6, 0.4))
+			Audio.play_sfx("error")
+		return false
+	if rounds > 0:
+		Ammo.cancel_reload(a)
+		Ammo.consume(a, rounds)
 	a.stamina -= st
-	a.mana -= mn
+	a.mana = maxf(0.0, a.mana - mn)
+	ManaSys.on_spent(a, mn, 1)
 	a.skill_cd[id] = n.get("cd", 5.0)
 	if aim.length() < 0.01:
 		aim = a.facing

@@ -25,6 +25,7 @@ var joystick_size := 1.0
 var button_size := 1.0
 var camera_zoom := 1.0
 var aim_assist := true
+var auto_reload := true          # reload by itself when the magazine runs dry (if there is a reserve)
 var auto_pickup := true
 var dev_unlock_all := false     # test option: open all eras
 var vibration := true
@@ -76,6 +77,7 @@ func load_settings() -> void:
 	button_size = cf.get_value("ctrl", "buttons", button_size)
 	camera_zoom = cf.get_value("ctrl", "zoom", camera_zoom)
 	aim_assist = cf.get_value("ctrl", "aim_assist", aim_assist)
+	auto_reload = cf.get_value("ctrl", "auto_reload", auto_reload)
 	auto_pickup = cf.get_value("ctrl", "auto_pickup", auto_pickup)
 	vibration = cf.get_value("ctrl", "vibration", vibration)
 	ui_opacity = cf.get_value("ctrl", "ui_opacity", ui_opacity)
@@ -106,6 +108,7 @@ func save_settings() -> void:
 	cf.set_value("ctrl", "buttons", button_size)
 	cf.set_value("ctrl", "zoom", camera_zoom)
 	cf.set_value("ctrl", "aim_assist", aim_assist)
+	cf.set_value("ctrl", "auto_reload", auto_reload)
 	cf.set_value("ctrl", "auto_pickup", auto_pickup)
 	cf.set_value("ctrl", "vibration", vibration)
 	cf.set_value("ctrl", "ui_opacity", ui_opacity)

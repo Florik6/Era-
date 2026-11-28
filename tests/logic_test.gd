@@ -64,6 +64,9 @@ class Suite:
 		await wait(0.3)
 		var e = w.spawner.spawn_enemy("bandit", p.global_position + Vector3(1.6, 0, 0), 1)
 		e.base_hp_override = 30.0
+		for it in e.data.inv.items.duplicate():      # the training target carries no potions
+			if ItemDB.base(it.base).get("slot", "") == "use":
+				e.data.inv.remove(it.uid)
 		e.brain.p = DBActors.ARCHETYPES.aggressive
 		e.base_speed = 0.0
 		e.refresh_gear()

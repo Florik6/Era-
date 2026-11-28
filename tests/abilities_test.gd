@@ -405,6 +405,18 @@ class H:
 			pl.statuses.erase("exhausted")
 			pl.statuses.erase("silenced")
 			AbilityExec.cataclysm_until = 0
+			AbilityExec._high_until.clear()       # one high spell at a time (0.15.0): each is tested alone
+			pl.reload_t = 0.0
+			var wb: Dictionary = pl.weapon_base()
+			if Ammo.uses_ammo(wb):                # ranged skills spend real rounds (0.15.0)
+				if Ammo.has_mag(wb):
+					Ammo.set_loaded(pl, int(wb.mag))
+				elif Ammo.reserve(pl) < 20:
+					while d.inv.is_full() and not d.inv.items.is_empty():
+						d.inv.items.pop_front()
+					var am := ItemDB.create(Ammo.kind_of(pl.weapon()), 0, 1)
+					am.qty = 40
+					d.inv.add(am)
 			if int(e.get("tier", 0)) == 6:
 				while d.inv.is_full() and not d.inv.items.is_empty():
 					d.inv.items.pop_front()
@@ -431,6 +443,9 @@ class H:
 			ok_n += 1
 			var ct := AbilityExec.cast_time(pl, e)
 			await wait(ct + 1.3 + (2.5 if int(e.get("tier", 0)) == 6 else 0.0))
+			var linger := 0.0
+			if int(e.get("tier", 0)) == 6:
+				linger = float(e.fx[0].get("dur", 6.0)) + 1.5 - 2.5    # let the cataclysm end before the next ability's dummies
 			var now := snapshot()
 			var new_st := false
 			for k in now.st:
@@ -459,6 +474,8 @@ class H:
 				effect_n += 1
 			else:
 				no_effect.append(e.id)
+			if linger > 0.0:
+				await wait(linger)
 			pl.statuses.erase("magic_shield")
 			pl.shield_hp = 0.0
 			d.ab_page = 0

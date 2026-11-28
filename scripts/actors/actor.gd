@@ -52,8 +52,14 @@ var act := {}
 var attack_cd := 0.0
 var combo := 0
 var combo_t := 0.0
-var ammo := 0
+## Rounds in the equipped weapon's magazine (stored in the weapon item, see Ammo).
+var ammo: int:
+	get:
+		return Ammo.loaded(self)
+	set(v):
+		Ammo.set_loaded(self, v)
 var reload_t := 0.0
+var reload_total := 1.0
 var blocking := false
 var block_t := 0.0
 var dodge_t := 0.0
@@ -87,6 +93,9 @@ var _resonant_n := 0
 var _anti_charge_cd := 0.0
 var _passive_t := 0.0
 var _last_cast_ms := 0
+var mana_delay_t := 0.0          # no mana regeneration right after a cast (ManaSys)
+var _mana_fresh := true          # an NPC that has not cast yet enters the world with a full pool
+var potion_mana_cd := 0.0        # shared cool-down of mana potions
 var _lod_n := 0
 var _lod_sum := 0.0
 var _lod_dt := 0.0
@@ -201,12 +210,9 @@ func recalc_stats() -> void:
 	if hp > 0:
 		hp = clampf(max_hp * ratio, 1.0, max_hp)
 	mana = minf(mana, max_mana)
+	if _mana_fresh and not is_player:
+		mana = max_mana       # NPCs spawn with full mana (the default 50 was hidden by the old fast regen)
 	stamina = minf(stamina, max_stamina)
-	var w := weapon()
-	if not w.is_empty():
-		var b := ItemDB.base(w.base)
-		if b.has("mag") and ammo <= 0 and reload_t <= 0.0:
-			ammo = b.mag
 
 ## Learned passive class / weapon skills: stat mods and behaviour hooks.
 ## Weapon passives work only with their weapon category.
@@ -306,7 +312,9 @@ func can_act() -> bool:
 	return not is_dead and not statuses.has("stun") and not statuses.has("freeze") and not statuses.has("stasis")
 
 func busy() -> bool:
-	return not act.is_empty() and act.t < act.dur * 0.75
+	# an action stays busy until its impact: a paid spell whose release comes
+	# late (long cast) must not be replaced by an attack and lost
+	return not act.is_empty() and (act.t < act.dur * 0.75 or not act.get("done", false))
 
 # ---------------------------------------------------------------- loop
 func _physics_process(delta: float) -> void:
@@ -388,10 +396,15 @@ func _tick_timers(delta: float) -> void:
 		skill_cd[k] -= delta
 		if skill_cd[k] <= 0.0:
 			skill_cd.erase(k)
+	if mana_delay_t > 0.0:
+		mana_delay_t = maxf(0.0, mana_delay_t - delta)
+	if potion_mana_cd > 0.0:
+		potion_mana_cd = maxf(0.0, potion_mana_cd - delta)
 	if reload_t > 0.0:
 		reload_t -= delta
 		if reload_t <= 0.0:
-			ammo = weapon_base().get("mag", 1)
+			reload_t = 0.0
+			Ammo.finish_reload(self)        # rounds move from the reserve only now
 	if dodge_t > 0.0:
 		dodge_t -= delta
 		if dodge_t <= 0.0 and dodge_kind == "leap" and is_player:
@@ -484,18 +497,12 @@ func _regen(dt: float) -> void:
 		hp = minf(max_hp, hp + r * dt)
 	if stats.has("drain") and not in_combat:
 		hp = maxf(1.0, hp - max_hp * 0.01 * dt)
-	var mr := max_mana * (0.025 if in_combat else 0.05)
-	if data and data.has_node("st_flow"):
-		mr *= 1.6
-	if stats.has("no_mana_regen") and not in_combat:
-		mr = 0.0
-	if hook("mana_idle") > 0.0 and Time.get_ticks_msec() - _last_cast_ms > 3000:
-		mr *= 1.0 + hook("mana_idle")
-	if statuses.has("exhausted"):
-		mr = 0.0
-	if Game.world and Game.world.get("director") and Game.world.director != null:
-		mr *= Game.world.director.mods.get("mana_regen", 1.0)
-	mana = minf(max_mana, mana + mr * dt)
+	# mana: slow, state-dependent regeneration with a pause after casts (ManaSys)
+	var mr := ManaSys.regen_rate(self)
+	if mr > 0.0 and mana < max_mana:
+		var before := mana
+		mana = minf(max_mana, mana + mr * dt)
+		ManaSys.stats.regen += mana - before
 	if not blocking:
 		stamina = minf(max_stamina, stamina + 22.0 * dt * (1.0 - clampf(stat("hc_st_regen"), 0.0, 0.8)))
 
@@ -633,6 +640,9 @@ func _update_rig(delta: float) -> void:
 		rig.dodge_p = 1.0 - dodge_t / maxf(0.05, dodge_total)
 	if not act.is_empty():
 		rig.action_p = clampf(act.t / act.dur, 0.0, 1.0)
+	elif reload_t > 0.0 and rig is HumanoidRig:
+		rig.action = "reload"
+		rig.action_p = clampf(1.0 - reload_t / maxf(0.1, reload_total), 0.0, 1.0)
 	elif rig.action != "":
 		rig.action = ""
 
@@ -701,23 +711,27 @@ func attack(aim: Vector3 = Vector3.ZERO) -> bool:
 		return false
 	match cat:
 		"bow":
+			if not Ammo.can_fire(self):
+				_dry_fire()
+				return false
 			start_action("shoot", interval * 0.85, 0.55, {"anim": "shoot"})
 			Audio.play_sfx("bow_draw", global_position, -8.0)
 		"firearm":
 			if reload_t > 0.0:
-				attack_cd = 0.1
+				if ammo > 0:
+					Ammo.cancel_reload(self)    # fire what is left: the reload stops, nothing moves
+				else:
+					attack_cd = 0.1
+					return false
+			if not Ammo.can_fire(self, Ammo.shot_cost(self)):
+				_dry_fire()
 				return false
-			if ammo <= 0:
-				reload()
-				return false
-			ammo -= 1
+			if Ammo.boost_on(self):
+				attack_cd = interval * 2.2     # a boosted shot charges longer
 			start_action("shoot", minf(0.25, interval * 0.8), 0.05, {"anim": "shoot"})
 		"staff":
-			if mana >= 3.0:
-				mana -= 3.0
-				start_action("cast_bolt", minf(0.55, interval * 0.9), 0.45, {"anim": "cast"})
-			else:
-				start_action("melee", 0.55, 0.45, {"anim": "overhead", "mult": 0.6})
+			# the staff's basic bolt is free: mana is for real spells (see ManaSys)
+			start_action("cast_bolt", minf(0.55, interval * 0.9), 0.45, {"anim": "cast"})
 		_:
 			var chain := _combo_chain(cat)
 			var idx := combo % chain.size()
@@ -816,7 +830,13 @@ func _on_impact(a: Dictionary) -> void:
 			if fin and is_player:
 				_finisher_fx(r, hits.size() > 0)
 		"shoot":
-			Combat.fire_weapon(self)
+			# the round is spent only by a shot that is really fired
+			if Ammo.consume(self, Ammo.shot_cost(self)):
+				Combat.fire_weapon(self)
+				if Ammo.has_mag(weapon_base()) and ammo <= 0 and (not is_player or (Settings.auto_reload and Ammo.reserve(self) > 0)):
+					reload()
+			else:
+				_dry_fire()
 		"cast_bolt":
 			Combat.staff_bolt(self)
 		"skill", "spell":
@@ -842,15 +862,36 @@ func _finisher_fx(r: float, landed: bool) -> void:
 	if landed:
 		CombatFeel.punch(0.08, 0.22)
 
-func reload() -> void:
+func reload() -> String:
+	var why := Ammo.start_reload(self)
+	if why == "":
+		reload_total = maxf(0.1, reload_t)
+	elif is_player and why != "магазин полон" and why != "уже перезаряжается":
+		Events.notify.emit("Перезарядка невозможна: " + why, Color(1.0, 0.6, 0.4))
+	return why
+
+## Trigger pulled with nothing to fire: a dry click and a clear reason.
+func _dry_fire() -> void:
+	Ammo.stats.dry_clicks += 1
+	if is_player:
+		Ammo.flash_ms = Time.get_ticks_msec()
+	attack_cd = 0.35
 	var b := weapon_base()
-	if not b.has("mag") or reload_t > 0.0 or ammo >= b.mag:
+	if not is_player:
+		if Ammo.has_mag(b):
+			reload()
 		return
-	var t: float = b.get("reload", 1.5)
-	if data and data.has_node("fa_reload"):
-		t *= 0.6
-	reload_t = t
-	Audio.play_sfx("reload", global_position, -4.0)
+	Audio.play_sfx("ui_click", global_position, -6.0)
+	if Ammo.boost_on(self) and ammo > 0 and (Ammo.reserve(self) <= 0 or not Settings.auto_reload):
+		Events.notify.emit("Мало заряда для усиленного выстрела (нужно %d) — переключите режим или перезарядитесь" % Ammo.BOOST_COST, Color(1.0, 0.75, 0.4))
+		return
+	if Ammo.has_mag(b) and Ammo.reserve(self) > 0:
+		if Settings.auto_reload:
+			reload()
+		else:
+			Events.notify.emit("Магазин пуст — нажмите «Перезарядка»", Color(1.0, 0.75, 0.4))
+	else:
+		Events.notify.emit("Нет боеприпасов: %s" % Ammo.base(Ammo.kind_of(weapon())).get("name", "боеприпасы"), Color(1.0, 0.5, 0.4))
 
 func set_block(on: bool) -> void:
 	if on and (not can_act() or stamina < 5.0 or dodge_t > 0.0):
@@ -875,6 +916,8 @@ func parry_window() -> float:
 func dodge(dir: Vector3) -> bool:
 	if not can_act() or stamina < 18.0:
 		return false
+	if reload_t > 0.0 and dodge_cd <= 0.0:
+		Ammo.cancel_reload(self, "уклонение")
 	if dodge_cd > 0.0:
 		# «Цепочка теней»: extra dashes right after a dash
 		if hook("dodge_chain") > 0.0 and _dodge_chain < int(hook("dodge_chain")) and Time.get_ticks_msec() - _last_dodge_ms < 1200 and stamina >= 33.0 and dodge_t <= 0.0:
@@ -1014,6 +1057,8 @@ func apply_status(id: String, dur: float, params: Dictionary = {}) -> void:
 		if hook("cast_steady") > 0.0 and randf() < hook("cast_steady"):
 			VFX.text(chest(), "Концентрация", Color(0.7, 0.8, 1.0), 0.8)
 			return
+	if id in ["stun", "freeze", "knockdown", "stasis", "fear"] and reload_t > 0.0:
+		Ammo.cancel_reload(self, "оглушение")
 	var s := params.duplicate()
 	s.t = maxf(dur, statuses.get(id, {}).get("t", 0.0))
 	var had_mods: bool = statuses.has(id) and statuses[id].has("mods")

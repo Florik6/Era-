@@ -18,6 +18,7 @@ static func arena_char() -> CharData:
 		c.inv.add(it)
 		if ItemDB.base(b).slot in ItemDB.SLOTS:
 			c.inv.equip_item(it)
+	Ammo.starter_supply(c, c.inv.equip.values())
 	return c
 
 static func create(mode: String, world) -> Node:

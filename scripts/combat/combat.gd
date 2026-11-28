@@ -155,6 +155,7 @@ static func deal(att, tgt, info: Dictionary) -> float:
 				armor *= 1.0 - att.hook("anti_armor")
 		if dtype in HALF_PHYSICAL:
 			armor *= 0.5
+		armor *= 1.0 - clampf(float(info.get("armor_pen", 0.0)), 0.0, 0.9)    # armour-piercing ammo
 		amt *= 60.0 / (60.0 + maxf(0.0, armor))
 	var res: float = tgt.resist.get(dtype, 0.0)
 	if tgt.data:
@@ -263,9 +264,9 @@ static func _on_hit(att: Actor, tgt: Actor, dealt: float, info: Dictionary) -> v
 	if info.get("proc", false):
 		return
 	if att._has_ability("leech_mana"):
-		att.mana = minf(att.max_mana, att.mana + dealt * 0.08)
+		ManaSys.leech(att, dealt * 0.08)           # capped per second
 	if "battlemage" in att.data.hybrids() and info.get("melee", false):
-		att.mana = minf(att.max_mana, att.mana + 2.0)
+		ManaSys.leech(att, 2.0)
 	if info.get("melee", false) and cat == "heavy" and att.data.has_node("hv_break"):
 		tgt.apply_status("armor_break", 5.0)
 	att.hit_count += 1
@@ -491,18 +492,27 @@ static func fire_weapon(att: Actor) -> void:
 	if cat == "bow" and att.data and att.data.has_node("bw_pierce"):
 		pierce = 1
 	var range_m := att.weapon_range() * 1.15
+	var amods := {}
+	Ammo.shot_mods(att, info, amods)      # special ammo: fire, runes, armour-piercing, quantum
+	var boosted := Ammo.boost_on(att)
+	if boosted:
+		info.amount = float(info.amount) * Ammo.BOOST_MULT
+		info.knock = 4.0
+		pierce += 1
 	if pellets > 1:
 		info.amount = info.amount
 	for i in pellets:
 		var ang := deg_to_rad(randf_range(-spread, spread) * (0.5 if pellets == 1 else 1.0))
 		var dir := att.facing.rotated(Vector3.UP, ang)
-		var opts := {"pierce": pierce, "range": range_m, "splash": b.get("splash", 0.0), "homing": b.get("homing", 0.0)}
+		var opts := {"pierce": pierce + int(amods.get("pierce", 0)), "range": range_m, "splash": maxf(float(b.get("splash", 0.0)), float(amods.get("splash", 0.0))), "homing": b.get("homing", 0.0)}
 		if info.get("resonant", false) and i == 0:
 			opts.on_end = func(pos: Vector3):
 				VFX.explosion(pos, 2.0, Color(0.4, 0.9, 1.0))
 				aoe(att if is_instance_valid(att) else null, pos, 2.0, {"amount": info.amount * 0.6, "dtype": "energy", "proc": true})
 		if att._has_ability("explosive"):
 			opts.splash = maxf(opts.splash, 2.5)
+		if boosted:
+			opts.radius = 0.45
 		Projectile.spawn(att, muzzle, dir * spd, info.duplicate(), kind, opts)
 	var snd := "bow_release"
 	match model:

@@ -69,6 +69,7 @@ class IconButton extends Button:
 class VitalsPanel extends Control:
 	var font: Font
 	var hp_shown := 1.0
+	var mana_shown := 1.0
 	func _ready() -> void:
 		mouse_filter = Control.MOUSE_FILTER_IGNORE
 		custom_minimum_size = Vector2(300, 92)
@@ -110,8 +111,17 @@ class VitalsPanel extends Control:
 		draw_string(font, Vector2(x0 + 6, 32), ht, HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(1, 1, 1, 0.95))
 		if pl.shield_hp > 0.0:
 			_bar(Vector2(x0, 20), 220, 3, pl.shield_hp / maxf(1.0, pl.max_hp), Color(0.6, 0.8, 1.0, 0.95))
-		_bar(Vector2(x0, 38), 190, 8, pl.mana / maxf(1.0, pl.max_mana), Color(0.28, 0.5, 1.0))
-		_bar(Vector2(x0, 49), 160, 4, pl.stamina / maxf(1.0, pl.max_stamina), Color(0.98, 0.82, 0.32))
+		# mana: the spent part fades out slowly, so every cast is visible on the bar
+		var mf: float = pl.mana / maxf(1.0, pl.max_mana)
+		mana_shown = maxf(mf, move_toward(mana_shown, mf, get_process_delta_time() * 0.6))
+		var mcol := Color(0.28, 0.5, 1.0) if pl.mana_delay_t <= 0.0 else Color(0.22, 0.36, 0.7)
+		_bar(Vector2(x0, 38), 190, 9, mf, mcol, mana_shown)
+		if Time.get_ticks_msec() - ManaSys.flash_ms < 700:
+			draw_rect(Rect2(Vector2(x0 - 2, 36), Vector2(194, 13)), Color(1.0, 0.3, 0.3, 0.9), false, 2.0)
+		var mt := "%d / %d" % [int(pl.mana), int(pl.max_mana)]
+		draw_string_outline(font, Vector2(x0 + 196, 47), mt, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, 3, Color(0, 0, 0, 0.9))
+		draw_string(font, Vector2(x0 + 196, 47), mt, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(0.7, 0.8, 1.0))
+		_bar(Vector2(x0, 50), 160, 4, pl.stamina / maxf(1.0, pl.max_stamina), Color(0.98, 0.82, 0.32))
 		# status chips
 		var sx := x0
 		for k in pl.statuses:
@@ -523,6 +533,14 @@ func _process(delta: float) -> void:
 	var w: Dictionary = pl.weapon()
 	var cat: String = pl.weapon_cat()
 	weapon_lbl.text = "%s · %s %d" % [ItemDB.display_name(w) if not w.is_empty() else "Кулаки", ItemDB.CAT_NAMES.get(cat, ""), pl.data.mastery_level(cat)]
+	# ammunition of the weapon in hand: «Патроны 24 / 120», «Заряд 23 / 90», «Стрелы 40»
+	var at := Ammo.hud_text(pl)
+	if at != "":
+		weapon_lbl.text += "   ·   %s %s" % [Ammo.hud_label(pl), at]
+		var empty: bool = pl.reload_t <= 0.0 and not Ammo.can_fire(pl, Ammo.shot_cost(pl))
+		weapon_lbl.modulate = Color(1.0, 0.45, 0.4) if empty or Time.get_ticks_msec() - Ammo.flash_ms < 700 else Color(1, 1, 1)
+	else:
+		weapon_lbl.modulate = Color(1, 1, 1)
 	var wt := ""
 	if Game.world and Game.world.weather and Game.world.weather.get("current") != null:
 		wt = {"clear": "ясно", "cloudy": "облачно", "rain": "дождь", "storm": "гроза", "fog": "туман", "snow": "снег", "wind": "ветер"}.get(Game.world.weather.current, "")

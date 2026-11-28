@@ -61,6 +61,8 @@ class H:
 		pl.stamina = pl.max_stamina
 		pl.statuses.erase("exhausted")
 		AbilityExec.cataclysm_until = 0
+		AbilityExec._high_until.clear()      # one high spell at a time (0.15.0)
+		pl.mana_delay_t = 0.0
 
 	func clean() -> void:
 		for st in StoneStructure.live.duplicate():
@@ -267,9 +269,10 @@ class H:
 		ready_caster()
 		pl.hp = pl.max_hp * 0.5
 		var hp0: float = pl.hp
-		pl.use_ability("h_warm_touch", fwd)
+		var why_wt := AbilityExec.block_reason(pl, "h_warm_touch", fwd)
+		var ok_wt: bool = pl.use_ability("h_warm_touch", fwd)
 		await wait(1.0)
-		ck("«Тёплое прикосновение» restores HP", pl.hp > hp0 + pl.max_hp * 0.08, "%.0f→%.0f" % [hp0, pl.hp])
+		ck("«Тёплое прикосновение» restores HP", pl.hp > hp0 + pl.max_hp * 0.08, "%.0f→%.0f ok=%s why=%s busy=%s" % [hp0, pl.hp, str(ok_wt), why_wt, str(pl.busy())])
 		var arm: Dictionary = hc.add_injury("arm_r", "cut", 2)
 		var leg: Dictionary = hc.add_injury("leg_l", "cut", 2)
 		ck("two cuts, both bleeding", int(arm.bleed) > 0 and int(leg.bleed) > 0)
@@ -419,14 +422,17 @@ class H:
 			await wait(0.5)
 		ck("an NPC necromancer raises servants near the fresh death", not AbilityExec.live_summons(nec).is_empty())
 		t_end = Time.get_ticks_msec() + 20000
-		while Time.get_ticks_msec() < t_end and not nec.statuses.has("magic_shield") and not bait.statuses.has("wither"):
+		while Time.get_ticks_msec() < t_end and is_instance_valid(nec) and is_instance_valid(bait) and not nec.statuses.has("magic_shield") and not bait.statuses.has("wither"):
 			await wait(0.5)
-		ck("…and uses its shield or curse", nec.statuses.has("magic_shield") or bait.statuses.has("wither") or bait.statuses.has("root"))
-		ck("…keeping its distance (%.1f m)" % nec.global_position.distance_to(bait.global_position), nec.global_position.distance_to(bait.global_position) > 4.0)
-		for m in AbilityExec.live_summons(nec):
-			AbilityExec.despawn(m)
-		AbilityExec.despawn(nec)
-		AbilityExec.despawn(bait)
+		var both: bool = is_instance_valid(nec) and is_instance_valid(bait)
+		ck("…and uses its shield or curse", both and (nec.statuses.has("magic_shield") or bait.statuses.has("wither") or bait.statuses.has("root")), "alive=%s" % str(both))
+		ck("…keeping its distance (%.1f m)" % (nec.global_position.distance_to(bait.global_position) if both else -1.0), both and nec.global_position.distance_to(bait.global_position) > 4.0)
+		if is_instance_valid(nec):
+			for m in AbilityExec.live_summons(nec):
+				AbilityExec.despawn(m)
+			AbilityExec.despawn(nec)
+		if is_instance_valid(bait):
+			AbilityExec.despawn(bait)
 		# healer heals a wounded ally
 		var heal_npc = foe("field_healer", spot - side * 6.0, 300.0, false)
 		var buddy = foe("bandit", spot - side * 9.0, 1000.0, true)

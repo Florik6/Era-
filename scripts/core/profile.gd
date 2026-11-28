@@ -71,6 +71,7 @@ func new_character(nm: String, cid: String, female: bool, appearance: Dictionary
 		if ItemDB.base(b).slot in ItemDB.SLOTS and char.inv.equipped(ItemDB.base(b).slot).is_empty():
 			char.inv.equip_item(it)
 	char.auto_slots(_main_cat())
+	Ammo.starter_supply(char, _owned_weapons())   # an archer starts with a quiver, a shooter with a reserve
 	has_character = true
 	current_era = 0
 	unlocked_eras = [0]
@@ -78,6 +79,7 @@ func new_character(nm: String, cid: String, female: bool, appearance: Dictionary
 	achievements = {}
 	stats = {}
 	legacy = {"flags": {}, "relics": [], "faction_power": {}, "faction_rep": {}, "destroyed": []}
+	legacy.flags["ammo_v1"] = true      # the starter supply above is the only free one
 	fallen_legends = []
 	hall_of_legends = []
 	artifacts = []
@@ -189,6 +191,15 @@ func set_flag(key: String, value = true) -> void:
 func flag(key: String, default = null):
 	return legacy.flags.get(key, default)
 
+func _owned_weapons() -> Array:
+	var out: Array = []
+	for sl in char.inv.equip:
+		out.append(char.inv.equip[sl])
+	for it in char.inv.items:
+		if ItemDB.base(str(it.get("base", ""))).get("slot", "") == "main":
+			out.append(it)
+	return out
+
 func to_dict() -> Dictionary:
 	return {"char": char.to_dict(), "has_character": has_character, "current_era": current_era, "unlocked_eras": unlocked_eras,
 		"era_progress": era_progress, "achievements": achievements, "stats": stats, "legacy": legacy,
@@ -234,6 +245,10 @@ func from_dict(d: Dictionary) -> void:
 			for it in f.get("items", []):
 				Inventory._fix(it)
 	bestiary = d.get("bestiary", {})
+	# saves made before ammunition existed: one-time loaded magazines + reserve
+	if has_character and not legacy.flags.get("ammo_v1", false):
+		Ammo.starter_supply(char, _owned_weapons())
+		legacy.flags["ammo_v1"] = true
 	home_chest = Inventory.new()
 	home_chest.from_dict(d.get("home_chest", {}))
 	home_chest.capacity = 999

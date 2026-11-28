@@ -18,6 +18,10 @@ const SPELL_TIER := [1, 1, 2, 2, 3, 3, 4, 4, 5, 6]
 const SPELL_COST := [1, 1, 1, 2, 2, 2, 3, 3, 4, 6]
 const TIER_SCHOOL_LVL := [0, 1, 4, 8, 12, 18, 24]
 const TIER_RANK := [0, 1, 1, 2, 3, 5, 7]          # minimum magic rank per tier
+## Mana price of a spell as a part of the standard mana pool of a mage at
+## the stage where the tier opens: weak 5–10 %, medium 12–20 %, strong
+## 25–40 %, master 40–55 %, archmage 60–75 %, catastrophic 80–100 %.
+const TIER_BANDS := [[0.0, 0.0], [0.05, 0.10], [0.12, 0.20], [0.25, 0.40], [0.40, 0.55], [0.60, 0.75], [0.80, 1.00]]
 const TIER_NAMES := ["", "Послушник", "Ученик", "Адепт", "Мастер", "Архимаг", "Катаклизм"]
 const RANK_NAMES := ["Не владеет магией", "Послушник", "Ученик", "Адепт", "Опытный маг", "Мастер школы", "Верховный мастер", "Архимаг", "Легендарный архимаг"]
 const WEAPON_CATS := ["sword", "heavy", "spear", "dagger", "bow", "firearm", "staff", "energy"]
@@ -61,9 +65,41 @@ static func S(id: String, school: String, n: int, nm: String, desc: String, o: D
 # ----------------------------------------------------------------- queries
 static func all() -> Dictionary:
 	if _all.is_empty():
-		for e in _build():
+		var list: Array = _build()
+		_normalize_costs(list)
+		for e in list:
 			_all[e.id] = e
 	return _all
+
+## Mana of a mage (class base 130 + 4 per level) when the school level
+## `slvl` is reached — the reference for spell prices.
+static func standard_pool(slvl: int) -> float:
+	return 130.0 + 4.0 * float(maxi(slvl, 1) - 1)
+
+## Spell prices are set by tier bands: the authored price only orders the
+## spells inside their tier (kept as "mana_authored").
+static func _normalize_costs(list: Array) -> void:
+	var lo := {}
+	var hi := {}
+	for e in list:
+		if e.kind != "spell":
+			continue
+		var t: int = int(e.tier)
+		var m := float(e.mana)
+		lo[t] = minf(float(lo.get(t, m)), m)
+		hi[t] = maxf(float(hi.get(t, m)), m)
+	for e in list:
+		if e.kind != "spell":
+			continue
+		var t: int = int(e.tier)
+		var m := float(e.mana)
+		var k := 0.5
+		if float(hi[t]) > float(lo[t]):
+			k = (m - float(lo[t])) / (float(hi[t]) - float(lo[t]))
+		var band: Array = TIER_BANDS[t]
+		var pool := standard_pool(TIER_SCHOOL_LVL[t])
+		e["mana_authored"] = m
+		e["mana"] = maxf(1.0, ceilf(pool * lerpf(float(band[0]), float(band[1]), k)))
 
 static func get_ab(id: String) -> Dictionary:
 	return all().get(id, {})

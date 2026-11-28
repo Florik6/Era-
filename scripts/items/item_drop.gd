@@ -98,7 +98,7 @@ func announce() -> void:
 func _potion_color(b: String) -> Color:
 	match b:
 		"potion_hp", "potion_big": return Color(0.9, 0.15, 0.2)
-		"potion_mana": return Color(0.2, 0.4, 1.0)
+		"potion_mana", "potion_mana_small", "potion_mana_big", "potion_mana_elixir": return Color(0.2, 0.4, 1.0)
 		"elixir_mutation": return Color(0.4, 1.0, 0.3)
 		"bomb_flask", "grenade": return Color(0.3, 0.3, 0.3)
 	if b.begins_with("tome") or b.begins_with("scroll"):

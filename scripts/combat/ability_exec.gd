@@ -11,6 +11,8 @@ const MAX_SUMMONS_WORLD := 24
 const MAX_TERRAIN := 40
 const CATACLYSM_EXHAUST := 14.0
 const ARCHMAGE_EXHAUST := 4.0
+const HIGH_WINDOW := 6.0        # an archmage spell "occupies" its caster this long after the cast
+const COST_FLOOR := 0.6         # all cost reductions together: at most −40 %
 
 static var _last := {}          # actor_id -> {"id", "aim"} — last spell (for «Зеркало мгновения»)
 static var _sustain := {}       # actor_id -> [[ability id, status key]]
@@ -21,6 +23,7 @@ static var cataclysm_until := 0 # msec: one cataclysm at a time in the world
 static var cataclysm_by = null  # who cast the active one
 static var stats := {"casts": 0, "by_id": {}, "summons": 0, "terrain": 0, "cataclysms": 0}
 static var last_reveal := {}    # actor_id -> number of things revealed
+static var _high_until := {}    # actor_id -> msec: an archmage/cataclysm spell is still active
 
 # ===================================================================== use
 ## Why `a` cannot use ability `id` right now ("" = it can).
@@ -41,7 +44,18 @@ static func block_reason(a: Actor, id: String, aim := Vector3.ZERO) -> String:
 	if a.stamina < st:
 		return "недостаточно выносливости"
 	if a.mana < mn:
-		return "недостаточно маны"
+		return "недостаточно маны (%d / %d)" % [int(a.mana), int(mn)]
+	var rounds := Ammo.ability_rounds(a, e)
+	if rounds > 0:
+		if a.reload_t > 0.0 and a.ammo <= 0:
+			return "идёт перезарядка"
+		if not Ammo.can_fire(a, 1):
+			return "нет боеприпасов" if not Ammo.has_mag(a.weapon_base()) or Ammo.reserve(a) <= 0 else "магазин пуст — перезарядитесь"
+	if int(e.get("tier", 0)) >= 5:
+		if a.statuses.has("exhausted"):
+			return "маг истощён (%.0f с)" % ceilf(float(a.statuses.exhausted.get("t", 0.0)))
+		if int(_high_until.get(a.actor_id, 0)) > Time.get_ticks_msec():
+			return "высшее заклинание ещё действует"
 	if int(e.get("tier", 0)) == 6:
 		var r := _cataclysm_block(a, e)
 		if r != "":
@@ -62,12 +76,18 @@ static func use(a: Actor, id: String, aim: Vector3) -> bool:
 	aim = aim.normalized()
 	var why := block_reason(a, id, aim)
 	if why != "":
+		if why.begins_with("недостаточно маны"):
+			ManaSys.refused(a)
 		if a.is_player:
 			Events.notify.emit("%s: %s" % [e.name, why], Color(0.9, 0.8, 0.45))
 			Audio.play_sfx("error")
 		return false
 	a.stamina -= stamina_cost(a, e)
-	a.mana -= mana_cost(a, e)
+	var mc := mana_cost(a, e)
+	a.mana = maxf(0.0, a.mana - mc)
+	ManaSys.on_spent(a, mc, int(e.get("tier", 0)))
+	if Ammo.ability_rounds(a, e) > 0:
+		Ammo.cancel_reload(a)          # the skill fires what is in the magazine
 	if int(e.get("tier", 0)) == 6 and a.is_player:
 		a.data.inv.consume(cataclysm_reagent())
 	a.skill_cd[id] = cooldown(a, e)
@@ -84,13 +104,25 @@ static func cast_heal_now(a: Actor, id: String, injury_id: int) -> String:
 	var why := block_reason(a, id)
 	if why != "":
 		return why
-	a.mana -= mana_cost(a, e)
+	var mc := mana_cost(a, e)
+	a.mana = maxf(0.0, a.mana - mc)
 	a.skill_cd[id] = cooldown(a, e)
 	a.set_meta("heal_pick", injury_id)
+	a.set_meta("heal_paid", [id, mc])
 	stats.casts += 1
+	_run(a, e, a.facing, spell_power(a, e), false)
+	a.remove_meta("heal_paid")
+	# Hardcore: a treatment the body refused (wrong injury, nothing to treat)
+	# gives the mana and the cool-down back — only a real result is paid for.
+	if a.has_meta("heal_refund"):
+		var why2: String = str(a.get_meta("heal_refund"))
+		a.remove_meta("heal_refund")
+		ManaSys.restore(a, mc)
+		a.skill_cd.erase(id)
+		return why2 if why2 != "" else "лечение не подействовало"
+	ManaSys.on_spent(a, mc, int(e.get("tier", 0)))
 	if a.data != null:
 		a.data.add_school_xp("heal", 3.0 + 1.5 * int(e.tier))
-	_run(a, e, a.facing, spell_power(a, e), false)
 	return ""
 
 ## Monsters / bosses / scripted casters: no mana, no requirements.
@@ -100,6 +132,8 @@ static func cast_free(a: Actor, id: String, aim: Vector3, power: float) -> bool:
 		return false
 	if int(e.get("tier", 0)) == 6 and Time.get_ticks_msec() < cataclysm_until:
 		return false
+	if int(e.get("tier", 0)) >= 5 and (a.statuses.has("exhausted") or int(_high_until.get(a.actor_id, 0)) > Time.get_ticks_msec()):
+		return false      # bosses and monsters obey the archmage limits too
 	if aim.length() < 0.01:
 		aim = a.facing
 	aim.y = 0
@@ -124,6 +158,8 @@ static func _start(a: Actor, e: Dictionary, aim: Vector3, power: float, free: bo
 		SpellVFX.fx("charge", e, {"a": a, "dur": ct})
 	else:
 		a.start_action(nm, 0.38, 0.3, payload)
+	if tier >= 5:
+		_high_until[a.actor_id] = Time.get_ticks_msec() + int((ct + HIGH_WINDOW) * 1000.0)
 	if tier == 6:
 		cataclysm_until = Time.get_ticks_msec() + int((ct + 12.0) * 1000.0)
 		cataclysm_by = a
@@ -178,7 +214,8 @@ static func mana_cost(a: Actor, e: Dictionary) -> float:
 		m *= 0.6
 	if a.data != null and a.data.school_level(e.school) >= int(e.slvl) + 6:
 		m *= 0.9
-	return roundf(m)
+	# discounts multiply, but never below COST_FLOOR of the price
+	return roundf(maxf(m, float(e.get("mana", 0.0)) * COST_FLOOR))
 
 static func cooldown(a: Actor, e: Dictionary) -> float:
 	var cd := float(e.get("cd", 2.0))
@@ -570,6 +607,7 @@ static func _c_shots(a: Actor, e: Dictionary, f: Dictionary, aim: Vector3, power
 	var dir := aim
 	if t:
 		dir = (t.chest() - a.chest()).normalized()
+	var paid := Ammo.ability_rounds(a, e) > 0
 	for i in n:
 		var ang := 0.0
 		if spread > 0.0 and n > 1:
@@ -580,6 +618,10 @@ static func _c_shots(a: Actor, e: Dictionary, f: Dictionary, aim: Vector3, power
 		var shoot := func():
 			if not is_instance_valid(a) or a.is_dead:
 				return
+			if paid and not Ammo.consume(a, 1):
+				if a.is_player and i > 0:
+					Audio.play_sfx("ui_click", a.global_position, -6.0)
+				return            # out of rounds: the rest of the burst is not fired
 			var info := _info(a, e, f, power)
 			info.melee = false
 			if f.get("crit", false):
@@ -608,6 +650,12 @@ static func _c_sky_volley(a: Actor, e: Dictionary, f: Dictionary, power: float) 
 			others.append(t)
 	others.sort_custom(func(x, y): return x.global_position.distance_squared_to(a.global_position) < y.global_position.distance_squared_to(a.global_position))
 	var targets: Array = marked.slice(0, mx) if not marked.is_empty() else others.slice(0, 3)
+	if Ammo.ability_rounds(a, e) > 0:
+		# one arrow per target, paid now; no arrows — no volley
+		var can := 0
+		while can < targets.size() and Ammo.consume(a, 1):
+			can += 1
+		targets = targets.slice(0, can)
 	var i := 0
 	for t in targets:
 		var tid: int = t.get_instance_id()
@@ -694,7 +742,8 @@ static func _c_bolt(a: Actor, e: Dictionary, f: Dictionary, aim: Vector3, power:
 		if t.max_mana > 0.0 and t.mana > 0.0:
 			var took := minf(t.mana, back)
 			t.mana -= took
-			a.mana = minf(a.max_mana, a.mana + took)
+			t._mana_fresh = false
+			ManaSys.leech(a, took)          # drained mana obeys the same per-second cap
 		else:
 			a.heal(back)
 
@@ -1009,6 +1058,8 @@ static func _c_heal(a: Actor, e: Dictionary, f: Dictionary) -> void:
 		var pick := int(t.get_meta("heal_pick", -1)) if t.has_meta("heal_pick") else -1
 		var res: Dictionary = Hardcore.inst.spell_op(t, op, sl, pick)
 		hc_done = res.get("ok", false)
+		if not hc_done and pick >= 0 and a.has_meta("heal_paid"):
+			a.set_meta("heal_refund", str(res.get("reason", "")))
 		if t.has_meta("heal_pick"):
 			t.remove_meta("heal_pick")
 	var amt := float(f.get("amt", 0.0))

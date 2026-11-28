@@ -75,6 +75,8 @@ func save_game() -> bool:
 		return false
 	if Game.world and Game.world.has_method("sync_to_state") and Game.mode == "world":
 		Game.world.sync_to_state()
+	if Game.player != null and is_instance_valid(Game.player) and Game.player.data == Profile.char and not Game.player.is_dead:
+		ManaSys.store(Game.player)
 	var pd := Profile.to_dict()
 	pd["chronicle"] = Chronicle.to_dict()
 	var ok := write_json(PROFILE, pd)

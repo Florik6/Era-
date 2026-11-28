@@ -61,6 +61,9 @@ func drop_for(victim: Actor, killer) -> void:
 		spawn_drop(ItemDB.random_for_era(era, lvl, table, luck), _scatter(p))
 	if randf() < 0.22:
 		spawn_drop(ItemDB.random_consumable(era), _scatter(p))
+	var ammo_drop := Ammo.victim_drop(victim, era)
+	if not ammo_drop.is_empty():
+		spawn_drop(ammo_drop, _scatter(p))
 	if victim.elite and randf() < 0.35:
 		spawn_drop(ItemDB.create("chrono_shard", 0, 1), _scatter(p))
 	# spirit essence (curse rituals): restless dead, dark casters and rift-born
@@ -136,6 +139,8 @@ func roll_chest(chest, actor) -> void:
 		items.append(ItemDB.random_consumable(era))
 	if randf() < (0.35 if rich else 0.12):
 		items.append(ItemDB.create("chrono_shard", 0, 1))
+	if randf() < (0.6 if rich else 0.4):
+		items.append(Ammo.loot_for(actor if actor != null and actor.get("is_player") == true else Game.player, era, Ammo._rng(), rich))
 	# ancient dungeons keep lost magical knowledge: a geomancer who can read
 	# it (earth mastery 12) always finds the golem's treatise in the first chest
 	var pd: CharData = actor.data if actor != null and actor.get("is_player") == true else null
@@ -160,6 +165,9 @@ func roll_chest(chest, actor) -> void:
 	Events.chest_opened.emit(actor, chest)
 
 func drop_from_container(pos: Vector3, _kind: String) -> void:
+	if randf() < 0.12:
+		spawn_drop(Ammo.loot_for(Game.player, Profile.current_era, Ammo._rng()), pos)
+		return
 	if randf() < 0.25:
 		spawn_drop(ItemDB.random_consumable(Profile.current_era), pos)
 	elif randf() < 0.2:

@@ -788,8 +788,9 @@ func _combat(delta: float) -> void:
 			_steer(dir, delta, 0.8)
 		else:
 			_steer(dir.cross(Vector3.UP) * strafe, delta, 0.5)
-		# casters keep a mana reserve for their spells (the staff bolt costs mana too)
-		if d <= r and _has_los(t, delta) and not AbilityAI.is_healer(n) and (n.weapon_cat() != "staff" or n.mana > n.max_mana * 0.45):
+		# the staff's basic bolt is free (ManaSys): casters keep shooting it while
+		# their mana slowly returns, and spend mana only on real spells
+		if d <= r and _has_los(t, delta) and not AbilityAI.is_healer(n):
 			n.attack(dir)
 	elif ranged:
 		var want_cover: bool = (p.caution > 0.55 or DBActors.eget(n.def_id, {}).get("cover", false) or lost_to_ranged >= 2) and t_ranged

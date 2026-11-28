@@ -351,7 +351,7 @@ func _process(delta: float) -> void:
 	if randf() < 0.12 and fl.size() > 2:
 		var a: String = fl[randi() % fl.size()]
 		var b: String = fl[randi() % fl.size()]
-		if a != b and not b in DBEras.faction(a).enemies:
+		if a != b and st.has(a) and st.has(b) and not b in DBEras.faction(a).enemies:
 			var nr := "alliance" if relation(a, b) == "peace" and randf() < 0.5 else ("war" if relation(a, b) == "peace" else "peace")
 			st[a].relations[b] = nr
 			st[b].relations[a] = nr

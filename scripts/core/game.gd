@@ -196,7 +196,7 @@ func _setup_input() -> void:
 	var map := {
 		"move_up": [KEY_W, KEY_UP], "move_down": [KEY_S, KEY_DOWN], "move_left": [KEY_A, KEY_LEFT], "move_right": [KEY_D, KEY_RIGHT],
 		"attack": [KEY_J], "secondary": [KEY_K], "dodge": [KEY_SPACE], "skill1": [KEY_1], "skill2": [KEY_2], "skill3": [KEY_3], "skill4": [KEY_4], "skill_page": [KEY_Q],
-		"interact": [KEY_F, KEY_E], "swap": [KEY_TAB, KEY_R], "potion": [KEY_H], "inventory": [KEY_I], "map": [KEY_M],
+		"interact": [KEY_F, KEY_E], "swap": [KEY_TAB], "reload": [KEY_R], "boost": [KEY_B], "potion": [KEY_H], "mana_potion": [KEY_G], "inventory": [KEY_I], "map": [KEY_M],
 		"journal": [KEY_L], "skills": [KEY_O], "pause": [KEY_ESCAPE, KEY_P], "companion": [KEY_C],
 	}
 	for action in map:

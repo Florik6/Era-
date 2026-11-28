@@ -175,7 +175,7 @@ func open_trade(n) -> void:
 	var era := Profile.current_era
 	var lvl: int = world.player.level
 	var items: Array = []
-	for b in ["potion_hp", "potion_mana", "scroll_identify", "scroll_purify", "purify_salt", "spirit_essence"]:
+	for b in ["potion_hp", "potion_mana_small", "potion_mana", "potion_mana_big", "scroll_identify", "scroll_purify", "purify_salt", "spirit_essence"]:
 		var it := ItemDB.create(b, 0, 1)
 		it.qty = 5 if b.begins_with("potion") else (3 if b == "purify_salt" else (1 if b == "spirit_essence" else 2))
 		items.append(it)
@@ -186,6 +186,9 @@ func open_trade(n) -> void:
 	items.append(ItemDB.create("companion_whistle", 0, 1))
 	var rng := RandomNumberGenerator.new()
 	rng.seed = hash(n.actor_id) + Game.day()
+	items.append_array(Ammo.shop_stock(era, rng))          # ammunition of this era
+	if rng.randf() < 0.25:
+		items.append(ItemDB.create("potion_mana_elixir", 0, 1))
 	for i in 5:
 		items.append(ItemDB.random_for_era(era, lvl, "chest", 0.0, rng))
 	var owner_f: String = world.factions.settlement_owner(n.settlement_id)

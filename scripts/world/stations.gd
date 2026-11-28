@@ -57,11 +57,12 @@ static func _forge(world) -> void:
 			return true
 		return false})
 	recipes.append_array(Recipes.for_station(world, "forge"))
+	recipes.append_array(Ammo.recipes_for(world, "forge"))
 	world.ui.open("craft", {"title": "Кузница", "recipes": recipes})
 
 static func _lab(world) -> void:
 	var pd: CharData = world.player.data
-	var defs := [["potion_hp", {"herbs": 2}, 5], ["potion_mana", {"herbs": 2}, 5], ["elixir_mutation", {"herbs": 3}, 40], ["bomb_flask", {"herbs": 1, "iron_ore": 1}, 10],
+	var defs := [["potion_hp", {"herbs": 2}, 5], ["potion_mana_small", {"herbs": 1}, 3], ["potion_mana", {"herbs": 2}, 6], ["potion_mana_big", {"herbs": 4}, 25], ["potion_mana_elixir", {"herbs": 6, "spirit_essence": 1}, 90], ["elixir_mutation", {"herbs": 3}, 40], ["bomb_flask", {"herbs": 1, "iron_ore": 1}, 10],
 		["potion_big", {"herbs": 5}, 60], ["scroll_identify", {"herbs": 1}, 25], ["purify_salt", {"herbs": 2}, 15]]
 	var recipes: Array = []
 	for d in defs:
@@ -76,6 +77,7 @@ static func _lab(world) -> void:
 				return true
 			return false})
 	recipes.append_array(Recipes.for_station(world, "lab"))
+	recipes.append_array(Ammo.recipes_for(world, "lab"))
 	world.ui.open("craft", {"title": "Алхимическая лаборатория", "recipes": recipes})
 
 static func _workshop(world) -> void:
@@ -106,6 +108,7 @@ static func _workshop(world) -> void:
 			return true
 		return false})
 	recipes.append_array(Recipes.for_station(world, "workshop"))
+	recipes.append_array(Ammo.recipes_for(world, "workshop"))
 	world.ui.open("craft", {"title": "Мастерская", "recipes": recipes})
 
 static func _terminal(world, poi) -> void:

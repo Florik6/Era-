@@ -50,11 +50,27 @@ static func act(n, t, d: float, dir: Vector3) -> bool:
 	var best := ""
 	var bs := 0.0
 	var best_aim := dir
-	for id in candidates(n):
+	var cands: Array = candidates(n)
+	# mana is scarce (ManaSys): a caster saves up for its signature spell
+	# (a summon or its highest tier) instead of spending everything on small ones
+	var sig := signature_spell(n, cands)
+	var sig_cost := AbilityExec.mana_cost(n, DBAbilities.get_ab(sig)) if sig != "" else 0.0
+	# an invulnerable target (dodge frames, a blessing) is not worth mana: only
+	# shields, heals, buffs and escapes are used meanwhile
+	var t_inv: bool = t != null and is_instance_valid(t) and t.statuses.has("invuln")
+	for id in cands:
 		var e: Dictionary = DBAbilities.get_ab(id)
 		if e.is_empty() or n.skill_cd.has(id):
 			continue
+		if t_inv and str(e.get("ai", {}).get("use", "")) in ["ranged", "line", "melee", "aoe", "open", "burst", "summon", "gap", "cataclysm", "wall"]:
+			continue
 		var r := score(n, e, t, d)
+		# only attacks wait for the big spell: walls, shields, heals and escapes never do
+		if sig != "" and id != sig and e.kind == "spell" and str(e.get("ai", {}).get("use", "")) in ["ranged", "line", "melee", "aoe", "open", "burst"]:
+			var c := AbilityExec.mana_cost(n, e)
+			# cheap spells (≤ 15 % of the pool) stay allowed: they barely delay the big one
+			if c > n.max_mana * 0.15 and n.mana - c < sig_cost and not (r.s >= 0.85):
+				r.s *= 0.35
 		if r.s <= bs:
 			continue
 		if AbilityExec.block_reason(n, id) != "":
@@ -73,6 +89,21 @@ static func act(n, t, d: float, dir: Vector3) -> bool:
 		var u := str(DBAbilities.get_ab(best).get("ai", {}).get("use", ""))
 		stats.by_use[u] = int(stats.by_use.get(u, 0)) + 1
 	return ok
+
+## The spell this caster saves mana for: its summon, else its highest tier
+## (never a cataclysm — those have their own limits), "" if none is worth it.
+static func signature_spell(n, cands: Array) -> String:
+	var best := ""
+	var bv := 0.0
+	for id in cands:
+		var e: Dictionary = DBAbilities.get_ab(id)
+		if e.is_empty() or e.kind != "spell" or n.skill_cd.has(id) or int(e.get("tier", 0)) >= 6:
+			continue
+		var v := float(e.tier) + (3.0 if str(e.get("ai", {}).get("use", "")) == "summon" and AbilityExec.live_summons(n).is_empty() else 0.0)
+		if v > bv and AbilityExec.mana_cost(n, e) <= n.max_mana * 0.9:
+			bv = v
+			best = id
+	return best if bv >= 3.0 else ""
 
 static func _status_on(t, e: Dictionary) -> bool:
 	for f in e.fx:

@@ -64,6 +64,8 @@ class H:
 		pl.mana = pl.max_mana
 		pl.stamina = pl.max_stamina
 		pl.statuses.erase("exhausted")
+		pl.mana_delay_t = 0.0
+		AbilityExec._high_until.clear()      # the archmage "one high spell at a time" window (0.15.0)
 
 	func face(a, t) -> Vector3:
 		var to: Vector3 = t.global_position - a.global_position
@@ -193,7 +195,12 @@ class H:
 				if str(it.get("knowledge", "")) == "tome_e_guardian_golem":
 					got_treatise = true
 					pl.use_item(it)
-		ck("…the golem's treatise found in a dungeon chest and read", got_treatise and d.knowledge.has("tome_e_guardian_golem"))
+		var near_drops: Array = []
+		if chest:
+			for dr2 in Game.grid.query(chest.global_position, 8.0, "interact"):
+				if dr2 is ItemDrop:
+					near_drops.append(str(dr2.item.get("base", "gold")) + ":" + str(dr2.item.get("knowledge", "")))
+		ck("…the golem's treatise found in a dungeon chest and read", got_treatise and d.knowledge.has("tome_e_guardian_golem"), "chest opened=%s drops=%s" % [str(chest.get("opened")) if chest else "-", str(near_drops)])
 		ck("«Голем хранителя» learned", d.learn_ability("e_guardian_golem"), d.ability_block("e_guardian_golem"))
 		refill()
 		pl.use_ability("e_guardian_golem", pl.facing)
@@ -206,6 +213,7 @@ class H:
 			AbilityExec.despawn(m)
 		# the archmage path and the trial
 		d.level = 35
+		pl.recalc_stats()                    # a real level-up recalculates max mana (130 + 4 per level)
 		d.class_pts += 40
 		for e in DBAbilities.class_skills("mage"):
 			d.learn_ability(e.id)
@@ -301,6 +309,7 @@ class H:
 		info.melee = true
 		info.hit_pos = arm_pos
 		info.dtype = "slash"
+		info.amount = maxf(float(info.amount), pl.max_hp * 0.15)  # a real (medium) blow for a level-35 hero
 		Combat.deal(bandit, pl, info)
 		pl.apply_status("invuln", 999999.0)
 		AbilityExec.despawn(bandit)

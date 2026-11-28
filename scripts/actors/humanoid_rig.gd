@@ -1308,6 +1308,15 @@ func _pose_action(t: Dictionary, act: String, p: float) -> Vector2:
 			t.elbow_r = t.elbow_r.lerp(Vector3(1.1, 0, 0), e1)
 			t.arm_l = t.arm_l.lerp(Vector3(0.6 - 0.2 * g1, 0, -0.3), e1 * 0.7)
 			t.neck.y += 0.15 * g1 * e1
+		"reload":
+			# weapon tipped down, the off hand works the magazine / cell / powder
+			var e3 := _ss(p / 0.2) * (1.0 - _seg(p, 0.85, 1.0))
+			var jig := sin(p * TAU * 2.0) * 0.14 * e3
+			t.arm_r = t.arm_r.lerp(Vector3(0.85, -0.1, 0.25), e3)
+			t.elbow_r = t.elbow_r.lerp(Vector3(1.35, 0, 0), e3)
+			t.arm_l = t.arm_l.lerp(Vector3(0.75 + jig, 0.35, -0.3), e3)
+			t.elbow_l = t.elbow_l.lerp(Vector3(1.55, 0, 0), e3)
+			t.neck.x += 0.25 * e3
 		"drink":
 			var e2 := _ss(p / 0.35) * (1.0 - _seg(p, 0.7, 1.0))
 			t.arm_r = t.arm_r.lerp(Vector3(1.9, 0, 0.35), e2)
