@@ -56,6 +56,7 @@ func build() -> void:
 	tools.add_child(UITheme.button("Объединить", func():
 		player_data().inv.merge_stacks()
 		refresh(), 48, 140))
+	tools.add_child(UITheme.button("Технологии", func(): manager.open("tech"), 48, 150))
 	_bag = GridContainer.new()
 	_bag.columns = 6
 	right.add_child(UITheme.scroll(_bag))
@@ -219,6 +220,10 @@ func _card(it: Dictionary, slot: String) -> void:
 		var ub := UITheme.button("Использовать", func(): _do_use(it, msg), 60, 190)
 		ub.disabled = not has_player()
 		row.add_child(ub)
+	if TechKnow.item_family(it) != "" or TechKnow.has_special(it):
+		row.add_child(UITheme.button("Изучить", func():
+			close_modal()
+			manager.open("inspect", {"item": it}), 60, 150))
 	if slot == "" and bslot in ItemDB.SLOTS:
 		row.add_child(UITheme.button("Примерить", func():
 			if _preview:

@@ -54,6 +54,8 @@ func open_npc(n) -> void:
 			opts.append({"text": "Торговец организации", "cb": func(): world.factions.open_vendor(n.faction_id)})
 		_:
 			text = _villager_line(n)
+	if str(n.get_meta("prof", "")) == "smith" or n.has_meta("tech_teacher"):
+		opts.append({"text": "Обучение оружию эпохи", "cb": func(): TechKnow.open_teacher(world, n)})
 	if n.has_meta("civic_id"):
 		opts.append({"text": "Расспросить о жизни", "cb": func(): _civic_story(n), "close": true})
 	var qs: Array = world.quests.offers_for(n)

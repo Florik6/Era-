@@ -449,6 +449,8 @@ static func fire_weapon(att: Actor) -> void:
 	info.knock = 1.0
 	var muzzle := att.chest() + att.facing * (0.5 + WeaponModels.muzzle_length(model) * 0.6) + Vector3(0, 0.1, 0)
 	var spread: float = b.get("spread", 2.0)
+	var tk: Dictionary = TechKnow.mods(att) if att.data and TechKnow.item_family(att.weapon()) != "" else {"spread": 1.0, "heat": 1.0}
+	spread *= float(tk.spread)           # how well the technology is understood
 	if att.data:
 		if att.data.has_node("fa_steady"):
 			spread *= 0.5
@@ -467,7 +469,7 @@ static func fire_weapon(att: Actor) -> void:
 				if att.statuses[sk].get("no_heat", false):
 					no_heat = true
 			if not no_heat:
-				att._heat += 9.0 * (1.0 - att.hook("heat_ctrl"))
+				att._heat += 9.0 * (1.0 - att.hook("heat_ctrl")) * float(tk.heat)
 				if att._heat >= 100.0:
 					att._heat = 0.0
 					att._overheat_t = 2.0

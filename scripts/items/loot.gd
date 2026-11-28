@@ -141,6 +141,19 @@ func roll_chest(chest, actor) -> void:
 		items.append(ItemDB.create("chrono_shard", 0, 1))
 	if randf() < (0.6 if rich else 0.4):
 		items.append(Ammo.loot_for(actor if actor != null and actor.get("is_player") == true else Game.player, era, Ammo._rng(), rich))
+	# rifts keep the remains of other ages: fragments of technology and treatises
+	if str(world.get("dimension")) != "":
+		if randf() < 0.55:
+			var fr := ItemDB.create("tech_fragment", 0, 1)
+			fr.qty = 1 + (1 if rich else 0)
+			items.append(fr)
+		if randf() < (0.3 if rich else 0.12):
+			items.append(ItemDB.create("tech_manual_" + ["future", "energy", "anomalous", "modern", "industrial"][randi() % 5], 0, 1))
+		# a weapon of a later age, lost in the rift: an unknown device for the hero
+		if randf() < (0.2 if rich else 0.08) and era < 4:
+			var later := ["musket", "revolver", "rifle_lever", "tesla_gun", "carbine", "smg", "pulse_rifle", "smart_gun", "plasma_cannon"].filter(func(x): return int(ItemDB.base(x).get("era", 0)) > era)
+			if not later.is_empty():
+				items.append(ItemDB.create(later[randi() % later.size()], 1, lvl))
 	# ancient dungeons keep lost magical knowledge: a geomancer who can read
 	# it (earth mastery 12) always finds the golem's treatise in the first chest
 	var pd: CharData = actor.data if actor != null and actor.get("is_player") == true else null
@@ -220,6 +233,8 @@ func pickup(a, d: ItemDrop) -> void:
 			it.curse.hidden = false
 			Events.notify.emit("Сканер: предмет проклят!", Color(0.9, 0.3, 0.4))
 		Audio.play_sfx("pickup", a.global_position, -3.0)
+		if TechKnow.unknown_name(it) != "":
+			Events.notify.emit("Обнаружено неизвестное устройство", Color(0.55, 0.85, 1.0))
 		Events.notify.emit("Получено: " + ItemDB.display_name(it) + ((" ×%d" % it.qty) if it.get("qty", 1) > 1 else ""), ItemDB.rarity_color(it))
 		Events.item_picked.emit(a, it)
 		if it.get("rarity", 0) >= 4:
@@ -235,7 +250,7 @@ func pickup(a, d: ItemDrop) -> void:
 func _npc_take(n, it: Dictionary) -> bool:
 	if not n.data.inv.add(it):
 		return false
-	if ItemDB.is_equipment(it):
+	if ItemDB.is_equipment(it) and TechKnow.npc_can_use(n, it):
 		var slot: String = ItemDB.base(it.base).slot
 		if ItemDB.power(it) > ItemDB.power(n.data.inv.equipped(slot)) and it.get("curse", {}).get("hidden", false) == false:
 			var res: Dictionary = n.data.inv.equip_item(it)

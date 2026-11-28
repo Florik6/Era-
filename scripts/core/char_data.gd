@@ -28,6 +28,13 @@ var saved_sets := {}       # name -> {cat: {"0": [...], "1": [...]}}
 var favorites: Array = []
 var pain_until := 0.0      # game time until which pain relief halves injury penalties
 var vitals := {}           # saved mana state: {mana, max_mana, delay, potion_cd, surge_t, surge_k}
+# Technological Knowledge System (TechKnow) — belongs to the hero, kept across eras
+var tech := {}             # family -> {xp, research}
+var tech_cats := {}        # category -> general knowledge (books, teachers)
+var tech_models := {}      # weapon base id -> {fam, parts, streak, special, shots, examined, identified, compared}
+var tech_skills: Array = []  # Tech Cognition branch
+var tech_pts := 0          # points of cognition
+var tech_mem := {"eras": [0], "schemas": [], "training": [], "maint": []}   # Historical Knowledge Memory
 
 func setup_class(cid: String) -> void:
 	class_id = cid
@@ -472,7 +479,8 @@ func to_dict() -> Dictionary:
 		"gold": gold, "mastery": mastery, "schools": schools, "slots": slots, "inv": inv.to_dict(), "kills": kills,
 		"fame": fame, "companion": companion, "injuries": injuries, "pain_until": pain_until,
 		"class_pts": class_pts, "class_skills": class_skills, "spells": spells, "knowledge": knowledge, "ab_page": ab_page,
-		"saved_sets": saved_sets, "favorites": favorites, "vitals": vitals}
+		"saved_sets": saved_sets, "favorites": favorites, "vitals": vitals,
+		"tech": tech, "tech_cats": tech_cats, "tech_models": tech_models, "tech_skills": tech_skills, "tech_pts": tech_pts, "tech_mem": tech_mem}
 
 func from_dict(d: Dictionary) -> void:
 	name = d.get("name", name)
@@ -514,6 +522,22 @@ func from_dict(d: Dictionary) -> void:
 	saved_sets = d.get("saved_sets", {})
 	favorites = d.get("favorites", [])
 	vitals = d.get("vitals", {})
+	tech = d.get("tech", {})
+	tech_cats = d.get("tech_cats", {})
+	tech_models = d.get("tech_models", {})
+	for k in tech_models:
+		var mr: Dictionary = tech_models[k]
+		mr["shots"] = int(mr.get("shots", 0))
+	tech_skills = d.get("tech_skills", [])
+	tech_pts = int(d.get("tech_pts", 0))
+	tech_mem = d.get("tech_mem", {"eras": [0], "schemas": [], "training": [], "maint": []})
+	for k2 in ["eras", "schemas", "training", "maint"]:
+		if not tech_mem.has(k2):
+			tech_mem[k2] = [0] if k2 == "eras" else []
+	var eras_i: Array = []
+	for e in tech_mem.eras:
+		eras_i.append(int(e))
+	tech_mem.eras = eras_i
 	for sch in schools:
 		if not schools[sch].has("pts"):
 			schools[sch].pts = int(schools[sch].lvl)

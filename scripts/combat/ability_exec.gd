@@ -39,6 +39,9 @@ static func block_reason(a: Actor, id: String, aim := Vector3.ZERO) -> String:
 		return "безмолвие"
 	if e.kind == "weapon" and a.mastery_cat() != e.cat:
 		return "нужно оружие: %s" % ItemDB.CAT_NAMES.get(e.cat, e.cat)
+	var tk := TechKnow.skill_block(a, e)
+	if tk != "":
+		return tk
 	var st := stamina_cost(a, e)
 	var mn := mana_cost(a, e)
 	if a.stamina < st:

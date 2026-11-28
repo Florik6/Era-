@@ -193,6 +193,8 @@ static func start_reload(a) -> String:
 	if not unlimited(a) and reserve(a) <= 0:
 		return "нет запасных боеприпасов (%s)" % base(kind_of(it)).get("name", "")
 	var t: float = float(b.get("reload", 1.5))
+	if TechKnow.item_family(it) != "":
+		t *= float(TechKnow.mods(a).reload)      # a novice fumbles the cell / magazine
 	if a.data and a.data.has_node("fa_reload"):
 		t *= 0.6
 	a.reload_t = t
@@ -250,6 +252,8 @@ static func select_kind(a, kind: String) -> String:
 		return "не подходит к оружию «%s»" % b.get("name", "")
 	if kind_of(it) == kind:
 		return "уже заряжено"
+	if kind != fam and not TechKnow.can_special_ammo(a):
+		return "особые боеприпасы распознаёт только мастер технологии (V)"
 	cancel_reload(a)
 	if has_mag(b):
 		var cur := loaded(a)
@@ -295,7 +299,7 @@ static func boost_on(a) -> bool:
 	if not a.is_player:
 		return false
 	var it: Dictionary = a.weapon()
-	return not it.is_empty() and bool(it.get("boost", false)) and is_energy(ItemDB.base(it.base))
+	return not it.is_empty() and bool(it.get("boost", false)) and is_energy(ItemDB.base(it.base)) and TechKnow.can_special(a)
 
 ## Units one press of «Атака» spends.
 static func shot_cost(a) -> int:
@@ -305,6 +309,8 @@ static func toggle_boost(a) -> String:
 	var it: Dictionary = a.weapon()
 	if it.is_empty() or not is_energy(ItemDB.base(it.base)):
 		return "усиленный выстрел есть только у энергетического оружия"
+	if not bool(it.get("boost", false)) and not TechKnow.can_special(a):
+		return "особые режимы — после уверенного владения технологией (IV)"
 	it["boost"] = not bool(it.get("boost", false))
 	return ""
 
@@ -384,6 +390,11 @@ static func loot_for(pl, era: int, rng: RandomNumberGenerator, big := false) -> 
 				var f2 := family_for(ItemDB.base(w2.base))
 				if f2 != "":
 					fam = f2
+	# ammunition of a later era is not lying around in ordinary places: it
+	# comes from rifts, its own era, or maintenance (TechKnow.MAINTENANCE)
+	var in_rift: bool = Game.world != null and str(Game.world.get("dimension")) != ""
+	if fam != "" and not in_rift and int(base(fam).get("era", 0)) > era:
+		fam = ""
 	if fam == "":
 		var era_fams: Array = [["ammo_arrow", "ammo_bolt"], ["ammo_ball", "ammo_arrow"], ["ammo_revolver", "ammo_rifle", "ammo_shell"],
 			["ammo_pistol", "ammo_rifle", "ammo_cell"], ["ammo_pulse", "ammo_cell", "ammo_plasma"]][clampi(era, 0, 4)]

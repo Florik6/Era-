@@ -11,6 +11,7 @@ func _ready() -> void:
 	SaveSys.delete_all()
 	Chronicle.clear()
 	Profile.new_character("Автопилот", ["warrior", "archer", "rogue", "mage"][randi() % 4], false, {})
+	TechKnow.debug_master_all(Profile.char)   # this suite tests other systems: all technology known
 	Profile.current_era = int(OS.get_environment("SOAK_ERA")) if OS.get_environment("SOAK_ERA") != "" else 0
 	if Profile.current_era > 0:
 		# arrive like a real player: at the era's entry level with era-appropriate gear

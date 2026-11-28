@@ -58,6 +58,8 @@ func _ready() -> void:
 	Game.world = self
 	mode = Game.mode
 	era = Profile.current_era
+	if mode == "world" and Profile.has_character:
+		TechKnow.on_visit(Profile.char, era)      # Historical Knowledge Memory: eras the hero has seen
 	if mode == "world":
 		Game.world_state = SaveSys.load_world_state(era)
 		if Game.world_state.is_empty():

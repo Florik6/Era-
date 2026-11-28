@@ -56,6 +56,7 @@ var action := ""            # current action animation
 var action_p := 0.0         # 0..1
 var blocking := false
 var aiming := false
+var handling := 1.0         # how well the hands know the weapon (TechKnow): 0 novice … 1 master
 var dodging := false
 var dodge_p := 0.0
 var dead := false
@@ -1095,6 +1096,8 @@ func animate(delta: float) -> void:
 			aim_want = true
 	elif aiming:
 		_pose_aim(t, 0.4)
+		if handling < 0.99 and _cat == "firearm":
+			t.arm_r.x -= 0.35 * (1.0 - handling)
 	if parry_t > 0.0:
 		var pk := sin(parry_t / 0.3 * PI)
 		t.arm_r = t.arm_r.lerp(Vector3(1.0, 0.0, 1.4), pk)
@@ -1311,12 +1314,24 @@ func _pose_action(t: Dictionary, act: String, p: float) -> Vector2:
 		"reload":
 			# weapon tipped down, the off hand works the magazine / cell / powder
 			var e3 := _ss(p / 0.2) * (1.0 - _seg(p, 0.85, 1.0))
-			var jig := sin(p * TAU * 2.0) * 0.14 * e3
+			var jig := sin(p * TAU * (2.0 + 2.0 * (1.0 - handling))) * 0.14 * e3 * (1.0 + 1.5 * (1.0 - handling))
+			t.neck.x += 0.2 * e3 * (1.0 - handling)
 			t.arm_r = t.arm_r.lerp(Vector3(0.85, -0.1, 0.25), e3)
 			t.elbow_r = t.elbow_r.lerp(Vector3(1.35, 0, 0), e3)
 			t.arm_l = t.arm_l.lerp(Vector3(0.75 + jig, 0.35, -0.3), e3)
 			t.elbow_l = t.elbow_l.lerp(Vector3(1.55, 0, 0), e3)
 			t.neck.x += 0.25 * e3
+		"inspect":
+			# holding an unknown device up in front, turning it, looking at it
+			var e4 := _ss(p / 0.25) * (1.0 - _seg(p, 0.8, 1.0))
+			var turn := sin(p * TAU * 1.5)
+			t.arm_r = t.arm_r.lerp(Vector3(1.25, -0.25 + 0.35 * turn, 0.2), e4)
+			t.elbow_r = t.elbow_r.lerp(Vector3(1.6, 0, 0), e4)
+			t.hand_r = t.hand_r.lerp(Vector3(0.2, 1.2 * turn, 0.6 * turn), e4)
+			t.arm_l = t.arm_l.lerp(Vector3(1.0, 0.35, -0.25), e4)
+			t.elbow_l = t.elbow_l.lerp(Vector3(1.5, 0, 0), e4)
+			t.neck.x += 0.45 * e4
+			t.neck.y += 0.15 * turn * e4
 		"drink":
 			var e2 := _ss(p / 0.35) * (1.0 - _seg(p, 0.7, 1.0))
 			t.arm_r = t.arm_r.lerp(Vector3(1.9, 0, 0.35), e2)
@@ -1397,6 +1412,7 @@ func _pose_action(t: Dictionary, act: String, p: float) -> Vector2:
 			match _cat:
 				"bow":
 					var draw := _seg(p, 0.05, 0.5) * (1.0 - _seg(p, 0.53, 0.58))
+					draw *= 1.0 - 0.25 * (1.0 - handling) * absf(sin(_clock * 6.0))
 					var settle := _seg(p, 0.0, 0.15) * (1.0 - _seg(p, 0.8, 1.0))
 					for key in AIM_KEYS:
 						_tmp[key] = t[key]
@@ -1406,7 +1422,11 @@ func _pose_action(t: Dictionary, act: String, p: float) -> Vector2:
 						t[key2] = bv.lerp(t[key2], settle)
 				"firearm":
 					_pose_aim(t, 1.0)
-					var kick := 1.0 - _seg(p, 0.05, 0.6)
+					var kick := (1.0 - _seg(p, 0.05, 0.6)) * (1.0 + 0.9 * (1.0 - handling))
+					var unsure := 1.0 - handling
+					t.arm_r.x -= 0.3 * unsure
+					t.arm_r.y += sin(_clock * 7.0) * 0.09 * unsure
+					t.neck.x += 0.12 * unsure
 					t.arm_r.x += 0.38 * kick
 					t.elbow_r.x += 0.2 * kick
 					t.spine.x += 0.1 * kick

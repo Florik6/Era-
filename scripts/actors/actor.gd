@@ -631,6 +631,8 @@ func _move(delta: float) -> void:
 
 func _update_rig(delta: float) -> void:
 	var hv := Vector2(velocity.x, velocity.z).length()
+	if rig is HumanoidRig and data != null:
+		rig.handling = TechKnow.handling(self)
 	rig.move_speed = hv / 5.0
 	if rig is HumanoidRig and rig.gait == "" and (is_player or data != null):
 		rig.gait = String(move_style().get("step", ""))
@@ -682,6 +684,8 @@ func _on_action_end(_a: Dictionary) -> void:
 
 func attack_interval() -> float:
 	var spd: float = weapon_base().get("spd", 1.3) if data else 1.0
+	if data and TechKnow.item_family(weapon()) != "":
+		spd /= float(TechKnow.mods(self).interval)     # an unsure hand prepares the weapon slower
 	spd *= 1.0 + stat("aspd")
 	if weapon_cat() == "firearm" and data and data.has_node("fa_recoil"):
 		spd *= 1.2
@@ -708,6 +712,9 @@ func attack(aim: Vector3 = Vector3.ZERO) -> bool:
 		statuses.erase("stealth")
 	if _overheat_t > 0.0 and mastery_cat() == "energy":
 		attack_cd = 0.1
+		return false
+	if data and not TechKnow.can_fire(self):
+		_unknown_weapon()
 		return false
 	match cat:
 		"bow":
@@ -801,6 +808,8 @@ func _on_impact(a: Dictionary) -> void:
 		"melee":
 			var p: Dictionary = a.data
 			var anim: String = p.get("anim", "slash")
+			if is_player and TechKnow.item_family(weapon()) != "":
+				TechKnow.practice(self, 1.0)
 			var arc := 110.0
 			if anim in ["thrust", "stab"]:
 				arc = 50.0
@@ -833,6 +842,7 @@ func _on_impact(a: Dictionary) -> void:
 			# the round is spent only by a shot that is really fired
 			if Ammo.consume(self, Ammo.shot_cost(self)):
 				Combat.fire_weapon(self)
+				TechKnow.practice(self, 1.0)        # experience of handling: only real shots count
 				if Ammo.has_mag(weapon_base()) and ammo <= 0 and (not is_player or (Settings.auto_reload and Ammo.reserve(self) > 0)):
 					reload()
 			else:
@@ -871,6 +881,17 @@ func reload() -> String:
 	return why
 
 ## Trigger pulled with nothing to fire: a dry click and a clear reason.
+## The weapon in hand is an unknown technology: no shot, an unsure look at it.
+func _unknown_weapon() -> void:
+	attack_cd = 0.9
+	TechKnow.stats.refused += 1
+	if not is_player:
+		return
+	start_action("inspect", 1.1, 0.99, {"anim": "inspect"})
+	Audio.play_sfx("ui_click", global_position, -8.0)
+	var st := TechKnow.weapon_stage(self)
+	Events.notify.emit("Вы не знаете, как пользоваться этим оружием" + (" — изучите его: Инвентарь → Изучить" if st <= 2 else ""), Color(1.0, 0.75, 0.4))
+
 func _dry_fire() -> void:
 	Ammo.stats.dry_clicks += 1
 	if is_player:
@@ -1261,7 +1282,7 @@ func _has_ability(ab: String) -> bool:
 	if data == null:
 		return false
 	for it in data.inv.equip.values():
-		if it.get("ability", "") == ab:
+		if it.get("ability", "") == ab and (not is_player or TechKnow.special_ok(self, it)):
 			return true
 	return false
 

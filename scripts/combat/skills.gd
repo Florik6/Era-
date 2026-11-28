@@ -16,6 +16,10 @@ static func use(a: Actor, id: String, aim: Vector3) -> bool:
 		if a.is_player:
 			Events.notify.emit("Недостаточно выносливости" if a.stamina < st else "Недостаточно маны", Color(0.9, 0.8, 0.4))
 		return false
+	if AMMO.has(id) and TechKnow.weapon_stage(a) < 4:
+		if a.is_player:
+			Events.notify.emit("%s: нужно уверенное владение технологией (IV)" % n.get("name", id), Color(1.0, 0.6, 0.4))
+		return false
 	var rounds := int(AMMO.get(id, 0)) if Ammo.uses_ammo(a.weapon_base()) else 0
 	if rounds > 0 and not Ammo.can_fire(a, rounds):
 		if a.is_player:

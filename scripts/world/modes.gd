@@ -19,6 +19,8 @@ static func arena_char() -> CharData:
 		if ItemDB.base(b).slot in ItemDB.SLOTS:
 			c.inv.equip_item(it)
 	Ammo.starter_supply(c, c.inv.equip.values())
+	TechKnow.setup_new(c, Profile.current_era)
+	TechKnow.migrate(c, src.tech_mem.get("eras", [0]))
 	return c
 
 static func create(mode: String, world) -> Node:

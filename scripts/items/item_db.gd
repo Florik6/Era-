@@ -293,10 +293,12 @@ static func base(id: String) -> Dictionary:
 		return c
 	if Ammo.has(id):
 		return Ammo.base(id)               # Ammo & Mana overhaul: ammunition
+	if TechKnow.has_item(id):
+		return TechKnow.item_base(id)      # technological knowledge: treatises, fragments
 	return BeastItems.base(id)         # Beasts of the Ages: materials, relics, trophies
 
 static func has_base(id: String) -> bool:
-	return BASES.has(id) or ItemCatalog.has(id) or BeastItems.has(id) or Ammo.has(id)
+	return BASES.has(id) or ItemCatalog.has(id) or BeastItems.has(id) or Ammo.has(id) or TechKnow.has_item(id)
 
 static func roll_rarity(table: String = "normal", luck: float = 0.0, rng: RandomNumberGenerator = null) -> int:
 	var w: Array = TABLES.get(table, TABLES.normal).duplicate()
@@ -494,6 +496,9 @@ static func _gen_name(item: Dictionary, b: Dictionary, r: RandomNumberGenerator)
 	return nm
 
 static func display_name(item: Dictionary) -> String:
+	var unk := TechKnow.unknown_name(item)       # the hero does not know what this is yet
+	if unk != "":
+		return unk
 	var nm: String = item.get("name", base(item.get("base", "")).get("name", "?"))
 	if item.get("upg", 0) > 0:
 		nm += " +%d" % item.upg
@@ -535,6 +540,9 @@ static func value(item: Dictionary) -> int:
 ## BBCode description used by item cards.
 static func describe(item: Dictionary) -> String:
 	var b := base(item.get("base", ""))
+	var unk := TechKnow.unknown_name(item)
+	if unk != "":
+		return _describe_unknown(item, unk)
 	var col := rarity_color(item).to_html(false)
 	var t := "[b][color=#%s]%s[/color][/b]\n" % [col, display_name(item)]
 	if b.slot in ["use", "mat"]:
@@ -599,6 +607,22 @@ static func describe(item: Dictionary) -> String:
 	for h in item.get("history", []):
 		t += "[color=#998866]· %s[/color]\n" % h
 	t += "[color=#888888]Цена: %d[/color]" % value(item)
+	return t
+
+## An item of an unknown technology: the look and a guess, no numbers.
+static func _describe_unknown(item: Dictionary, unk: String) -> String:
+	var fam := TechKnow.item_family(item)
+	var st := TechKnow.stage_of_xp(TechKnow.fam_xp(Profile.char, fam)) if Profile.char else 1
+	var t := "[b][color=#88ccff]%s[/color][/b]\n" % unk
+	t += "[color=#aaaaaa]Оружие · технология неизвестна[/color]\n"
+	if st >= 2:
+		t += "Назначение: %s.\n" % str(TechKnow.FAMILIES[fam][4])
+		t += "Дальность: примерно %d м. Урон и устройство пока непонятны.\n" % int(base(item.base).get("range", 2.0))
+	else:
+		t += "Урон: ??? · Боеприпасы: ??? · Устройство: ???\n"
+	t += "[color=#ffcc66]Стадия освоения: %s — %s[/color]\n" % [TechKnow.STAGE_SHORT[st], TechKnow.STAGE_NAMES[st]]
+	t += "[color=#cccccc]Инвентарь → «Изучить»: осмотреть, определить назначение, разобраться в деталях.[/color]\n"
+	t += "[color=#888888]Цена: ?[/color]"
 	return t
 
 static func _fmt(k: String, v: float) -> String:

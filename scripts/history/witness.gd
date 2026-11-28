@@ -54,6 +54,16 @@ static func dialog(world, n) -> void:
 		items.append(sh)
 		if rel >= 1.0:
 			items.append(ItemDB.random_for_era(era, world.player.level, "boss"))
+		# charges for future weapons the hero has learnt, far from their era
+		var fams_done := {}
+		for wit in world.player.data.inv.all_equipped() + world.player.data.inv.items:
+			var af := Ammo.family_for(ItemDB.base(str(wit.get("base", ""))))
+			if af != "" and not fams_done.has(af) and int(Ammo.base(af).get("era", 0)) > era and TechKnow.item_stage(world.player, wit) >= 3:
+				fams_done[af] = true
+				items.append(Ammo.stack(af, Ammo._rng(), true))
+		var frag := ItemDB.create("tech_fragment", 0, 1)
+		frag.qty = 2
+		items.append(frag)
 		w.trades = int(w.get("trades", 0)) + 1
 		w.relation = rel + 0.15
 		world.ui.open("trade", {"title": "Последний Свидетель", "items": items, "price_mult": 1.2 - minf(0.4, rel * 0.1), "sell": false, "buy_cb": func(it): return world.factions.buy(it, 1.2 - minf(0.4, rel * 0.1))})})
@@ -85,5 +95,7 @@ static func dialog(world, n) -> void:
 		n.hp = n.max_hp
 		n.add_aggro(world.player, 999.0)
 		Events.banner.emit("Последний Свидетель стал врагом", "Он запомнит это во всех эпохах.", Color(1.0, 0.4, 0.4))})
+	if rel >= 0.0:
+		opts.append({"text": "Знания эпох: технологии и устройства", "cb": func(): TechKnow.open_teacher(world, n, true)})
 	opts.append({"text": "Уйти", "cb": func(): pass})
 	world.ui.open("dialog", {"title": "Последний Свидетель — " + v[0] if w.met.size() >= 3 else "Последний Свидетель", "text": text, "portrait_color": Color(0.6, 0.9, 1.0), "options": opts})

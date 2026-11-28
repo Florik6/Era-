@@ -58,6 +58,7 @@ static func _forge(world) -> void:
 		return false})
 	recipes.append_array(Recipes.for_station(world, "forge"))
 	recipes.append_array(Ammo.recipes_for(world, "forge"))
+	recipes.append_array(TechKnow.maintenance_recipes(world))
 	world.ui.open("craft", {"title": "Кузница", "recipes": recipes})
 
 static func _lab(world) -> void:
@@ -109,6 +110,7 @@ static func _workshop(world) -> void:
 		return false})
 	recipes.append_array(Recipes.for_station(world, "workshop"))
 	recipes.append_array(Ammo.recipes_for(world, "workshop"))
+	recipes.append_array(TechKnow.maintenance_recipes(world))
 	world.ui.open("craft", {"title": "Мастерская", "recipes": recipes})
 
 static func _terminal(world, poi) -> void:

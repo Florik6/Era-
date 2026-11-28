@@ -20,6 +20,7 @@ func _ready() -> void:
 	SaveSys.delete_all()
 	Chronicle.clear()
 	Profile.new_character("Стрелок", "mage", false, {"skin": 1, "hair": 1, "hair_color": 1, "beard": 1, "cloth": 0})
+	TechKnow.debug_master_all(Profile.char)   # this suite tests other systems: all technology known
 	Profile.world_seed = 515151
 	Profile.current_era = 0
 	Settings.cinematics = 0

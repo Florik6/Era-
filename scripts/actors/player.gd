@@ -257,6 +257,12 @@ func equip_item(item: Dictionary) -> Dictionary:
 			_maybe_start_release_quest(item)
 		refresh_gear()
 		Events.item_equipped.emit(self, item)
+		if ItemDB.base(item.base).get("slot", "") == "main" and TechKnow.item_stage(self, item) <= 2:
+			# an unknown device: the hero turns it over in his hands
+			start_action("inspect", 1.3, 0.99, {"anim": "inspect"})
+			Events.notify.emit("Неизвестное устройство: вы не понимаете, как оно работает", Color(0.55, 0.85, 1.0))
+		elif ItemDB.base(item.base).get("slot", "") == "main" and TechKnow.item_family(item) != "" and not TechKnow.model_known(data, str(item.base)) and TechKnow.family_stage(self, TechKnow.item_family(item)) >= 4:
+			Events.notify.emit("Знакомая технология, новая модель: ознакомьтесь (Инвентарь → Изучить) или сделайте несколько выстрелов", Color(0.6, 0.9, 1.0))
 	return res
 
 func unequip_slot(slot: String) -> Dictionary:
@@ -357,6 +363,11 @@ func use_item(item: Dictionary) -> bool:
 			ok = purify("artifact")
 		"bomb":
 			throw_bomb(item.base)
+		"tech_manual":
+			Events.notify.emit(TechKnow.read_manual(data, str(b.tcat)), Color(0.6, 0.9, 1.0))
+			Audio.play_sfx("pickup", global_position, -4.0)
+		"tech_fragment":
+			Events.notify.emit(TechKnow.use_fragment(data), Color(0.6, 0.9, 1.0))
 		"learn_school":
 			if data.learn_school(b.school):
 				Events.banner.emit("Новая школа магии", DBSkills.SCHOOLS[b.school].name, DBSkills.SCHOOLS[b.school].color)

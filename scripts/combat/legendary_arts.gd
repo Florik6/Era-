@@ -40,7 +40,7 @@ static func skill_dict(id: String) -> Dictionary:
 
 static func _wdmg(a) -> float:
 	var w: Dictionary = a.weapon() if a.has_method("weapon") else {}
-	return float(ItemDB.stat(w, "dmg")) if not w.is_empty() else 20.0
+	return float(ItemDB.stat(w, "dmg")) * TechKnow.special_power(a, w) if not w.is_empty() else 20.0
 
 static func _foes(a, center: Vector3, r: float) -> Array:
 	var out: Array = []
@@ -58,6 +58,10 @@ static func use(a, id: String, aim: Vector3) -> bool:
 	if art != art_of(a) or not ARTS.has(art):
 		return false
 	var d: Dictionary = ARTS[art]
+	if not TechKnow.special_ok(a, a.weapon()):
+		if a.is_player:
+			Events.notify.emit("Особая сила предмета не изучена: Инвентарь → Изучить → «Особый узел»", Color(1.0, 0.7, 0.4))
+		return false
 	if aim.length() < 0.01:
 		aim = a.facing
 	aim.y = 0

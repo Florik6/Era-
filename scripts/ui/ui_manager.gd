@@ -23,6 +23,8 @@ const SCREENS := {
 	"character": "res://scripts/ui/screens/character.gd",
 	"anatomy": "res://scripts/ui/screens/anatomy.gd",
 	"storage": "res://scripts/ui/screens/storage.gd",
+	"inspect": "res://scripts/ui/screens/inspect.gd",
+	"tech": "res://scripts/ui/screens/tech.gd",
 }
 
 var stack: Array = []

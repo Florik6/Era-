@@ -80,6 +80,8 @@ func new_character(nm: String, cid: String, female: bool, appearance: Dictionary
 	stats = {}
 	legacy = {"flags": {}, "relics": [], "faction_power": {}, "faction_rep": {}, "destroyed": []}
 	legacy.flags["ammo_v1"] = true      # the starter supply above is the only free one
+	TechKnow.setup_new(char, 0)         # a hero masters the technology of his own era only
+	legacy.flags["tech_v1"] = true
 	fallen_legends = []
 	hall_of_legends = []
 	artifacts = []
@@ -249,6 +251,11 @@ func from_dict(d: Dictionary) -> void:
 	if has_character and not legacy.flags.get("ammo_v1", false):
 		Ammo.starter_supply(char, _owned_weapons())
 		legacy.flags["ammo_v1"] = true
+	# saves made before technological knowledge existed: the eras already
+	# played are known technology (Historical Knowledge Memory)
+	if has_character and not legacy.flags.get("tech_v1", false):
+		TechKnow.migrate(char, unlocked_eras + [current_era])
+		legacy.flags["tech_v1"] = true
 	home_chest = Inventory.new()
 	home_chest.from_dict(d.get("home_chest", {}))
 	home_chest.capacity = 999
